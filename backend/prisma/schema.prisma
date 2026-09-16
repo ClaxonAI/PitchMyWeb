@@ -1,0 +1,529 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  READY
+  RUNNING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Not specified explicitly by the product doc; smallest reasonable set that
+// lets a campaign filter on website presence (the core value proposition).
+enum WebsiteRequirement {
+  ANY
+  WITH_WEBSITE
+  WITHOUT_WEBSITE
+}
+
+enum LeadStatus {
+  NEW
+  ANALYZED
+  SITE_READY
+  PITCHED
+  REPLIED
+  INTERESTED
+  NEGOTIATING
+  WON
+  LOST
+}
+
+enum ScoreClassification {
+  EXCELLENT
+  STRONG
+  MEDIUM
+  LOW
+  IGNORE
+}
+
+enum ServiceCode {
+  WEBSITE
+  WEBSITE_REDESIGN
+  WHATSAPP
+  REVIEWS
+  SEO
+  AI_CHATBOT
+  AI_VOICE_AGENT
+  APPOINTMENT_SYSTEM
+  DIGITAL_MENU
+  POS
+}
+
+// Not specified explicitly by the product doc; smallest reasonable lifecycle
+// for a generated demo site.
+enum WebsiteStatus {
+  DRAFT
+  GENERATING
+  READY
+  PUBLISHED
+  FAILED
+}
+
+// Not specified explicitly by the product doc; smallest reasonable lifecycle
+// for AI-generated outreach copy.
+enum PitchStatus {
+  PENDING
+  GENERATED
+  FAILED
+}
+
+// V1 only drives WHATSAPP, but the model stays extensible for later channels.
+enum OutreachChannel {
+  WHATSAPP
+  EMAIL
+  SMS
+  OTHER
+}
+
+// Not specified explicitly by the product doc; mirrors the V1 WhatsApp flow
+// (link generated -> operator opens it -> operator confirms send).
+enum OutreachStatus {
+  PENDING
+  LINK_GENERATED
+  OPENED
+  SENT
+  FAILED
+}
+
+enum ActivityType {
+  LEAD_CREATED
+  LEAD_ANALYZED
+  WEBSITE_GENERATED
+  DEMO_PUBLISHED
+  PITCH_GENERATED
+  WHATSAPP_OPENED
+  PITCHED
+  REPLIED
+  INTERESTED
+  MEETING
+  WON
+  LOST
+}
+
+// Not specified explicitly by the product doc; smallest reasonable set for
+// negotiation/won/lost state that mirrors the lead lifecycle without
+// duplicating it.
+enum DealStatus {
+  OPEN
+  NEGOTIATING
+  WON
+  LOST
+}
+
+// Phase 4: tracks one POST /api/campaigns/:id/run attempt. Not specified
+// explicitly by the product doc as a model (section 23 only says "create an
+// idempotent execution/job request"); this is the smallest reasonable
+// persisted record of that request, giving campaign runs a DB-backed audit
+// trail and an idempotency-key replay target instead of relying on
+// Campaign.status alone (which only proves *a* run happened, not which
+// request triggered it).
+enum CampaignExecutionStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Phase 5: one row per POST /api/leads/:id/analyze attempt (backend_tasks.md
+// section 27, "Record model name / prompt version / latency / output
+// status"). Mirrors two existing patterns rather than inventing a third:
+// Pitch already tracks promptVersion+modelName+status for AI-generated
+// content, and CampaignExecution already tracks a failed attempt's
+// diagnostic detail (errorMessage) without corrupting the entity it
+// attempted to affect. A FAILED row records that an attempt happened and
+// why, without ever writing invalid data into Lead/LeadScore — only a
+// SUCCESS row's content is ever copied onto the Lead (see
+// lib/leads/lead.service.ts's applyLeadAnalysis).
+enum AiAnalysisStatus {
+  SUCCESS
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  campaigns Campaign[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+// Phase 4 auth: opaque bearer token issued at login, stored server-side only
+// as a hash (never the raw token) so a database read alone cannot be used to
+// impersonate a session. The raw token lives only in the client's HTTP-only
+// cookie.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Campaign {
+  id                 String             @id @default(cuid())
+  userId             String
+  name               String
+  location           String
+  radius             Int?
+  category           String
+  minRating          Float?
+  minReviews         Int?
+  websiteRequirement WebsiteRequirement @default(ANY)
+  leadLimit          Int
+  status             CampaignStatus     @default(DRAFT)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads      Lead[]
+  executions CampaignExecution[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignExecution {
+  id               String                  @id @default(cuid())
+  campaignId       String
+  // Client-supplied replay key (campaignRunRequestSchema.idempotencyKey).
+  // Nullable, like Business.externalId: Postgres treats each NULL as
+  // distinct, so the uniqueness below only dedupes when a client actually
+  // supplies a key, matching the same documented pattern used for business
+  // discovery dedup (section 6).
+  idempotencyKey   String?
+  status           CampaignExecutionStatus @default(RUNNING)
+  businessesFound  Int                     @default(0)
+  leadsCreated     Int                     @default(0)
+  failedCount      Int                     @default(0)
+  // Phase 4 code-review finding #6: per-business ingestion failures used to
+  // be logged to console.error only, with no way to recover which business
+  // failed or why once the log line was gone. Each entry is a small
+  // {name, externalId, error} record (sanitized message only, never a raw
+  // stack trace) — a structured, queryable counterpart to failedCount.
+  failedBusinesses Json?
+  errorMessage     String?
+  startedAt        DateTime                @default(now())
+  completedAt      DateTime?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, idempotencyKey])
+  @@index([campaignId])
+  @@map("campaign_executions")
+}
+
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  address     String?
+  city        String?
+  phone       String?
+  email       String?
+  website     String?
+  instagram   String?
+  facebook    String?
+  rating      Float?
+  reviewCount Int?
+  latitude    Float?
+  longitude   Float?
+  // Provider identifier, e.g. "demo", "google_maps", "manual". Kept as a
+  // plain string (not an enum) so new LeadProvider implementations do not
+  // require a schema migration.
+  source      String
+  externalId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leads Lead[]
+
+  // Discovery deduplication: same provider + same external id => same
+  // canonical business. Rows with a NULL externalId are not deduplicated by
+  // this constraint (Postgres treats NULLs as distinct), which matches the
+  // documented rule that this key only applies when the provider supplies
+  // an external id.
+  @@unique([source, externalId])
+  @@index([category])
+  @@index([city])
+  @@map("businesses")
+}
+
+model Lead {
+  id                 String       @id @default(cuid())
+  campaignId         String
+  businessId         String
+  status             LeadStatus   @default(NEW)
+  score              Int?
+  recommendedService ServiceCode?
+  estimatedDealMin   Int?
+  estimatedDealMax   Int?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  campaign        Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  business        Business         @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  scores          LeadScore[]
+  analyses        LeadAnalysis[]
+  websiteProjects WebsiteProject[]
+  pitches         Pitch[]
+  outreach        Outreach[]
+  activities      Activity[]
+  deal            Deal?
+
+  // A given business can only appear once per campaign.
+  @@unique([campaignId, businessId])
+  @@index([businessId])
+  @@index([status])
+  @@index([score])
+  @@map("leads")
+}
+
+model LeadScore {
+  id                  String              @id @default(cuid())
+  leadId              String
+  rating              Int
+  reviewVolume        Int
+  websiteGap          Int
+  socialPresence      Int
+  contactAvailability Int
+  businessValue       Int
+  localDemand         Int
+  dataQuality         Int
+  total               Int
+  classification      ScoreClassification
+  createdAt           DateTime            @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_scores")
+}
+
+// Phase 5: AI analysis attempt record (see AiAnalysisStatus above). Content
+// fields (summary/needs/recommendedService/deal estimate) are nullable
+// because a FAILED row never has validated content to store — only the
+// attempt metadata (model/prompt version/latency/status/errorMessage) is
+// guaranteed present. `recommendedService`/`estimatedDealMin`/
+// `estimatedDealMax` intentionally duplicate what a SUCCESS row also
+// writes onto Lead (same relationship as LeadScore duplicating Lead.score):
+// this table is the append-only history of what each analysis attempt
+// produced, Lead holds only the current/latest value.
+model LeadAnalysis {
+  id                   String           @id @default(cuid())
+  leadId               String
+  status               AiAnalysisStatus
+  promptVersion        String
+  modelName            String
+  latencyMs            Int
+  repairUsed           Boolean          @default(false)
+  summary              String?
+  websiteNeed          Int?
+  whatsappNeed         Int?
+  reviewAutomationNeed Int?
+  voiceAgentNeed       Int?
+  recommendedService   ServiceCode?
+  estimatedDealMin     Int?
+  estimatedDealMax     Int?
+  // Sanitized diagnostic message only (never a raw exception/stack trace),
+  // same convention as CampaignExecution.errorMessage (section 19: never
+  // expose/persist internal error detail verbatim).
+  errorMessage         String?
+  createdAt            DateTime         @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_analyses")
+}
+
+model WebsiteProject {
+  id           String        @id @default(cuid())
+  leadId       String
+  template     String
+  theme        String?
+  contentJSON  Json
+  designJSON   Json?
+  // Phase 6 (section 11): a unique, URL-safe demo identifier. No such field
+  // existed before this phase — everything else the requirements need
+  // (WebsiteProject/WebsiteVersion, their relation, indexes, contentJSON)
+  // was already in place from Phase 1, so this is the one genuinely missing
+  // capability that justifies a migration. `@unique` makes the database the
+  // authority on uniqueness (section 11: "do not rely solely on an
+  // in-memory uniqueness check") — lib/websites/website.service.ts still
+  // retries on a rare collision, but the constraint is what actually
+  // prevents one, not the retry loop.
+  slug         String        @unique
+  demoUrl      String?
+  publishedUrl String?
+  status       WebsiteStatus @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  lead     Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  versions WebsiteVersion[]
+
+  @@index([leadId])
+  @@index([status])
+  @@map("website_projects")
+}
+
+model WebsiteVersion {
+  id               String   @id @default(cuid())
+  websiteProjectId String
+  versionNumber    Int
+  template         String
+  theme            String?
+  contentJSON      Json
+  designJSON       Json?
+  demoUrl          String?
+  createdAt        DateTime @default(now())
+
+  websiteProject WebsiteProject @relation(fields: [websiteProjectId], references: [id], onDelete: Cascade)
+
+  // Regeneration creates a new version rather than overwriting history.
+  @@unique([websiteProjectId, versionNumber])
+  @@index([websiteProjectId])
+  @@map("website_versions")
+}
+
+model Pitch {
+  id            String      @id @default(cuid())
+  leadId        String
+  content       String
+  promptVersion String
+  modelName     String
+  status        PitchStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  lead     Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  outreach Outreach[]
+
+  @@index([leadId])
+  @@map("pitches")
+}
+
+model Outreach {
+  id          String          @id @default(cuid())
+  leadId      String
+  pitchId     String?
+  channel     OutreachChannel @default(WHATSAPP)
+  status      OutreachStatus  @default(PENDING)
+  whatsappUrl String?
+  openedAt    DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pitch Pitch? @relation(fields: [pitchId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([pitchId])
+  @@map("outreach")
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  leadId    String
+  type      ActivityType
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // Historical events: no updatedAt, no destructive update path is expected.
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+  // Phase 8 analytics/CRM (section 11): the dominant new query pattern is
+  // "count/find leads whose campaign belongs to this user AND have an
+  // Activity of type X" (the funnel's per-stage counts in
+  // lib/analytics/analytics.service.ts) — an equality match on `type`
+  // combined with a join back through `leadId`. The existing single-column
+  // indexes on `leadId` and `type` can each be used alone but require
+  // Postgres to bitmap-AND two separate index scans; a composite index
+  // leading with the more selective equality column (`type`) serves this
+  // exact pattern directly. Not redundant with the single-column indexes
+  // above, which other existing queries (e.g. getActivityTimeline's
+  // leadId-only lookup) still use.
+  @@index([type, leadId])
+  @@map("activities")
+}
+
+model Deal {
+  id        String     @id @default(cuid())
+  leadId    String     @unique
+  value     Int
+  status    DealStatus @default(OPEN)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // leadId is already @unique above, which Postgres backs with its own
+  // unique index — a second plain index on it would be redundant (section
+  // 11: "avoid redundant indexes"). status is genuinely new: Phase 8's
+  // pipeline-value query filters on it (WHERE status IN (...)), the same
+  // pattern Campaign/Lead already index their own status column for.
+  @@index([status])
+  @@map("deals")
+}
+
+model Service {
+  id          String      @id @default(cuid())
+  name        String
+  code        ServiceCode @unique
+  description String?
+  priceMin    Int
+  priceMax    Int
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("services")
+}
+
+// Generic operator/system configuration store. Secrets never belong here;
+// they stay in environment variables.
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
