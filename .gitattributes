@@ -1,0 +1,9 @@
+# These files are executed or parsed on Linux, so they must keep LF endings
+# whatever the checkout platform does. On Windows core.autocrlf=true rewrites
+# them to CRLF, and git archive applies the same conversion — which produced a
+# deployment tarball whose scripts died immediately with
+#   bootstrap.sh: line 12: $'\r': command not found
+#   bootstrap.sh: line 13: set: pipefail: invalid option name
+# because the carriage return becomes part of the shebang and of every command.
+*.sh text eol=lf
+*.conf text eol=lf
