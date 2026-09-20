@@ -24,8 +24,9 @@ export type StorageConfig = {
   publicEndpoint?: string;
   region: string;
   bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  /** Omitted when the host supplies credentials itself, e.g. an EC2 instance role. */
+  accessKeyId?: string;
+  secretAccessKey?: string;
   forcePathStyle: boolean;
 };
 
@@ -36,7 +37,10 @@ export function storageConfigFromEnv(env: Env = process.env): StorageConfig | nu
   const bucket = env.STORAGE_BUCKET?.trim();
   const accessKeyId = env.STORAGE_ACCESS_KEY?.trim();
   const secretAccessKey = env.STORAGE_SECRET_KEY?.trim();
-  if (!bucket || !accessKeyId || !secretAccessKey) return null;
+  // Only the bucket is required. Static keys are for MinIO and R2; on EC2 the
+  // instance role already supplies credentials, and demanding them here meant
+  // issuing a second, long-lived set for an identity the host already has.
+  if (!bucket) return null;
   const endpoint = env.STORAGE_ENDPOINT?.trim() || undefined;
   return {
     endpoint,
@@ -52,7 +56,7 @@ export function storageConfigFromEnv(env: Env = process.env): StorageConfig | nu
 
 export class StorageNotConfiguredError extends Error {
   constructor() {
-    super("Object storage is not configured (STORAGE_BUCKET / STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY)");
+    super("Object storage is not configured (STORAGE_BUCKET is required; STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY only when the host has no credentials of its own)");
     this.name = "StorageNotConfiguredError";
   }
 }
@@ -62,7 +66,11 @@ function client(config: StorageConfig, endpoint: string | undefined): S3Client {
     region: config.region,
     endpoint,
     forcePathStyle: config.forcePathStyle,
-    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    // Left unset when no static keys are configured, which is what makes the
+    // SDK walk its default provider chain and pick up the instance role.
+    ...(config.accessKeyId && config.secretAccessKey
+      ? { credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } }
+      : {}),
   });
 }
 
