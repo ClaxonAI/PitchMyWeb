@@ -6,7 +6,7 @@ Target architecture, decided 2026-09-20:
 Cloudflare DNS (pitchmyweb.in)
   ├── @       →  EC2 elastic IP   →  nginx :443  →  pmw-web    :3000
   ├── api     →  EC2 elastic IP   →  nginx :443  →  pmw-api    :4000
-  ├── sites   →  EC2 elastic IP   →  nginx :443  →  pmw-sites  :3200
+  ├── preview →  EC2 elastic IP   →  nginx :443  →  pmw-sites  :3200
   └── clerk   →  Clerk (CNAME, DNS only — never proxied)
 
 EC2 t3.large (2 vCPU / 8 GB, ap-south-1), PM2 running 7 processes
@@ -73,7 +73,7 @@ APP_ENV=production
 ```
 CLERK_SECRET_KEY=sk_live_...        # the SAME key as apps/web
 APP_URL=https://pitchmyweb.in
-SITES_PUBLIC_URL=https://sites.pitchmyweb.in
+SITES_PUBLIC_URL=https://preview.pitchmyweb.in
 API_INTERNAL_URL=https://api.pitchmyweb.in
 APP_ENV=production
 DATABASE_URL=...                    # RDS, private subnet

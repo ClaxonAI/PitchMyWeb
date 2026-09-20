@@ -49,7 +49,7 @@ echo
 records="$(cf "${API}/zones/${ZONE_ID}/dns_records?per_page=200")"
 
 # --- app hostnames: A -> instance, unproxied -------------------------------
-for host in "$ZONE_NAME" "www.${ZONE_NAME}" "api.${ZONE_NAME}" "sites.${ZONE_NAME}"; do
+for host in "$ZONE_NAME" "www.${ZONE_NAME}" "api.${ZONE_NAME}" "preview.${ZONE_NAME}"; do
   existing="$(echo "$records" | jq -r --arg n "$host" '.result[] | select(.name==$n) | "\(.id) \(.type) \(.content) \(.proxied)"' | head -1)"
   read -r id type content proxied <<<"${existing:-}"
 

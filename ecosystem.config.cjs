@@ -52,7 +52,7 @@ module.exports = {
     // --- public web services (nginx terminates TLS in front of these) ------
     web("pmw-web", "./apps/web", "600M"), // :3000  pitchmyweb.in
     web("pmw-api", "./apps/api", "600M"), // :4000  api.pitchmyweb.in
-    web("pmw-sites", "./apps/sites", "450M"), // :3200  sites.pitchmyweb.in
+    web("pmw-sites", "./apps/sites", "450M"), // :3200  preview.pitchmyweb.in
 
     // --- background workers ------------------------------------------------
     // Holds a live WhatsApp socket per linked account. Safe to restart: auth

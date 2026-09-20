@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-DOMAINS=(pitchmyweb.in www.pitchmyweb.in api.pitchmyweb.in sites.pitchmyweb.in)
+DOMAINS=(pitchmyweb.in www.pitchmyweb.in api.pitchmyweb.in preview.pitchmyweb.in)
 CERT_DOMAIN_ARGS=()
 SITE_NAME=pitchmyweb
 REPO_CONF="$(dirname "$0")/../nginx/pitchmyweb.conf"
