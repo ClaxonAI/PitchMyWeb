@@ -44,7 +44,7 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
 
   useEffect(() => setAppleDevice(isAppleDevice()), []);
 
-  const visibleProviders = appleDevice ? providers.slice(0, 1) : providers;
+  const visibleProviders = providers;
 
   async function continueWith(provider: Provider): Promise<void> {
     setPending(provider);
