@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Users } from "lucide-react";
 import type { Lead, Paginated } from "@/lib/api-client";
+import { Button } from "@/components/dashboard-ui/button";
+import { Card } from "@/components/dashboard-ui/card";
+import { EmptyState } from "@/components/dashboard-ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { LeadFilters } from "@/components/dashboard/LeadFilters";
 
@@ -29,18 +34,35 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const query = await searchParams;
   const result = await loadLeads(query);
   const leads = result?.items ?? [];
+  // An empty list because nothing has been discovered yet is a different
+  // problem from an empty list because the filters exclude everything, and
+  // the fix for each is different too.
+  const isFiltered = Object.entries(query).some(([key, value]) => key !== "page" && Boolean(value));
+  const total = result?.total ?? 0;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div>
-        <h1 className="display text-2xl text-dash-foreground">Leads</h1>
-        <p className="mt-1 text-sm text-dash-muted-foreground">{result?.total ?? 0} leads across every campaign.</p>
-      </div>
+      <PageHeader title="Leads" description={`${total} ${total === 1 ? "lead" : "leads"} across every campaign.`} />
 
       <LeadFilters />
 
       {leads.length === 0 ? (
-        <p className="rounded-dash-lg border border-dash-border bg-dash-card p-6 text-sm text-dash-muted-foreground">No leads match these filters yet.</p>
+        <Card>
+          {isFiltered ? (
+            <EmptyState icon={Users} title="No leads match these filters" description="Try widening the filters above — clearing the search or status usually brings results back." />
+          ) : (
+            <EmptyState
+              icon={Users}
+              title="No leads yet"
+              description="Leads appear here once a search finds businesses. Nothing is scraped until you start one."
+              action={
+                <Button asChild>
+                  <Link href="/discover">Find businesses</Link>
+                </Button>
+              }
+            />
+          )}
+        </Card>
       ) : (
         <Table>
           <TableHeader>

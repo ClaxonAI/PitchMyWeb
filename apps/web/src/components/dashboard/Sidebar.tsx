@@ -8,7 +8,6 @@ import { useUiStore } from "@/lib/stores/ui-store";
 import { NAV_ITEMS } from "./nav-items";
 import { ADMIN_NAV_ITEMS } from "@/components/admin/nav-items";
 import { Badge } from "@/components/dashboard-ui/badge";
-import { LogoMark } from "@/components/layout/Logo";
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -51,9 +50,8 @@ export function Sidebar() {
 
   return (
     <aside className={cn("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-dash-border bg-dash-card md:flex", sidebarCollapsed ? "w-16" : "w-60")}>
-      <div className="flex h-14 items-center gap-2 border-b border-dash-border px-4">
-        <LogoMark className="size-8 shrink-0" />
-        {!sidebarCollapsed && <span className="display text-base text-dash-foreground">PitchMyWeb</span>}
+      <div className={cn("flex h-14 items-center border-b border-dash-border", sidebarCollapsed ? "justify-center px-2" : "px-4")}>
+        <span className="display text-base text-dash-foreground">{sidebarCollapsed ? "P" : "PitchMyWeb"}</span>
       </div>
       {sidebarCollapsed ? (
         <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto p-2">
@@ -76,6 +74,9 @@ export function Sidebar() {
       <button
         type="button"
         onClick={toggleSidebar}
+        // Collapsed, this button is icon-only, so it needs its own name.
+        aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         className="flex h-11 items-center justify-center gap-2 border-t border-dash-border text-xs text-dash-muted-foreground transition-colors hover:bg-dash-accent hover:text-dash-foreground"
       >
         {sidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : (

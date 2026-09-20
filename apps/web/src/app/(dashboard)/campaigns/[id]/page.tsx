@@ -2,12 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
+import { Activity, Building2, Download, ListChecks, Play, Search, Send } from "lucide-react";
 import type { CampaignLeadRow, CampaignOverview } from "@/lib/api-client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
+import { EmptyState } from "@/components/dashboard-ui/empty-state";
+import { StatTile } from "@/components/dashboard-ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
 import { CampaignActions } from "@/components/dashboard/CampaignActions";
 import { DiscoveryProgress } from "@/components/dashboard/DiscoveryProgress";
+import { PageHeader } from "@/components/dashboard/PageHeader";
 import { WebsiteVerificationBadge } from "@/components/dashboard/WebsiteVerificationBadge";
 
 export const metadata: Metadata = { title: "Campaign" };
@@ -40,59 +45,35 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="display text-2xl text-dash-foreground">{campaign.name}</h1>
-            <StatusBadge status={campaign.status} />
-          </div>
-          <p className="mt-1 text-sm text-dash-muted-foreground">
-            {campaign.category} · {campaign.location}
-          </p>
-        </div>
-        <CampaignActions campaign={campaign} />
-      </div>
+      <PageHeader
+        title={campaign.name}
+        badge={<StatusBadge status={campaign.status} />}
+        description={`${campaign.category} · ${campaign.location}`}
+        actions={<CampaignActions campaign={campaign} />}
+      />
 
       {execution?.errorMessage && (
         <p className="rounded-dash-lg border border-dash-destructive/30 bg-dash-destructive/10 p-4 text-sm text-dash-destructive">{execution.errorMessage}</p>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card>
-          <CardHeader className="p-4 pb-1">
-            <CardTitle>Leads found</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="display text-2xl">{counts.leads}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-4 pb-1">
-            <CardTitle>Selected</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="display text-2xl">{counts.selected}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-4 pb-1">
-            <CardTitle>Delivered</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="display text-2xl">{counts.delivered}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-4 pb-1">
-            <CardTitle>Run status</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="text-sm font-medium">{execution?.status ?? "Not run yet"}</p>
-            {execution && (
+        <StatTile label="Leads found" icon={Building2} value={counts.leads} />
+        <StatTile label="Selected" icon={ListChecks} value={counts.selected} />
+        <StatTile label="Delivered" icon={Send} value={counts.delivered} emphasis={counts.delivered > 0} />
+        <div className="flex flex-col gap-2 rounded-dash-lg border border-dash-border bg-dash-card p-4">
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 shrink-0 text-dash-muted-foreground" />
+            <p className="truncate text-sm font-medium text-dash-muted-foreground">Run status</p>
+          </div>
+          {execution ? (
+            <>
+              <StatusBadge status={execution.status} className="self-start" />
               <DiscoveryProgress campaignId={id} executionId={execution.id} initialStatus={execution.status} />
-            )}
-          </CardContent>
-        </Card>
+            </>
+          ) : (
+            <p className="text-sm text-dash-muted-foreground">Not run yet</p>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -101,11 +82,24 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         </CardHeader>
         <CardContent className="p-0">
           {leadRows.length === 0 ? (
-            <p className="p-5 text-sm text-dash-muted-foreground">
-              {campaign.status === "RUNNING" || campaign.status === "PROCESSING"
-                ? "Search is in progress. Leads will show up here when the scrape finishes."
-                : "No leads yet — pay for a plan, then start a search from Discover."}
-            </p>
+            campaign.status === "RUNNING" || campaign.status === "PROCESSING" ? (
+              <EmptyState
+                icon={Search}
+                title="Search in progress"
+                description="Leads will show up here as soon as the scrape finishes. You can leave this page — it keeps running."
+              />
+            ) : (
+              <EmptyState
+                icon={Search}
+                title="No leads yet"
+                description="This campaign hasn't returned any businesses. Start a search from Discover to fill it."
+                action={
+                  <Button asChild>
+                    <Link href="/discover">Find businesses</Link>
+                  </Button>
+                }
+              />
+            )
           ) : (
             <Table className="border-0">
               <TableHeader>
@@ -141,16 +135,22 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                     <TableCell>{row.pipeline ? <StatusBadge status={row.pipeline.stage} /> : "—"}</TableCell>
                     <TableCell>
                       {row.pipeline?.videoReady ? (
-                        <span className="inline-flex items-center gap-3 text-sm">
-                          <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                            Watch
-                          </a>
-                          <a href={`/api/pipelines/${row.pipeline.id}/video?download=1`} className="font-medium text-dash-primary hover:underline">
-                            Download
-                          </a>
+                        <span className="inline-flex items-center gap-1">
+                          <Button asChild variant="ghost" size="sm" title="Watch the demo video">
+                            <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer">
+                              <Play />
+                              Watch
+                            </a>
+                          </Button>
+                          <Button asChild variant="ghost" size="sm" title="Download the demo video as MP4">
+                            <a href={`/api/pipelines/${row.pipeline.id}/video?download=1`}>
+                              <Download />
+                              <span className="sr-only">Download</span>
+                            </a>
+                          </Button>
                         </span>
                       ) : (
-                        "—"
+                        <span className="text-dash-muted-foreground">—</span>
                       )}
                     </TableCell>
                   </TableRow>

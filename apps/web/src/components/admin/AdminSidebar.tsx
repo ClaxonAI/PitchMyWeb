@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ADMIN_NAV_ITEMS } from "./nav-items";
-import { LogoMark } from "@/components/layout/Logo";
 
 export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -36,7 +35,6 @@ export function AdminSidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-dash-border bg-dash-card md:flex">
       <div className="flex h-14 items-center border-b border-dash-border px-4">
-        <LogoMark className="size-8" />
         <span className="display text-base text-dash-foreground">Admin</span>
       </div>
       <AdminSidebarNav />

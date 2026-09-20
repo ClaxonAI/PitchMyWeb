@@ -12,7 +12,6 @@ import { SidebarNav } from "./Sidebar";
 import { useSession } from "./SessionProvider";
 import { authApi } from "@/lib/api-client";
 import { Badge } from "@/components/dashboard-ui/badge";
-import { LogoMark } from "@/components/layout/Logo";
 
 function initialsOf(name: string | null, email: string): string {
   if (name && name.trim().length > 0) {
@@ -55,7 +54,7 @@ export function Topbar() {
           </Button>
         </SheetTrigger>
         <SheetContent>
-          <SheetTitle className="flex items-center gap-2 px-1 text-base"><LogoMark className="size-7" />PitchMyWeb</SheetTitle>
+          <SheetTitle className="display px-1 text-base">PitchMyWeb</SheetTitle>
           <div className="mt-4 flex-1">
             <SidebarNav onNavigate={() => setMobileOpen(false)} />
           </div>

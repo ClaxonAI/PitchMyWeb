@@ -9,6 +9,7 @@ import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/dashboard-ui/tabs";
 import { Select } from "@/components/dashboard-ui/select";
+import { PitchBody } from "@/components/dashboard/PitchBody";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { WebsiteVerificationBadge } from "@/components/dashboard/WebsiteVerificationBadge";
 
@@ -284,7 +285,7 @@ export function LeadDetail({ initialLead }: { initialLead: LeadDetailType }) {
                       <StatusBadge status={pitch.status} />
                       <span className="text-xs text-dash-muted-foreground">{new Date(pitch.createdAt).toLocaleString()}</span>
                     </div>
-                    <p className="whitespace-pre-wrap">{pitch.content}</p>
+                    <PitchBody content={pitch.content} className="text-dash-foreground" />
                   </div>
                 ))
               )}

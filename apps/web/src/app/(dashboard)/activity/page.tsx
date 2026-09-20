@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Activity as ActivityIcon } from "lucide-react";
 import type { ActivityRow, Paginated } from "@/lib/api-client";
+import { Button } from "@/components/dashboard-ui/button";
+import { Card } from "@/components/dashboard-ui/card";
+import { EmptyState } from "@/components/dashboard-ui/empty-state";
+import { PageHeader } from "@/components/dashboard/PageHeader";
+import { statusLabel } from "@/components/dashboard/StatusBadge";
 
 export const metadata: Metadata = { title: "Activity" };
 export const dynamic = "force-dynamic";
@@ -25,19 +31,27 @@ export default async function ActivityPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <div>
-        <h1 className="display text-2xl text-dash-foreground">Activity</h1>
-        <p className="mt-1 text-sm text-dash-muted-foreground">Everything that&apos;s happened across your leads, most recent first.</p>
-      </div>
+      <PageHeader title="Activity" description="Everything that's happened across your leads, most recent first." />
 
       {activities.length === 0 ? (
-        <p className="rounded-dash-lg border border-dash-border bg-dash-card p-6 text-sm text-dash-muted-foreground">No activity yet.</p>
+        <Card>
+          <EmptyState
+            icon={ActivityIcon}
+            title="Nothing has happened yet"
+            description="Every lead created, demo built and pitch sent is logged here as it happens."
+            action={
+              <Button asChild>
+                <Link href="/discover">Find businesses</Link>
+              </Button>
+            }
+          />
+        </Card>
       ) : (
         <div className="flex flex-col divide-y divide-dash-border rounded-dash-lg border border-dash-border bg-dash-card">
           {activities.map((activity) => (
             <div key={activity.id} className="flex items-center justify-between px-5 py-3 text-sm">
               <div>
-                <p className="font-medium">{activity.type.replaceAll("_", " ")}</p>
+                <p className="font-medium">{statusLabel(activity.type)}</p>
                 {activity.lead && (
                   <p className="text-dash-muted-foreground">
                     <Link href={`/leads/${activity.leadId}`} className="hover:underline">

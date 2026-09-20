@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { MessageSquareQuote } from "lucide-react";
 import type { Lead, Paginated, Pitch } from "@/lib/api-client";
+import { Button } from "@/components/dashboard-ui/button";
+import { Card } from "@/components/dashboard-ui/card";
+import { EmptyState } from "@/components/dashboard-ui/empty-state";
+import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PitchBody } from "@/components/dashboard/PitchBody";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 
 export const metadata: Metadata = { title: "Pitches" };
@@ -26,13 +32,21 @@ export default async function PitchesPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <div>
-        <h1 className="display text-2xl text-dash-foreground">Pitches</h1>
-        <p className="mt-1 text-sm text-dash-muted-foreground">Every pitch generated across your campaigns.</p>
-      </div>
+      <PageHeader title="Pitches" description="Every pitch generated across your campaigns." />
 
       {pitches.length === 0 ? (
-        <p className="rounded-dash-lg border border-dash-border bg-dash-card p-6 text-sm text-dash-muted-foreground">No pitches generated yet.</p>
+        <Card>
+          <EmptyState
+            icon={MessageSquareQuote}
+            title="No pitches yet"
+            description="Each lead gets a pitch written for it once a search finishes and its demo site is built."
+            action={
+              <Button asChild>
+                <Link href="/discover">Find businesses</Link>
+              </Button>
+            }
+          />
+        </Card>
       ) : (
         <div className="flex flex-col gap-3">
           {pitches.map((pitch) => (
@@ -46,7 +60,7 @@ export default async function PitchesPage() {
                   <span className="text-xs text-dash-muted-foreground">{new Date(pitch.createdAt).toLocaleString()}</span>
                 </div>
               </div>
-              <p className="whitespace-pre-wrap text-dash-muted-foreground">{pitch.content}</p>
+              <PitchBody content={pitch.content} />
             </div>
           ))}
         </div>
