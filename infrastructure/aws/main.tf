@@ -187,7 +187,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "postgres" {
   identifier            = "pitchmyweb-db"
   engine                = "postgres"
-  engine_version        = "15.4"
+  engine_version        = "15"
   instance_class        = "db.t3.micro"
   allocated_storage     = 20
   storage_type          = "gp3"
@@ -265,6 +265,16 @@ resource "aws_iam_role" "ec2_role" {
   })
 }
 
+# Lets the SSM *agent* register with Systems Manager so Session Manager and
+# send-command work. This is separate from the Parameter Store read below:
+# that grants ssm:GetParameter, while the agent needs the ssmmessages/
+# ec2messages channel actions. Without this the instance never appears in
+# describe-instance-information, however long you wait.
+resource "aws_iam_role_policy_attachment" "ssm_managed_core" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 # IAM Policy for SSM and KMS
 resource "aws_iam_role_policy" "ssm_policy" {
   name = "pitchmyweb-ssm-policy"
@@ -335,6 +345,7 @@ resource "aws_instance" "app" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+  key_name               = "pitchmyweb-prod"
 
   tags = {
     Name = "pitchmyweb-app"
