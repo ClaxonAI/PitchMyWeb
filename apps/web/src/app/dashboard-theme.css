@@ -1,0 +1,109 @@
+/*
+ * Dashboard-only design tokens (Phase 1). Every token here is named with a
+ * `dash-` prefix specifically so it can never collide with the marketing
+ * site's own `@theme` tokens in globals.css (e.g. `--color-primary`) — the
+ * two token sets coexist in the same global Tailwind build, but no
+ * marketing component ever references a `dash-` prefixed utility, and no
+ * dashboard component ever references a bare (unprefixed) one. This is what
+ * keeps `next-themes`'s dark-mode class toggle (applied to <html>, since
+ * that's the only element next-themes can target) harmless to marketing
+ * pages even though route groups share one <html> across client-side
+ * navigation: a `dark` class on <html> only changes the *value* of
+ * `--dash-*` variables, which marketing components never read.
+ *
+ * Light values are lifted directly from brandthis.in's own CSS custom
+ * properties (read from its live stylesheet): --purple #3336cd (primary —
+ * already coincidentally this product's brand primary too), --bg #f4f6ff
+ * (page background), --paper #ffffff (card surfaces), --purple-soft #e8ebff
+ * (secondary/accent), --muted #4d5366 (muted text), --border/--gray-200
+ * #e5e7eb, --red #dc2626 (their error token; --coral is their decorative
+ * accent, not semantic error, so it's intentionally not used here). Their
+ * palette has no semantic "success" token (only the decorative --lime
+ * #c9f27a, too pale for text/icon contrast), so success is a darker olive
+ * derived from the same hue rather than a generic emerald. Dark values have
+ * no brandthis equivalent to copy (their site is light-only) — they're a
+ * fresh set in the same hue family (purple/red/olive), not an inverted copy.
+ */
+
+@theme inline {
+  --color-dash-background: var(--dash-background);
+  --color-dash-foreground: var(--dash-foreground);
+  --color-dash-card: var(--dash-card);
+  --color-dash-card-foreground: var(--dash-card-foreground);
+  --color-dash-popover: var(--dash-popover);
+  --color-dash-popover-foreground: var(--dash-popover-foreground);
+  --color-dash-primary: var(--dash-primary);
+  --color-dash-primary-foreground: var(--dash-primary-foreground);
+  --color-dash-secondary: var(--dash-secondary);
+  --color-dash-secondary-foreground: var(--dash-secondary-foreground);
+  --color-dash-muted: var(--dash-muted);
+  --color-dash-muted-foreground: var(--dash-muted-foreground);
+  --color-dash-accent: var(--dash-accent);
+  --color-dash-accent-foreground: var(--dash-accent-foreground);
+  --color-dash-destructive: var(--dash-destructive);
+  --color-dash-destructive-foreground: var(--dash-destructive-foreground);
+  --color-dash-success: var(--dash-success);
+  --color-dash-success-foreground: var(--dash-success-foreground);
+  --color-dash-border: var(--dash-border);
+  --color-dash-input: var(--dash-input);
+  --color-dash-ring: var(--dash-ring);
+  --radius-dash-sm: calc(var(--dash-radius) - 4px);
+  --radius-dash-md: calc(var(--dash-radius) - 2px);
+  --radius-dash-lg: var(--dash-radius);
+  --radius-dash-xl: calc(var(--dash-radius) + 4px);
+}
+
+:root {
+  --dash-background: #f4f6ff;
+  --dash-foreground: #18181b;
+  --dash-card: #ffffff;
+  --dash-card-foreground: #18181b;
+  --dash-popover: #ffffff;
+  --dash-popover-foreground: #18181b;
+  --dash-primary: #3336cd;
+  --dash-primary-foreground: #ffffff;
+  --dash-secondary: #e8ebff;
+  --dash-secondary-foreground: #18181b;
+  --dash-muted: #f4f4f5;
+  --dash-muted-foreground: #4d5366;
+  --dash-accent: #e8ebff;
+  --dash-accent-foreground: #18181b;
+  --dash-destructive: #dc2626;
+  --dash-destructive-foreground: #ffffff;
+  --dash-success: #5c8f1f;
+  --dash-success-foreground: #ffffff;
+  --dash-border: #e5e7eb;
+  --dash-input: #e5e7eb;
+  --dash-ring: #3336cd;
+  --dash-radius: 0.75rem;
+}
+
+.dark {
+  --dash-background: #0b0b14;
+  --dash-foreground: #f4f6ff;
+  --dash-card: #131320;
+  --dash-card-foreground: #f4f6ff;
+  --dash-popover: #131320;
+  --dash-popover-foreground: #f4f6ff;
+  --dash-primary: #9b8aff;
+  --dash-primary-foreground: #0b0b14;
+  --dash-secondary: #23233a;
+  --dash-secondary-foreground: #f4f6ff;
+  --dash-muted: #1b1b29;
+  --dash-muted-foreground: #a6a8c4;
+  --dash-accent: #23233a;
+  --dash-accent-foreground: #f4f6ff;
+  --dash-destructive: #ff8a80;
+  --dash-destructive-foreground: #0b0b14;
+  --dash-success: #a8e063;
+  --dash-success-foreground: #0b0b14;
+  --dash-border: #262638;
+  --dash-input: #262638;
+  --dash-ring: #9b8aff;
+}
+
+.dashboard-shell {
+  background: var(--dash-background);
+  color: var(--dash-foreground);
+  min-height: 100dvh;
+}

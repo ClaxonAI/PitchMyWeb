@@ -1,0 +1,39 @@
+{
+  "name": "pitchmyweb",
+  "private": true,
+  "description": "PitchMyWeb monorepo: marketing + dashboard web app, API, WhatsApp worker, shared packages",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w apps/api -- -p 4000",
+    "dev:worker": "npm run dev -w apps/whatsapp-worker",
+    "jobs": "npm run jobs -w apps/api",
+    "build": "npm run build -w apps/web && npm run build -w apps/api && npm run build -w apps/sites",
+    "build:web": "npm run build -w apps/web",
+    "build:api": "npm run build -w apps/api",
+    "lint": "npm run lint -w apps/web && npm run lint -w apps/sites",
+    "test": "npm run test -w packages/contracts && npm run test -w apps/api && npm run test -w apps/whatsapp-worker && npm run test -w apps/recorder-worker && npm run test -w apps/discovery-worker && npm run test -w apps/verification-worker",
+    "test:api": "npm run test -w apps/api",
+    "test:worker": "npm run test -w apps/whatsapp-worker",
+    "test:discovery": "npm run test -w apps/discovery-worker",
+    "test:verification": "npm run test -w apps/verification-worker",
+    "typecheck": "npm run typecheck -w packages/db && npm run typecheck -w packages/contracts && npm run typecheck -w packages/templates && npm run typecheck -w packages/storage && npm run typecheck -w apps/api && npm run typecheck -w apps/whatsapp-worker && npm run typecheck -w apps/recorder-worker && npm run typecheck -w apps/discovery-worker && npm run typecheck -w apps/verification-worker && npm run typecheck -w apps/sites && npm run typecheck -w apps/web",
+    "db:generate": "npm run generate -w packages/db",
+    "db:migrate": "npm run migrate -w packages/db",
+    "db:deploy": "npm run deploy -w packages/db",
+    "db:seed": "npm run seed -w packages/db",
+    "db:studio": "npm run studio -w packages/db",
+    "dev:sites": "npm run dev -w apps/sites",
+    "dev:recorder": "npm run dev -w apps/recorder-worker",
+    "dev:discovery": "npm run dev -w apps/discovery-worker",
+    "dev:verification": "npm run dev -w apps/verification-worker",
+    "dev:python-discovery": "apps/python-discovery/.venv/Scripts/python.exe apps/python-discovery/src/main.py",
+    "build:sites": "npm run build -w apps/sites",
+    "test:recorder": "npm run test -w apps/recorder-worker"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@pitchmyweb/sites",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public preview sites for pitched businesses (the dental-clinic template), recorded by apps/recorder-worker",
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start -p 3200",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pitchmyweb/templates": "*",
+    "@tailwindcss/postcss": "^4.1.13",
+    "next": "^15.5.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "eslint": "^9.35.0",
+    "eslint-config-next": "^15.5.2",
+    "typescript": "^5.9.2"
+  }
+}

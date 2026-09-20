@@ -1,0 +1,39 @@
+{
+  "name": "@pitchmyweb/recorder-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Records published preview sites with Playwright, converts them to WhatsApp-ready MP4 and uploads them to object storage.",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "browsers:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@pitchmyweb/contracts": "*",
+    "@pitchmyweb/db": "*",
+    "@pitchmyweb/storage": "*",
+    "@prisma/adapter-pg": "^7.10.0",
+    "bullmq": "^5.63.0",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.9.1",
+    "pg": "^8.23.0",
+    "pino": "^9.6.0",
+    "playwright": "^1.63.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "@types/pg": "^8.23.1",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

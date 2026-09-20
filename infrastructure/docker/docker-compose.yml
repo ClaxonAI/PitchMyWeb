@@ -1,0 +1,76 @@
+# Local development infrastructure.
+#   npm run infra:up      start Postgres + Redis
+#   npm run infra:down    stop them (data is kept in the named volumes)
+#
+# `name:` is pinned rather than inferred from this file's directory. Compose
+# derives the project name — and therefore the volume prefix — from the
+# containing folder, so moving this file from the repo root to
+# infrastructure/docker/ would otherwise rename the volume to
+# `docker_pitchmyweb-pgdata` and silently hand you an empty database. Pinning
+# it keeps the existing `pitchmyweb_pitchmyweb-pgdata` volume attached.
+name: pitchmyweb
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: pitchmyweb-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pitchmyweb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitchmyweb_local}
+      POSTGRES_DB: ${POSTGRES_DB:-pitchmyweb_dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - pitchmyweb-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # BullMQ queues, session locks, rate counters and the realtime pub/sub
+  # channel. Port 6381 because 6379 and 6380 are taken by other local
+  # projects on this machine; like Postgres it is bound to 127.0.0.1 only,
+  # so nothing on the network can reach it.
+  redis:
+    image: redis:7-alpine
+    container_name: pitchmyweb-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6381}:6379"
+    volumes:
+      - pitchmyweb-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible storage for demo recordings (apps/recorder-worker uploads,
+  # apps/api signs download URLs). Ports 9100/9101 because 9000/9001 are
+  # taken by another local project. Console: http://127.0.0.1:9101
+  minio:
+    image: minio/minio:latest
+    container_name: pitchmyweb-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-pitchmyweb}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-pitchmyweb_local_storage}
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9100}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - pitchmyweb-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pitchmyweb-pgdata:
+  pitchmyweb-redisdata:
+  pitchmyweb-miniodata:

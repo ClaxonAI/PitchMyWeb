@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+/*
+ * Preview-site tokens. Deliberately NOT the PitchMyWeb brand: each preview
+ * should feel like the clinic's own site. Three calm themes, picked per
+ * clinic by the template builder and applied with data-theme on the root.
+ */
+@theme {
+  --color-page: var(--site-page);
+  --color-paper: var(--site-paper);
+  --color-ink: var(--site-ink);
+  --color-muted: var(--site-muted);
+  --color-line: var(--site-line);
+  --color-brand: var(--site-brand);
+  --color-brand-deep: var(--site-brand-deep);
+  --color-brand-soft: var(--site-brand-soft);
+  --color-accent: var(--site-accent);
+  --color-whatsapp: #1fa855;
+
+  --font-display: var(--font-instrument), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-soft: 1.75rem;
+  --shadow-float: 0 30px 60px -30px rgb(15 42 46 / 0.35), 0 8px 18px -12px rgb(15 42 46 / 0.2);
+}
+
+:root,
+[data-theme="teal"] {
+  --site-page: #f6f2ea;
+  --site-paper: #fffdf8;
+  --site-ink: #10292c;
+  --site-muted: #5d6f6f;
+  --site-line: #e3dccf;
+  --site-brand: #0f5c57;
+  --site-brand-deep: #0a3f3c;
+  --site-brand-soft: #dcebe6;
+  --site-accent: #e39266;
+}
+
+[data-theme="sage"] {
+  --site-page: #f4f3ec;
+  --site-paper: #fdfcf7;
+  --site-ink: #1c2a21;
+  --site-muted: #5f6b61;
+  --site-line: #e0ded2;
+  --site-brand: #3d6a4f;
+  --site-brand-deep: #2a4b37;
+  --site-brand-soft: #e0e9dd;
+  --site-accent: #c98556;
+}
+
+[data-theme="navy"] {
+  --site-page: #f5f4f0;
+  --site-paper: #fefdfa;
+  --site-ink: #121c2e;
+  --site-muted: #5b6475;
+  --site-line: #e1dfd7;
+  --site-brand: #1f3d66;
+  --site-brand-deep: #152a47;
+  --site-brand-soft: #dfe6f0;
+  --site-accent: #d6a045;
+}
+
+[data-theme="amber"] {
+  --site-page: #f7f1e6;
+  --site-paper: #fffaf2;
+  --site-ink: #2a1c12;
+  --site-muted: #6e5a48;
+  --site-line: #ead9c4;
+  --site-brand: #9a4a16;
+  --site-brand-deep: #6e3010;
+  --site-brand-soft: #f3e0cc;
+  --site-accent: #c47a2b;
+}
+
+[data-theme="violet"] {
+  --site-page: #f6f3fb;
+  --site-paper: #fdfbff;
+  --site-ink: #17131f;
+  --site-muted: #6b6278;
+  --site-line: #e4dceb;
+  --site-brand: #7c3aed;
+  --site-brand-deep: #5b21b6;
+  --site-brand-soft: #f5f3ff;
+  --site-accent: #c4b5fd;
+}
+
+[data-theme="ember"] {
+  --site-page: #111111;
+  --site-paper: #1a1a1a;
+  --site-ink: #f4f1ea;
+  --site-muted: #b3aaa0;
+  --site-line: #2c2c2c;
+  --site-brand: #ff7a00;
+  --site-brand-deep: #c45a00;
+  --site-brand-soft: #3a2414;
+  --site-accent: #ffb347;
+}
+
+[data-theme="stone"] {
+  --site-page: #f4f1ec;
+  --site-paper: #fbf9f5;
+  --site-ink: #2c2924;
+  --site-muted: #6d675e;
+  --site-line: #e2dcd2;
+  --site-brand: #5c5346;
+  --site-brand-deep: #3d372f;
+  --site-brand-soft: #ebe4d8;
+  --site-accent: #b08968;
+}
+
+[data-theme="wine"] {
+  --site-page: #f7f0ee;
+  --site-paper: #fffaf9;
+  --site-ink: #2a1418;
+  --site-muted: #6f565c;
+  --site-line: #ead8d4;
+  --site-brand: #7a2e3a;
+  --site-brand-deep: #541f28;
+  --site-brand-soft: #f0d9dc;
+  --site-accent: #c9a27a;
+}
+
+[data-theme="ink"] {
+  --site-page: #eef2f6;
+  --site-paper: #f7f9fb;
+  --site-ink: #0f1720;
+  --site-muted: #5b6773;
+  --site-line: #d5dde5;
+  --site-brand: #1e3a5f;
+  --site-brand-deep: #12263f;
+  --site-brand-soft: #d9e4f0;
+  --site-accent: #3d8bfd;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--site-page);
+    color: var(--site-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--site-brand);
+    color: white;
+  }
+  :focus-visible {
+    outline: 2px solid var(--site-brand);
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+  details > summary {
+    list-style: none;
+  }
+  details > summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.015em;
+  }
+  .kicker {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .grain {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* Scroll reveal: elements start slightly lowered and fade in once visible.
+     Without JavaScript (or with reduced motion) everything is simply shown. */
+  .js [data-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .js [data-reveal].is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.55; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@utility animate-float {
+  animation: float-slow 6s ease-in-out infinite;
+}
+@utility animate-pulse-ring {
+  animation: pulse-ring 2.4s ease-out infinite;
+}
+
+/* Marketing homepage embeds: keep sticky chrome quiet, show content immediately. */
+.demo-embed .fixed {
+  display: none !important;
+}
+.demo-embed [data-reveal] {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .js [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}

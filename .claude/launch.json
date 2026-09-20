@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pitchmyweb",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "apps/web", "--", "-p", "3100"],
+      "port": 3100
+    },
+    {
+      "name": "pitchmyweb-sites",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "apps/sites"],
+      "port": 3200
+    },
+    {
+      "name": "pitchmyweb-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "apps/api", "--", "-p", "4000"],
+      "port": 4000
+    }
+  ]
+}

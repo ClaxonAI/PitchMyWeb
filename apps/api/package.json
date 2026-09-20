@@ -1,0 +1,60 @@
+{
+  "name": "@pitchmyweb/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PitchMyWeb API: Next.js route handlers, domain services and the WhatsApp control plane.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "jobs": "tsx --env-file=.env scripts/job-scheduler.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "job:expire-stale-runs": "tsx scripts/expire-stale-runs.ts",
+    "job:backfill-business-normalized": "tsx scripts/backfill-business-normalized-fields.ts",
+    "job:enqueue-website-verifications": "tsx scripts/enqueue-website-verifications.ts",
+    "demo:preview": "tsx scripts/demo-preview.ts",
+    "admin:promote": "tsx scripts/promote-admin.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClaxonAI/PitchMyWeb.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ClaxonAI/PitchMyWeb/issues"
+  },
+  "homepage": "https://github.com/ClaxonAI/PitchMyWeb#readme",
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.18.1",
+    "@langchain/core": "^0.3.80",
+    "@langchain/openai": "^0.3.17",
+    "@pitchmyweb/contracts": "*",
+    "@pitchmyweb/db": "*",
+    "@pitchmyweb/storage": "*",
+    "@pitchmyweb/templates": "*",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.63.0",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.9.1",
+    "libphonenumber-js": "^1.13.13",
+    "next": "^16.3.5",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  }
+}

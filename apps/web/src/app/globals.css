@@ -1,0 +1,140 @@
+@import "tailwindcss";
+/* Dashboard-only tokens (Phase 1) — see dashboard-theme.css's own header
+ * comment for why these coexist safely with the tokens below. */
+@import "./dashboard-theme.css";
+
+/*
+ * Design tokens — the single source of truth for the brand.
+ * Palette derived from brandthis.in. Every component consumes these via
+ * Tailwind utilities (bg-primary, text-ink, rounded-card, shadow-glow …).
+ */
+@theme {
+  --color-primary: #3157d5;
+  --color-primary-strong: #2443ad;
+  --color-violet: #536dfe;
+  --color-lilac: #9aaeff;
+  --color-ink: #0a0a0a;
+  --color-ink-2: #16161d;
+  --color-paper: #ffffff;
+  --color-mist: #f4efe7;
+  --color-mist-2: #fbf8f2;
+  --color-mist-3: #ebe3d8;
+  --color-mist-4: #ded3c5;
+  --color-coral: #ff6d5f;
+  --color-lime: #c9f27a;
+  --color-whatsapp: #25d366;
+  --color-whatsapp-deep: #0b5f55;
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+
+  --shadow-glow: 0 10px 24px rgb(49 87 213 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.14);
+  --shadow-soft: 0 16px 38px rgb(10 10 10 / 0.06);
+  --shadow-lift: 0 28px 70px -24px rgb(36 27 18 / 0.2);
+
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-scan: scan 1.8s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes scan {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(88px); }
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Base styles must live in a layer, otherwise they override utilities. */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--color-primary);
+    color: white;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-variation-settings: "opsz" 96, "SOFT" 30;
+    letter-spacing: -0.018em;
+  }
+  .grid-paper {
+    background-image:
+      linear-gradient(to right, rgb(49 87 213 / 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(49 87 213 / 0.07) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 30%, transparent 75%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(10 10 10 / 0.15) transparent;
+}
+
+@utility reveal {
+  animation: var(--animate-fade-up);
+  animation-fill-mode: both;
+}
+
+@utility text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

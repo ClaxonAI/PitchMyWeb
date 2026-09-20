@@ -1,0 +1,25 @@
+{
+  "name": "@pitchmyweb/templates",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Website template content contracts (zod) and builders that turn a business into template content",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "typescript": "^5.9.3"
+  }
+}

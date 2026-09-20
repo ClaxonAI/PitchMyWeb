@@ -1,0 +1,1086 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT
+  READY
+  RUNNING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Not specified explicitly by the product doc; smallest reasonable set that
+// lets a campaign filter on website presence (the core value proposition).
+enum WebsiteRequirement {
+  ANY
+  WITH_WEBSITE
+  WITHOUT_WEBSITE
+}
+
+// Phase 2C: rolling, post-hoc website-liveness check (apps/verification-worker).
+// Never gates lead/campaign creation — matchesWebsiteRequirement stays
+// presence-only; this is display-only, written asynchronously sometime
+// after the Business row already exists.
+enum WebsiteVerificationStatus {
+  UNVERIFIED // default — no website, or not yet checked
+  LIVE // reachable (HTTP or Playwright-rendered) with no parked-page signal
+  PARKED // reachable but looks like a registrar parking/for-sale page
+  DEAD // DNS failure, connection refused, 4xx/5xx, or SSRF-guard rejection
+  UNREACHABLE // timed out at every attempt — ambiguous, not proof of death
+}
+
+enum LeadStatus {
+  NEW
+  ANALYZED
+  SITE_READY
+  PITCHED
+  REPLIED
+  INTERESTED
+  NEGOTIATING
+  WON
+  LOST
+}
+
+enum ScoreClassification {
+  EXCELLENT
+  STRONG
+  MEDIUM
+  LOW
+  IGNORE
+}
+
+enum ServiceCode {
+  WEBSITE
+  WEBSITE_REDESIGN
+  WHATSAPP
+  REVIEWS
+  SEO
+  AI_CHATBOT
+  AI_VOICE_AGENT
+  APPOINTMENT_SYSTEM
+  DIGITAL_MENU
+  POS
+}
+
+// Not specified explicitly by the product doc; smallest reasonable lifecycle
+// for a generated demo site.
+enum WebsiteStatus {
+  DRAFT
+  GENERATING
+  READY
+  PUBLISHED
+  FAILED
+}
+
+// Not specified explicitly by the product doc; smallest reasonable lifecycle
+// for AI-generated outreach copy.
+enum PitchStatus {
+  PENDING
+  GENERATED
+  FAILED
+}
+
+// V1 only drives WHATSAPP, but the model stays extensible for later channels.
+enum OutreachChannel {
+  WHATSAPP
+  EMAIL
+  SMS
+  OTHER
+}
+
+// Not specified explicitly by the product doc; mirrors the V1 WhatsApp flow
+// (link generated -> operator opens it -> operator confirms send).
+enum OutreachStatus {
+  PENDING
+  LINK_GENERATED
+  OPENED
+  SENT
+  FAILED
+}
+
+enum ActivityType {
+  LEAD_CREATED
+  LEAD_ANALYZED
+  WEBSITE_GENERATED
+  DEMO_PUBLISHED
+  PITCH_GENERATED
+  WHATSAPP_OPENED
+  PITCHED
+  REPLIED
+  INTERESTED
+  MEETING
+  WON
+  LOST
+}
+
+// Not specified explicitly by the product doc; smallest reasonable set for
+// negotiation/won/lost state that mirrors the lead lifecycle without
+// duplicating it.
+enum DealStatus {
+  OPEN
+  NEGOTIATING
+  WON
+  LOST
+}
+
+// Phase 4: tracks one POST /api/campaigns/:id/run attempt. Not specified
+// explicitly by the product doc as a model (section 23 only says "create an
+// idempotent execution/job request"); this is the smallest reasonable
+// persisted record of that request, giving campaign runs a DB-backed audit
+// trail and an idempotency-key replay target instead of relying on
+// Campaign.status alone (which only proves *a* run happened, not which
+// request triggered it).
+enum CampaignExecutionStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Phase 5: one row per POST /api/leads/:id/analyze attempt (backend_tasks.md
+// section 27, "Record model name / prompt version / latency / output
+// status"). Mirrors two existing patterns rather than inventing a third:
+// Pitch already tracks promptVersion+modelName+status for AI-generated
+// content, and CampaignExecution already tracks a failed attempt's
+// diagnostic detail (errorMessage) without corrupting the entity it
+// attempted to affect. A FAILED row records that an attempt happened and
+// why, without ever writing invalid data into Lead/LeadScore — only a
+// SUCCESS row's content is ever copied onto the Lead (see
+// lib/leads/lead.service.ts's applyLeadAnalysis).
+enum AiAnalysisStatus {
+  SUCCESS
+  FAILED
+}
+
+// Pricing-page checkout (Razorpay Standard Checkout). PENDING from order
+// creation until the client-side checkout completes; PAID only after
+// lib/checkout/checkout.service.ts's verifyPayment has independently
+// recomputed and matched the HMAC signature server-side (never set from a
+// client-claimed status). FAILED covers a signature mismatch or a payment
+// Razorpay itself reports as failed.
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// Phase 3: platform roles. USER is the customer dashboard; ADMIN and
+// SUPER_ADMIN share the /admin portal. SUPER_ADMIN is the only role that
+// can change another user's role.
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  // Null for Google-only accounts (they never set a password).
+  passwordHash String?
+  // Google subject (`sub`). Unique when present so the same Google account
+  // cannot be linked to two PitchMyWeb users.
+  googleId     String?  @unique
+  // Phase 1 dashboard (apps/web profile page): display name, optional and
+  // editable via PATCH /api/me. Nothing in the auth flow depends on it —
+  // register/login only ever use email/passwordHash; Google fills it once.
+  name         String?
+  imageUrl     String?
+  role         UserRole @default(USER)
+  // Set by an admin; login and requireCurrentUser both refuse a non-null value.
+  suspendedAt  DateTime?
+  lastLoginAt  DateTime?
+  // Operator-assigned or checkout-claimed plan ("auto" | "direct"). A
+  // non-null value counts as paid access even without a Razorpay Order row.
+  planId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  campaigns        Campaign[]
+  sessions         Session[]
+  whatsappAccounts WhatsAppAccount[]
+  whatsappMessages WhatsAppMessage[]
+  orders           Order[]
+  auditLogs        AuditLog[]
+  trialDevice      TrialDevice?
+
+  @@index([role])
+  @@map("users")
+}
+
+// Phase 3: append-only platform audit trail. actorId is nullable so a
+// deleted user does not take the log with them (onDelete SetNull).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model TrialDevice {
+  id            String   @id @default(cuid())
+  visitorIdHash String   @unique
+  userId        String   @unique
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("trial_devices")
+}
+
+model Coupon {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  discountPercent  Int
+  active           Boolean  @default(true)
+  maxRedemptions   Int?
+  redemptionCount  Int      @default(0)
+  expiresAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([active, expiresAt])
+  @@map("coupons")
+}
+
+// Phase 4 auth: opaque bearer token issued at login, stored server-side only
+// as a hash (never the raw token) so a database read alone cannot be used to
+// impersonate a session. The raw token lives only in the client's HTTP-only
+// cookie.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Campaign {
+  id                 String             @id @default(cuid())
+  userId             String
+  name               String
+  // Market purchased for this campaign. It is immutable after creation and
+  // must be covered by one of the user's PAID orders.
+  market             String             @default("india")
+  location           String
+  radius             Int?
+  category           String
+  minRating          Float?
+  minReviews         Int?
+  websiteRequirement WebsiteRequirement @default(ANY)
+  leadLimit          Int
+  status             CampaignStatus     @default(DRAFT)
+  // Delivery pipeline settings (docs/pipeline.md). targetCount is how many
+  // leads get a site + video + pitch; leadLimit is how many candidates
+  // discovery may return (normally about twice targetCount).
+  selectionMode      SelectionMode      @default(MANUAL)
+  targetCount        Int                @default(20)
+  deliveryMode       DeliveryMode       @default(AUTO)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads      Lead[]
+  executions CampaignExecution[]
+  pipelines  LeadPipeline[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignExecution {
+  id               String                  @id @default(cuid())
+  campaignId       String
+  // Client-supplied replay key (campaignRunRequestSchema.idempotencyKey).
+  // Nullable, like Business.externalId: Postgres treats each NULL as
+  // distinct, so the uniqueness below only dedupes when a client actually
+  // supplies a key, matching the same documented pattern used for business
+  // discovery dedup (section 6).
+  idempotencyKey   String?
+  status           CampaignExecutionStatus @default(RUNNING)
+  businessesFound  Int                     @default(0)
+  leadsCreated     Int                     @default(0)
+  failedCount      Int                     @default(0)
+  // Phase 4 code-review finding #6: per-business ingestion failures used to
+  // be logged to console.error only, with no way to recover which business
+  // failed or why once the log line was gone. Each entry is a small
+  // {name, externalId, error} record (sanitized message only, never a raw
+  // stack trace) — a structured, queryable counterpart to failedCount.
+  failedBusinesses Json?
+  errorMessage     String?
+  startedAt        DateTime                @default(now())
+  completedAt      DateTime?
+  // Async lead discovery. `provider` records which lead source ran
+  // ("demo" | "osm" | "custom"). `triggeredAt` is set only for asynchronous
+  // providers once the workflow acknowledged the trigger, which is what the
+  // stale-run reaper keys on. `externalRunId` is the workflow's own run id,
+  // when the provider has one worth cross-referencing. `ingestLeaseUntil`
+  // serialises result callbacks for one execution (see run.service.ts).
+  provider         String                  @default("demo")
+  externalRunId    String?
+  triggeredAt      DateTime?
+  ingestLeaseUntil DateTime?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, idempotencyKey])
+  @@index([campaignId])
+  @@index([status, triggeredAt])
+  @@map("campaign_executions")
+}
+
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  address     String?
+  city        String?
+  phone       String?
+  email       String?
+  website     String?
+  instagram   String?
+  facebook    String?
+  rating      Float?
+  reviewCount Int?
+  latitude    Float?
+  longitude   Float?
+  // Provider identifier, e.g. "demo", "google_maps", "manual". Kept as a
+  // plain string (not an enum) so new LeadProvider implementations do not
+  // require a schema migration.
+  source      String
+  externalId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Phase 2 dedup engine (lib/business/normalize.ts): lowercased/collapsed
+  // forms used by the matching cascade's tiers 2-4. Nullable because they're
+  // backfilled for pre-existing rows (scripts/backfill-business-normalized-fields.ts)
+  // rather than being present from day one.
+  normalizedName    String?
+  normalizedPhone   String?
+  normalizedAddress String?
+  normalizedDomain  String?
+
+  // Set when this business was merged into another (lib/business/merge.ts).
+  // Never hard-deleted — Lead.business stays onDelete: Restrict — so a
+  // merged-away row still exists for history, just excluded from every
+  // dedup tier's lookup (WHERE mergedIntoId IS NULL).
+  mergedIntoId String?
+  mergedInto   Business?  @relation("BusinessMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Business[] @relation("BusinessMerge")
+
+  // Phase 2C (apps/verification-worker): rolling website-liveness check.
+  websiteVerificationStatus WebsiteVerificationStatus @default(UNVERIFIED)
+  websiteVerifiedAt         DateTime?
+
+  leads                         Lead[]
+  sources                       BusinessSource[]
+  possibleDuplicatesAsBusiness  PossibleDuplicate[] @relation("PossibleDuplicateBusiness")
+  possibleDuplicatesAsCandidate PossibleDuplicate[] @relation("PossibleDuplicateCandidate")
+  mergesAsWinner                BusinessMerge[]     @relation("BusinessMergeWinner")
+  mergesAsLoser                 BusinessMerge[]     @relation("BusinessMergeLoser")
+
+  // Discovery deduplication: same provider + same external id => same
+  // canonical business. Rows with a NULL externalId are not deduplicated by
+  // this constraint (Postgres treats NULLs as distinct), which matches the
+  // documented rule that this key only applies when the provider supplies
+  // an external id.
+  @@unique([source, externalId])
+  @@index([category])
+  @@index([city])
+  @@index([normalizedPhone])
+  @@index([normalizedDomain])
+  @@index([normalizedName])
+  @@index([mergedIntoId])
+  @@index([websiteVerificationStatus, websiteVerifiedAt])
+  @@map("businesses")
+}
+
+// Phase 2 dedup engine: the evidence trail. One row per provider record ever
+// ingested for a business, regardless of which cascade tier matched it —
+// distinct from Business itself, which holds only the current canonical
+// snapshot. @@unique mirrors Business's own nullable-safe (source, id)
+// convention on a different table, so it never touches Business's own
+// @@unique([source, externalId]).
+model BusinessSource {
+  id               String   @id @default(cuid())
+  businessId       String
+  source           String
+  sourceBusinessId String?
+  sourceUrl        String?
+  rawData          Json
+  createdAt        DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([source, sourceBusinessId])
+  @@index([businessId])
+  @@map("business_sources")
+}
+
+// Phase 2 dedup engine: PENDING until a human resolves it. businessId is
+// always the pre-existing/canonical match; candidateId is the newly-flagged
+// incoming record (lib/business/dedupe.ts's resolveBusiness) — this ordering
+// is what lib/business/merge.ts relies on to know which side is the winner.
+// The (businessId, candidateId) pair can never be flagged twice regardless
+// of ordering — enforced by a hand-written expression index in this
+// migration's raw SQL (Prisma's schema DSL can't express LEAST()/GREATEST()).
+enum PossibleDuplicateStatus {
+  PENDING
+  CONFIRMED_MERGED
+  DISMISSED
+}
+
+model PossibleDuplicate {
+  id            String                  @id @default(cuid())
+  businessId    String
+  candidateId   String
+  score         Float
+  matchedFields Json
+  status        PossibleDuplicateStatus @default(PENDING)
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  createdAt     DateTime                @default(now())
+
+  business  Business       @relation("PossibleDuplicateBusiness", fields: [businessId], references: [id], onDelete: Cascade)
+  candidate Business       @relation("PossibleDuplicateCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+  merge     BusinessMerge?
+
+  @@index([status])
+  @@index([businessId])
+  @@index([candidateId])
+  @@map("possible_duplicates")
+}
+
+// Phase 2 dedup engine: a permanent audit row per merge. possibleDuplicateId
+// is unique so a given review can never be recorded as merged twice.
+model BusinessMerge {
+  id                  String   @id @default(cuid())
+  winnerBusinessId    String
+  loserBusinessId     String
+  resolvedBy          String
+  reason              String?
+  possibleDuplicateId String?  @unique
+  createdAt           DateTime @default(now())
+
+  winner            Business           @relation("BusinessMergeWinner", fields: [winnerBusinessId], references: [id])
+  loser             Business           @relation("BusinessMergeLoser", fields: [loserBusinessId], references: [id])
+  possibleDuplicate PossibleDuplicate? @relation(fields: [possibleDuplicateId], references: [id])
+
+  @@index([winnerBusinessId])
+  @@index([loserBusinessId])
+  @@map("business_merges")
+}
+
+model Lead {
+  id                 String       @id @default(cuid())
+  campaignId         String
+  businessId         String
+  status             LeadStatus   @default(NEW)
+  score              Int?
+  recommendedService ServiceCode?
+  estimatedDealMin   Int?
+  estimatedDealMax   Int?
+  // Discovery insights written by the lead-discovery workflow (n8n + LLM):
+  // a one-sentence description and the services it offers. Plain text,
+  // validated and sanitized on ingest; never HTML.
+  summary            String?
+  services           String[]     @default([])
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  campaign         Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Restrict)
+  scores           LeadScore[]
+  analyses         LeadAnalysis[]
+  websiteProjects  WebsiteProject[]
+  pitches          Pitch[]
+  outreach         Outreach[]
+  activities       Activity[]
+  deal             Deal?
+  whatsappMessages WhatsAppMessage[]
+  pipelines        LeadPipeline[]
+  recordings       DemoRecording[]
+
+  // A given business can only appear once per campaign.
+  @@unique([campaignId, businessId])
+  @@index([businessId])
+  @@index([status])
+  @@index([score])
+  @@index([recommendedService])
+  @@index([campaignId, recommendedService])
+  @@map("leads")
+}
+
+model LeadScore {
+  id                  String              @id @default(cuid())
+  leadId              String
+  rating              Int
+  reviewVolume        Int
+  websiteGap          Int
+  socialPresence      Int
+  contactAvailability Int
+  businessValue       Int
+  localDemand         Int
+  dataQuality         Int
+  total               Int
+  classification      ScoreClassification
+  createdAt           DateTime            @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_scores")
+}
+
+// Phase 5: AI analysis attempt record (see AiAnalysisStatus above). Content
+// fields (summary/needs/recommendedService/deal estimate) are nullable
+// because a FAILED row never has validated content to store — only the
+// attempt metadata (model/prompt version/latency/status/errorMessage) is
+// guaranteed present. `recommendedService`/`estimatedDealMin`/
+// `estimatedDealMax` intentionally duplicate what a SUCCESS row also
+// writes onto Lead (same relationship as LeadScore duplicating Lead.score):
+// this table is the append-only history of what each analysis attempt
+// produced, Lead holds only the current/latest value.
+model LeadAnalysis {
+  id                   String           @id @default(cuid())
+  leadId               String
+  status               AiAnalysisStatus
+  promptVersion        String
+  modelName            String
+  latencyMs            Int
+  repairUsed           Boolean          @default(false)
+  summary              String?
+  websiteNeed          Int?
+  whatsappNeed         Int?
+  reviewAutomationNeed Int?
+  voiceAgentNeed       Int?
+  recommendedService   ServiceCode?
+  estimatedDealMin     Int?
+  estimatedDealMax     Int?
+  // Sanitized diagnostic message only (never a raw exception/stack trace),
+  // same convention as CampaignExecution.errorMessage (section 19: never
+  // expose/persist internal error detail verbatim).
+  errorMessage         String?
+  createdAt            DateTime         @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_analyses")
+}
+
+model WebsiteProject {
+  id           String        @id @default(cuid())
+  leadId       String
+  template     String
+  theme        String?
+  contentJSON  Json
+  designJSON   Json?
+  // Phase 6 (section 11): a unique, URL-safe demo identifier. No such field
+  // existed before this phase — everything else the requirements need
+  // (WebsiteProject/WebsiteVersion, their relation, indexes, contentJSON)
+  // was already in place from Phase 1, so this is the one genuinely missing
+  // capability that justifies a migration. `@unique` makes the database the
+  // authority on uniqueness (section 11: "do not rely solely on an
+  // in-memory uniqueness check") — lib/websites/website.service.ts still
+  // retries on a rare collision, but the constraint is what actually
+  // prevents one, not the retry loop.
+  slug         String        @unique
+  demoUrl      String?
+  publishedUrl String?
+  status       WebsiteStatus @default(DRAFT)
+  // Public previews are temporary: after this moment the preview app shows
+  // an "expired" page and the cleanup job removes its recordings.
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  lead       Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  versions   WebsiteVersion[]
+  recordings DemoRecording[]
+
+  @@index([leadId])
+  @@index([status])
+  @@map("website_projects")
+}
+
+model WebsiteVersion {
+  id               String   @id @default(cuid())
+  websiteProjectId String
+  versionNumber    Int
+  template         String
+  theme            String?
+  contentJSON      Json
+  designJSON       Json?
+  demoUrl          String?
+  createdAt        DateTime @default(now())
+
+  websiteProject WebsiteProject @relation(fields: [websiteProjectId], references: [id], onDelete: Cascade)
+
+  // Regeneration creates a new version rather than overwriting history.
+  @@unique([websiteProjectId, versionNumber])
+  @@index([websiteProjectId])
+  @@map("website_versions")
+}
+
+model Pitch {
+  id            String      @id @default(cuid())
+  leadId        String
+  content       String
+  promptVersion String
+  modelName     String
+  status        PitchStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  lead             Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  outreach         Outreach[]
+  whatsappMessages WhatsAppMessage[]
+
+  @@index([leadId])
+  @@map("pitches")
+}
+
+model Outreach {
+  id          String          @id @default(cuid())
+  leadId      String
+  pitchId     String?
+  channel     OutreachChannel @default(WHATSAPP)
+  status      OutreachStatus  @default(PENDING)
+  whatsappUrl String?
+  openedAt    DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  lead  Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pitch Pitch? @relation(fields: [pitchId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([pitchId])
+  @@map("outreach")
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  leadId    String
+  type      ActivityType
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // Historical events: no updatedAt, no destructive update path is expected.
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+  // Phase 8 analytics/CRM (section 11): the dominant new query pattern is
+  // "count/find leads whose campaign belongs to this user AND have an
+  // Activity of type X" (the funnel's per-stage counts in
+  // lib/analytics/analytics.service.ts) — an equality match on `type`
+  // combined with a join back through `leadId`. The existing single-column
+  // indexes on `leadId` and `type` can each be used alone but require
+  // Postgres to bitmap-AND two separate index scans; a composite index
+  // leading with the more selective equality column (`type`) serves this
+  // exact pattern directly. Not redundant with the single-column indexes
+  // above, which other existing queries (e.g. getActivityTimeline's
+  // leadId-only lookup) still use.
+  @@index([type, leadId])
+  @@map("activities")
+}
+
+model Deal {
+  id        String     @id @default(cuid())
+  leadId    String     @unique
+  value     Int
+  status    DealStatus @default(OPEN)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // leadId is already @unique above, which Postgres backs with its own
+  // unique index — a second plain index on it would be redundant (section
+  // 11: "avoid redundant indexes"). status is genuinely new: Phase 8's
+  // pipeline-value query filters on it (WHERE status IN (...)), the same
+  // pattern Campaign/Lead already index their own status column for.
+  @@index([status])
+  @@map("deals")
+}
+
+model Service {
+  id          String      @id @default(cuid())
+  name        String
+  code        ServiceCode @unique
+  description String?
+  priceMin    Int
+  priceMax    Int
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("services")
+}
+
+// Generic operator/system configuration store. Secrets never belong here;
+// they stay in environment variables.
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp layer (docs/adr/0001-automated-whatsapp-via-baileys.md)
+//
+// This is the first part of the system that sends a message on the user's
+// behalf, rather than handing the operator a wa.me link to click. Everything
+// below exists to make that safe: one row per linked account, encrypted
+// credential storage, one row per outbound message with its full status
+// history, and a global do-not-contact list.
+// ---------------------------------------------------------------------------
+
+enum WhatsAppStatus {
+  DISCONNECTED
+  CONNECTING
+  QR_READY
+  PAIRING_CODE_READY
+  CONNECTED
+  RECONNECTING
+  LOGGED_OUT
+  ERROR
+}
+
+enum WaMessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  // Rejected by the outreach policy before any send was attempted (opted
+  // out, duplicate inside the cooling-off window, invalid number, ...).
+  // Distinct from FAILED, which means WhatsApp itself refused or errored.
+  BLOCKED
+  // Still QUEUED when the account was disconnected; never attempted.
+  CANCELLED
+}
+
+enum OptOutSource {
+  INBOUND_KEYWORD
+  MANUAL
+}
+
+// One linked WhatsApp account. Phase 2 allows a single account per user;
+// that limit lives in lib/whatsapp/account.service.ts rather than in a
+// unique constraint on userId, because Phase 3 multi-number sending is
+// expected to lift it and a dropped constraint is a migration, whereas a
+// dropped service check is a one-line change.
+model WhatsAppAccount {
+  id              String         @id @default(cuid())
+  userId          String
+  // Both are populated by WhatsApp itself once the socket connects; they
+  // are unknown (null) while the account is still being linked.
+  phoneNumber     String?
+  displayName     String?
+  status          WhatsAppStatus @default(DISCONNECTED)
+  lastConnectedAt DateTime?
+  // Last time the worker observed a healthy socket for this account —
+  // how live the connection is, as opposed to when it was first linked.
+  lastSeenAt      DateTime?
+  // Sanitized, user-facing text only, same convention as
+  // CampaignExecution.errorMessage: never a raw Baileys error or stack.
+  lastError       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authKeys WhatsAppAuthKey[]
+  messages WhatsAppMessage[]
+
+  @@index([userId])
+  // The worker restoreAll() sweep on boot scans for CONNECTED/RECONNECTING
+  // accounts across every user — the one query in this system that is not
+  // scoped to a single user, so it needs its own index.
+  @@index([status])
+  @@map("whatsapp_accounts")
+}
+
+// The Baileys authentication state, encrypted at rest.
+//
+// Postgres rather than object storage because Baileys writes many small
+// keys (one per Signal session/pre-key/sender-key) very frequently, which
+// suits a table with a composite primary lookup far better than one object
+// per key. Reads and writes go through the AuthStateRepository interface in
+// the worker, so swapping in S3 later touches one file.
+//
+// The plaintext never exists in this table: ciphertext is AES-256-GCM
+// output under WA_AUTH_ENCRYPTION_KEY, with its own random iv and the GCM
+// authTag stored alongside so tampering is detectable on read. keyVersion
+// identifies which encryption key produced the row, so a key rotation can
+// re-encrypt rows incrementally instead of invalidating every linked
+// account at once.
+model WhatsAppAuthKey {
+  id         String   @id @default(cuid())
+  accountId  String
+  // "creds" for the top-level credential blob, otherwise the Signal key
+  // type Baileys asks for ("pre-key", "session", "sender-key", ...). Kept
+  // as a string, not an enum: the set is defined by Baileys, and a new key
+  // type in a future release must not require a schema migration.
+  category   String
+  keyId      String
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes
+  keyVersion Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  account WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Every read is "give me this key for this account", every write is an
+  // upsert on the same triple. The unique index is also prefixed by
+  // accountId, so the wipe-on-logout delete uses it too — a separate index
+  // on accountId alone would be redundant.
+  @@unique([accountId, category, keyId])
+  @@map("whatsapp_auth_keys")
+}
+
+// One outbound message. The row is created QUEUED by the API (after the
+// policy gate) and is the only source of truth for recipient and body — the
+// BullMQ job carries just this id, so a message body never sits in Redis.
+model WhatsAppMessage {
+  id                String          @id @default(cuid())
+  userId            String
+  accountId         String
+  leadId            String?
+  pitchId           String?
+  // Digits only, normalized by normalizePhoneForWhatsApp before insert.
+  phoneNumber       String
+  body              String
+  // Optional attachment. The body is sent as its caption. The storage key
+  // is an internal bucket path and is never returned by the API.
+  mediaKind         WaMediaKind?
+  mediaStorageKey   String?
+  mediaMimeType     String?
+  status            WaMessageStatus @default(QUEUED)
+  // The WhatsApp message id, used to match delivery/read receipts back to
+  // this row.
+  providerMessageId String?
+  // Sanitized reason for BLOCKED/FAILED (a policy reason code such as
+  // "opted_out", or a mapped send failure) — never a raw provider error.
+  failureReason     String?
+  queuedAt          DateTime        @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lead    Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  pitch   Pitch?          @relation(fields: [pitchId], references: [id], onDelete: SetNull)
+
+  // Worker: what is still pending for this account, and the
+  // cancel-on-disconnect sweep.
+  @@index([accountId, status])
+  @@index([leadId])
+  // API: the message list for one user, newest first.
+  @@index([userId, createdAt])
+  // Outreach policy: "has this account messaged this number recently?" — an
+  // equality match on two columns plus a range on the third, which this
+  // composite serves directly and [accountId, status] cannot.
+  @@index([accountId, phoneNumber, createdAt])
+  // Inbound receipts arrive keyed by the WhatsApp id, not ours.
+  @@index([providerMessageId])
+  @@map("whatsapp_messages")
+}
+
+// Global do-not-contact list, keyed by phone number alone and deliberately
+// not scoped to a user or an account: once a business has said stop, no
+// PitchMyWeb user may message it. Enforced in the API before a message is
+// ever queued and again in the worker before it is sent.
+model OptOut {
+  id          String       @id @default(cuid())
+  phoneNumber String       @unique
+  source      OptOutSource
+  // Free text for MANUAL entries ("asked by phone"); for INBOUND_KEYWORD it
+  // records which keyword matched.
+  reason      String?
+  createdAt   DateTime     @default(now())
+
+  @@map("opt_outs")
+}
+
+// ---------------------------------------------------------------------------
+// Delivery pipeline (docs/pipeline.md)
+//
+// One LeadPipeline row per lead a user selected for outreach. It walks
+//   SELECTED -> BUILDING_SITE -> SITE_PUBLISHED -> RECORDING -> VIDEO_UPLOADED
+//   -> DELIVERY_QUEUED -> SENT            (Auto: video sent from WhatsApp)
+//   -> LINK_READY -> SENT                 (Direct: user sends a wa.me link)
+// and can land in FAILED from any stage, remembering which stage failed so
+// a retry resumes there. lib/pipeline/pipeline.service.ts is the only writer.
+// ---------------------------------------------------------------------------
+
+enum SelectionMode {
+  MANUAL
+  AUTO
+}
+
+enum DeliveryMode {
+  AUTO
+  DIRECT
+}
+
+enum PipelineStage {
+  SELECTED
+  BUILDING_SITE
+  SITE_PUBLISHED
+  RECORDING
+  VIDEO_UPLOADED
+  DELIVERY_QUEUED
+  LINK_READY
+  SENT
+  FAILED
+}
+
+enum RecordingStatus {
+  QUEUED
+  RECORDING
+  READY
+  FAILED
+}
+
+enum WaMediaKind {
+  VIDEO
+}
+
+model LeadPipeline {
+  id                String         @id @default(cuid())
+  campaignId        String
+  leadId            String
+  stage             PipelineStage  @default(SELECTED)
+  // Where it failed and why (a fixed reason code, never raw error text).
+  failureStage      PipelineStage?
+  failureReason     String?
+  websiteProjectId  String?
+  recordingId       String?
+  whatsappMessageId String?
+  // Direct delivery: the prepared wa.me link.
+  whatsappUrl       String?
+  attempts          Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, leadId])
+  @@index([campaignId, stage])
+  @@index([stage, updatedAt])
+  @@map("lead_pipelines")
+}
+
+// One Playwright recording of a published preview. Written by
+// apps/recorder-worker; the file itself lives in object storage.
+model DemoRecording {
+  id               String          @id @default(cuid())
+  websiteProjectId String
+  leadId           String
+  pipelineId       String?
+  status           RecordingStatus @default(QUEUED)
+  storageKey       String?
+  posterKey        String?
+  durationMs       Int?
+  sizeBytes        Int?
+  mimeType         String?
+  failureReason    String?
+  attempts         Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  websiteProject WebsiteProject @relation(fields: [websiteProjectId], references: [id], onDelete: Cascade)
+  lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([websiteProjectId, status])
+  @@index([status, createdAt])
+  @@map("demo_recordings")
+}
+
+// Pricing-page checkout (Razorpay Payment Links with a verified webhook —
+// see lib/checkout/payment-link-webhook.ts). Deliberately anonymous at
+// creation: /pricing has no session, so userId starts null and is attached
+// once the buyer registers or logs in after a PAID order
+// (lib/checkout/checkout.service.ts's claimOrder, called from the
+// register/login route handlers). amount/currency are computed server-side
+// from planId/market/countryCode/couponCode (lib/checkout/plan-pricing.ts,
+// a deliberate duplicate of apps/web/src/data/plans.ts's pricing table —
+// the client-submitted price is never trusted for what Razorpay actually
+// charges) and frozen here at creation time, so a later change to the
+// pricing table cannot retroactively alter a historical order's amount.
+model Order {
+  id                String      @id @default(cuid())
+  userId            String?
+  planId            String
+  market            String
+  payerEmail        String?
+  countryCode       String?
+  couponCode        String?
+  // Smallest currency unit (cents), matching Razorpay's own convention.
+  amount            Int
+  currency          String
+  status            OrderStatus @default(PENDING)
+  razorpayOrderId   String      @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("orders")
+}

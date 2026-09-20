@@ -1,0 +1,40 @@
+{
+  "name": "@pitchmyweb/whatsapp-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Owns the live WhatsApp sockets: session lifecycle, encrypted auth persistence, reconnects and the outbound send queue.",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hapi/boom": "^9.1.4",
+    "@pitchmyweb/contracts": "*",
+    "@pitchmyweb/db": "*",
+    "@pitchmyweb/storage": "*",
+    "@prisma/adapter-pg": "^7.10.0",
+    "baileys": "7.0.0-rc14",
+    "bullmq": "^5.63.0",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.9.1",
+    "pg": "^8.23.0",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.4",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.5",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "market" TEXT NOT NULL DEFAULT 'india';
