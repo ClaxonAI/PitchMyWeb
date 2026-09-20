@@ -21,7 +21,7 @@ function GoogleIcon() {
 export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, getToken, signOut } = useAuth();
   const sessionFailed = useSearchParams().get("error") === "session";
   const [pending, setPending] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(sessionFailed ? "We couldn't start your session. Please try again." : null);
@@ -34,9 +34,18 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
       // new sign-in would be rejected with "already signed in", so just
       // re-create the app session and continue.
       if (isSignedIn) {
-        if (!(await exchangeClerkSession(getToken))) throw new Error("We couldn't start your session. Please try again.");
-        window.location.assign("/dashboard");
-        return;
+        if (await exchangeClerkSession(getToken)) {
+          window.location.assign("/dashboard");
+          return;
+        }
+        // The Clerk session is no longer exchangeable — the usual cause is the
+        // secret key being rotated while a browser still holds a session signed
+        // by the old one. Without discarding it every retry re-enters this same
+        // branch and fails identically, so the button loops forever and only
+        // clearing cookies escapes. Dropping it means the next click runs a
+        // fresh OAuth flow.
+        await signOut();
+        throw new Error("Your previous session has expired. Please sign in again.");
       }
       const strategy = `oauth_${provider}` as const;
       const redirectUrl = `${window.location.origin}/sso-callback`;
