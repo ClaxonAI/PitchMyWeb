@@ -42,7 +42,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     // expected, without suppressing hydration warnings anywhere else.
     <html lang="en" className={`${manrope.variable} ${fraunces.variable}`} suppressHydrationWarning>
       <body>
-        <ClerkProvider publishableKey={process.env.CLERK_PUBLISHABLE_KEY}>{children}</ClerkProvider>
+        {/* No publishableKey prop: the SDK reads NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+            itself, and clerkMiddleware() reads that same variable and nothing
+            else. Passing it here from a differently-named variable is what
+            previously left the middleware with an empty key. */}
+        <ClerkProvider>{children}</ClerkProvider>
       </body>
     </html>
   );

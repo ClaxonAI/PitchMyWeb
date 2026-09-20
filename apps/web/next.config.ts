@@ -9,6 +9,27 @@ import type { NextConfig } from "next";
 // The alternative — CORS plus credentials plus SameSite=None — would mean
 // relaxing the cookie for every request in order to support one endpoint.
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
+
+// Clerk's publishable key is inlined into the browser bundle at build time, so
+// it has to be right when `next build` runs — a production image built with a
+// development key authenticates against the development instance, and one built
+// with no key leaves clerkMiddleware() unable to complete its handshake. Set
+// APP_ENV=production on real deployments to make that a hard failure; local
+// production builds only warn, so they stay runnable with development keys.
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+const isProductionDeploy = process.env.APP_ENV?.trim().toLowerCase() === "production";
+
+if (!clerkPublishableKey) {
+  throw new Error(
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Sign-in cannot work without it — copy the publishable key from your Clerk instance into apps/web/.env.local (or the deployment's environment).",
+  );
+}
+if (clerkPublishableKey.startsWith("pk_test_")) {
+  const message =
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is a Clerk development key (pk_test_…). Development instances have strict usage limits and their sessions do not work on a production domain. Use the pk_live_… key from your Clerk production instance, and set CLERK_FRONTEND_API_URL to that instance's domain.";
+  if (isProductionDeploy) throw new Error(message);
+  console.warn(`\n⚠ ${message}\n`);
+}
 // Clerk loads clerk-js from its Frontend API host and calls that host for the
 // OAuth callback / session. With a 'self'-only CSP those requests are blocked,
 // so SSO never completes and /sso-callback can't mint the app session cookie.

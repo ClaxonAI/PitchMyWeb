@@ -9,7 +9,14 @@ import { claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.ser
 export async function handleClerkSession(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
   const secretKey = process.env.CLERK_SECRET_KEY?.trim();
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
-  if (!secretKey || !token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // A missing secret key is a deployment fault, not a bad credential. Returning
+  // 401 for it made a misconfigured server look exactly like a rejected token,
+  // which is what makes this class of problem so slow to diagnose.
+  if (!secretKey) {
+    console.error("CLERK_SECRET_KEY is not set: social sign-in cannot create an application session.");
+    return NextResponse.json({ error: "Sign-in is not configured" }, { status: 503 });
+  }
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const verified = await verifyToken(token, { secretKey });
@@ -42,7 +49,15 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
       expires: session.expiresAt,
     });
     return response;
-  } catch {
+  } catch (error) {
+    // The usual cause in a fresh deployment is the web app and this API holding
+    // keys from two different Clerk instances: the token verifies against
+    // neither, and every sign-in dead-ends at /login with no clue why.
+    const instance = secretKey.startsWith("sk_test_") ? "development (sk_test_…)" : "production (sk_live_…)";
+    console.error(
+      `Clerk token verification failed. This API is using a ${instance} secret key — check it belongs to the same Clerk instance as the web app's NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.`,
+      error instanceof Error ? error.message : error,
+    );
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }
