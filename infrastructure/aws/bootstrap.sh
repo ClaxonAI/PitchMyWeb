@@ -54,8 +54,21 @@ step "pm2"
 command -v pm2 >/dev/null || npm install -g pm2
 
 # --- application ----------------------------------------------------------
-step "repository"
-if [ -d "$APP_DIR/.git" ]; then
+step "source"
+# Two ways in. SOURCE_S3 ships a `git archive` tarball through the bucket and
+# is what this deployment uses: the repository belongs to a different GitHub
+# account than the one operating it, and fine-grained tokens only reach repos
+# their creator owns, so the box has no usable clone credential — only its
+# instance role. Cloning stays supported for when one exists.
+if [ -n "${SOURCE_S3:-}" ]; then
+  install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
+  aws s3 cp "$SOURCE_S3" /tmp/src.tar.gz --region "$REGION"
+  # Extracted over whatever is there: the tarball holds tracked files only, so
+  # node_modules and build output survive and npm ci stays incremental.
+  tar xzf /tmp/src.tar.gz -C "$APP_DIR"
+  chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
+  rm -f /tmp/src.tar.gz
+elif [ -d "$APP_DIR/.git" ]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch --all --prune
   sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard origin/main
 else

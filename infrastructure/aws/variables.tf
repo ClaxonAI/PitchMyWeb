@@ -22,9 +22,15 @@ variable "db_password" {
 }
 
 variable "repo_url" {
-  description = "Git repository the instance clones at first boot"
+  description = "Git repository, used only when a clone credential is available"
   type        = string
   default     = "https://github.com/ClaxonAI/PitchMyWeb.git"
+}
+
+variable "source_s3_url" {
+  description = "Source tarball the instance unpacks at first boot"
+  type        = string
+  default     = "s3://pitchmyweb-prod-recordings-claxonai/deploy/current.tar.gz"
 }
 
 variable "s3_bucket_name" {

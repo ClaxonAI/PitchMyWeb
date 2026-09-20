@@ -371,17 +371,18 @@ resource "aws_instance" "app" {
       /tmp/aws/install --update
     fi
 
-    # The repository is private. A credential helper is used rather than a
-    # token in the clone URL: the URL form leaves the token in .git/config and
-    # in this script's output under /var/log, and it would not survive the
-    # fetch bootstrap.sh runs on redeploy. This asks SSM each time instead, so
-    # the token is never written to disk and rotating it needs no change here.
-    sudo -u ubuntu git config --global credential.helper \
-      '!f() { echo username=x-access-token; echo "password=$(aws ssm get-parameter --name /pitchmyweb/prod/GITHUB_TOKEN --with-decryption --region ${var.aws_region} --query Parameter.Value --output text)"; }; f'
-    sudo -u ubuntu git config --global credential.'https://github.com'.useHttpPath false
+    # Source arrives as a tarball from the bucket rather than a clone. The
+    # repository is owned by a different GitHub account than the one operating
+    # it, and a fine-grained token only reaches repositories its creator owns,
+    # so no token issued from the operating account can read it. The instance
+    # role already grants S3, which sidesteps GitHub credentials entirely.
+    install -d -o ubuntu -g ubuntu /home/ubuntu/PitchMyWeb
+    aws s3 cp ${var.source_s3_url} /tmp/src.tar.gz --region ${var.aws_region}
+    tar xzf /tmp/src.tar.gz -C /home/ubuntu/PitchMyWeb
+    chown -R ubuntu:ubuntu /home/ubuntu/PitchMyWeb
+    rm -f /tmp/src.tar.gz
 
-    sudo -u ubuntu git clone ${var.repo_url} /home/ubuntu/PitchMyWeb
-    bash /home/ubuntu/PitchMyWeb/infrastructure/aws/bootstrap.sh
+    SOURCE_S3=${var.source_s3_url} bash /home/ubuntu/PitchMyWeb/infrastructure/aws/bootstrap.sh
   EOF
 
   tags = {
