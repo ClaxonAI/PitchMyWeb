@@ -12,6 +12,7 @@
 
 set -euo pipefail
 
+REGION="${AWS_REGION:-ap-south-1}"
 REPO_URL="${REPO_URL:-https://github.com/ClaxonAI/PitchMyWeb.git}"
 APP_DIR="${APP_DIR:-/home/ubuntu/PitchMyWeb}"
 APP_USER="${APP_USER:-ubuntu}"
