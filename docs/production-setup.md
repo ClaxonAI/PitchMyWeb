@@ -91,8 +91,37 @@ which instance its key belongs to when that happens.
 encrypted in Postgres under it; lose it and every linked account must re-pair.
 
 Load secrets from SSM Parameter Store at boot rather than committing a `.env`
-to the box. The instance role needs `ssm:GetParameters` plus `kms:Decrypt` for
-`SecureString` values.
+to the box. The instance role needs `kms:Decrypt` plus **both** parameter ARN
+forms: `GetParameter` authorises against each parameter and matches
+`parameter/pitchmyweb/prod/*`, while `GetParametersByPath` authorises against
+the bare path `parameter/pitchmyweb/prod`, which the wildcard does not cover.
+With only the wildcard the call fails as AccessDenied naming a resource that
+looks like it should already be granted.
+
+### Two values that must be exactly right
+
+```
+DATABASE_URL=postgresql://…/pitchmyweb?sslmode=require
+NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-ca.pem
+STORAGE_ENDPOINT=https://s3.ap-south-1.amazonaws.com    # scheme required
+```
+
+**RDS enforces TLS** (`rds.force_ssl=1` in `default.postgres15`) and presents a
+certificate from Amazon's own CA, which Node does not trust. The workers reach
+Postgres through Prisma's `pg` driver adapter, which — unlike `prisma migrate`
+and `psql` — neither negotiates TLS on its own nor knows that CA. Both halves
+are needed: without `sslmode` the connection is refused outright, and with it
+but no CA the handshake fails on `self-signed certificate in certificate
+chain`. Migrations apply cleanly either way, so the database looks healthy
+while every worker crash-loops. `bootstrap.sh` fetches the regional bundle.
+
+**`STORAGE_ENDPOINT` needs its scheme.** Without `https://` the S3 client
+rejects it as `Invalid URL` and the recorder cannot start.
+
+Static `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` are **not** set here. They
+exist for MinIO and R2; on EC2 the instance role already grants S3, and
+`packages/storage` omits the credentials option when they are absent so the
+SDK uses its default provider chain.
 
 ## DNS (do this first — propagation takes up to 48h)
 
@@ -107,16 +136,33 @@ page. Three things reliably go wrong:
 3. **Deploy certificates.** A button appears on the Clerk dashboard home once
    records validate. Production auth does not work until it is pressed.
 
-## Box preparation
+## Deploying
 
-Chromium needs system libraries that are not installed by `npm ci`:
+Source reaches the box as a `git archive` tarball through S3, not a clone.
+The repository belongs to the `ClaxonAI` account while the work happens as a
+collaborator, and a fine-grained token only reaches repositories its creator
+owns — so no token issued from the operating account can read it. The
+instance role already grants S3, so nothing on the box needs a GitHub
+credential. Switching back to cloning needs only a working credential and
+`SOURCE_S3` left unset; a classic token honours collaborator access where a
+fine-grained one cannot.
 
 ```bash
-npm ci
-npx playwright install --with-deps chromium   # in apps/recorder-worker
-npm run build                                  # web, api, sites
-pm2 start ecosystem.config.cjs && pm2 save && pm2 startup
+# from a checkout, to ship the current commit
+git archive --format=tar.gz -o /tmp/pmw.tar.gz HEAD
+aws s3 cp /tmp/pmw.tar.gz s3://pitchmyweb-prod-recordings-claxonai/deploy/current.tar.gz
+
+# on the box — idempotent, so this is also the redeploy path
+sudo SOURCE_S3=s3://…/deploy/current.tar.gz bash infrastructure/aws/bootstrap.sh
 ```
+
+`bootstrap.sh` installs the aws CLI, Node, pm2 and Chromium's libraries — none
+of which the stock Ubuntu image carries — then loads secrets, migrates,
+builds, starts pm2 and configures nginx.
+
+Shell scripts must keep LF endings (`.gitattributes` pins them). On Windows
+`core.autocrlf` rewrites them and `git archive` carries that through, which
+ships a tarball whose scripts die on `$'\r': command not found`.
 
 nginx config is at `infrastructure/nginx/pitchmyweb.conf`. It disables
 `proxy_buffering` on the two SSE endpoints — campaign progress and WhatsApp
