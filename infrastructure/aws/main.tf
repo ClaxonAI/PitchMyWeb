@@ -289,7 +289,15 @@ resource "aws_iam_role_policy" "ssm_policy" {
           "ssm:GetParametersByPath",
           "ssm:GetParameter"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/pitchmyweb/prod/*"
+        # Both forms are required. GetParameter authorises against each
+        # parameter, matching the /* entry, but GetParametersByPath authorises
+        # against the path itself — the bare ARN — and the wildcard alone does
+        # not cover it. With only /* the call fails as AccessDenied naming a
+        # resource that looks like it should already be granted.
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/pitchmyweb/prod",
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/pitchmyweb/prod/*",
+        ]
       },
       {
         Effect = "Allow"
