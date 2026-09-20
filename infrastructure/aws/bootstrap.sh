@@ -54,6 +54,20 @@ node -v && npm -v
 step "pm2"
 command -v pm2 >/dev/null || npm install -g pm2
 
+step "rds ca bundle"
+# RDS enforces TLS (rds.force_ssl=1) and presents a certificate from Amazon's
+# own CA, which is not in Node's trust store — so a driver that verifies gets
+# "self-signed certificate in certificate chain". Prisma's migration engine
+# and psql negotiate their own way and are unaffected, which is why migrations
+# succeed while every worker on the pg driver adapter fails.
+# NODE_EXTRA_CA_CERTS points at this file; see docs/production-setup.md.
+if [ ! -s /etc/ssl/certs/rds-ca.pem ]; then
+  curl -fsSL "https://truststore.pki.rds.amazonaws.com/${REGION}/${REGION}-bundle.pem" \
+    -o /etc/ssl/certs/rds-ca.pem
+  chmod 644 /etc/ssl/certs/rds-ca.pem
+fi
+echo "rds ca: $(grep -c 'BEGIN CERTIFICATE' /etc/ssl/certs/rds-ca.pem) certificates"
+
 # --- application ----------------------------------------------------------
 step "source"
 # Two ways in. SOURCE_S3 ships a `git archive` tarball through the bucket and
