@@ -105,6 +105,12 @@ fi
 sudo -u "$APP_USER" --preserve-env pm2 save
 env PATH="$PATH" pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER" | tail -1 | bash || true
 
+step "nginx + tls"
+# After pm2, so the backends are already listening when the redirect to HTTPS
+# goes live. Skips certificate issuance rather than failing the bootstrap when
+# DNS is not pointing here yet.
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}" bash infrastructure/aws/setup-nginx.sh
+
 step "status"
 sudo -u "$APP_USER" --preserve-env pm2 list
 
