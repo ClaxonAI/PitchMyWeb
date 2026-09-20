@@ -355,6 +355,16 @@ resource "aws_instance" "app" {
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
   key_name               = "pitchmyweb-prod"
 
+  # The AMI default of 8 GB does not fit this build. node_modules across the
+  # workspaces is ~1.4 GB, Playwright's Chromium another ~300 MB, and three
+  # Next builds follow — the first attempt ran out with the builds still to
+  # go. gp3 rather than the default gp2: higher baseline throughput for the
+  # npm install, and cheaper per GB.
+  root_block_device {
+    volume_size = 30
+    volume_type = "gp3"
+  }
+
   # Bootstraps the box at first boot so a replacement comes back on its own
   # rather than needing a shell. Output lands in /var/log/cloud-init-output.log
   # and /var/log/pitchmyweb-bootstrap.log.
