@@ -23,7 +23,7 @@ set -euo pipefail
 
 REGION="${AWS_REGION:-ap-south-1}"
 SSM_PATH="${SSM_PATH:-/pitchmyweb/prod}"
-OUT_DIR="/etc/pitchmyweb"
+OUT_DIR="${OUT_DIR:-/etc/pitchmyweb}"
 OUT_FILE="${OUT_DIR}/env"
 APP_USER="${APP_USER:-pitchmyweb}"
 
@@ -62,7 +62,13 @@ for p in sorted(params, key=lambda x: x["Name"]):
     if not name or name in seen:
         continue
     seen.add(name)
-    print(f"{name}={shlex.quote(p['Value'])}")
+    # Bound to a variable rather than subscripting inside the f-string. This
+    # block is embedded in a single-quoted shell string, so a single quote
+    # here would end that string and the key would reach python bare; and
+    # double quotes cannot nest inside the f-string on the 3.10 that ships
+    # with Ubuntu 22.04.
+    value = p["Value"]
+    print(f"{name}={shlex.quote(value)}")
 
 print(f"# {len(seen)} parameters", file=sys.stderr)
 ' > "$TMP"
