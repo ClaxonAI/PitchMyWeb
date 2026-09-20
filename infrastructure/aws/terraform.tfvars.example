@@ -1,0 +1,7 @@
+# Copy this file to terraform.tfvars and fill in your values
+# terraform.tfvars is in .gitignore and should never be committed
+
+aws_region     = "ap-south-1"
+db_username    = "postgres"
+db_password    = "YourStrongPassword123!" # At least 8 characters, mix of upper/lower/numbers/symbols
+s3_bucket_name = "pitchmyweb-prod-recordings-CHANGE-THIS" # Must be globally unique

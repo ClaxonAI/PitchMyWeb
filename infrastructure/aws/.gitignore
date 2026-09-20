@@ -1,0 +1,17 @@
+# Terraform files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Variables (secrets)
+terraform.tfvars
+terraform.tfvars.json
+
+# Local files
+.env
+.env.local
+*.swp
+*.swo
+*~
+.DS_Store
