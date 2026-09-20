@@ -361,9 +361,26 @@ resource "aws_instance" "app" {
     set -euxo pipefail
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq git
-    git clone ${var.repo_url} /home/ubuntu/PitchMyWeb
-    chown -R ubuntu:ubuntu /home/ubuntu/PitchMyWeb
+    apt-get install -y -qq git curl unzip
+
+    # The aws CLI has to exist before the clone, because the credential for it
+    # lives in Parameter Store. bootstrap.sh installs it too; both check first.
+    if ! command -v aws >/dev/null; then
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      unzip -q -o /tmp/awscliv2.zip -d /tmp
+      /tmp/aws/install --update
+    fi
+
+    # The repository is private. A credential helper is used rather than a
+    # token in the clone URL: the URL form leaves the token in .git/config and
+    # in this script's output under /var/log, and it would not survive the
+    # fetch bootstrap.sh runs on redeploy. This asks SSM each time instead, so
+    # the token is never written to disk and rotating it needs no change here.
+    sudo -u ubuntu git config --global credential.helper \
+      '!f() { echo username=x-access-token; echo "password=$(aws ssm get-parameter --name /pitchmyweb/prod/GITHUB_TOKEN --with-decryption --region ${var.aws_region} --query Parameter.Value --output text)"; }; f'
+    sudo -u ubuntu git config --global credential.'https://github.com'.useHttpPath false
+
+    sudo -u ubuntu git clone ${var.repo_url} /home/ubuntu/PitchMyWeb
     bash /home/ubuntu/PitchMyWeb/infrastructure/aws/bootstrap.sh
   EOF
 
