@@ -347,6 +347,26 @@ resource "aws_instance" "app" {
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
   key_name               = "pitchmyweb-prod"
 
+  # Bootstraps the box at first boot so a replacement comes back on its own
+  # rather than needing a shell. Output lands in /var/log/cloud-init-output.log
+  # and /var/log/pitchmyweb-bootstrap.log.
+  #
+  # Replace on change, because user_data runs only at first boot: edited in
+  # place it would sit on the disk having never executed, and the box would
+  # silently not match the config.
+  user_data_replace_on_change = true
+
+  user_data = <<-EOF
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq git
+    git clone ${var.repo_url} /home/ubuntu/PitchMyWeb
+    chown -R ubuntu:ubuntu /home/ubuntu/PitchMyWeb
+    bash /home/ubuntu/PitchMyWeb/infrastructure/aws/bootstrap.sh
+  EOF
+
   tags = {
     Name = "pitchmyweb-app"
   }

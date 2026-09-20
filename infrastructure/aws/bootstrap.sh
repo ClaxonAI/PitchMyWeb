@@ -27,7 +27,19 @@ step() { echo; echo "--- $* ---"; }
 step "apt packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl git build-essential ca-certificates nginx postgresql-client
+apt-get install -y -qq curl git unzip build-essential ca-certificates nginx postgresql-client
+
+step "aws cli"
+# The stock Ubuntu image ships no aws CLI, and load-secrets.sh needs one to
+# reach Parameter Store. Installed from upstream rather than apt, whose
+# package is still v1.
+if ! command -v aws >/dev/null; then
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+  unzip -q -o /tmp/awscliv2.zip -d /tmp
+  /tmp/aws/install --update
+  rm -rf /tmp/awscliv2.zip /tmp/aws
+fi
+aws --version
 
 step "node ${NODE_MAJOR}"
 # Node 22.9+/24 is required: apps/api's jobs script uses --env-file-if-exists,

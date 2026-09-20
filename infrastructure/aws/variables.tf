@@ -21,6 +21,12 @@ variable "db_password" {
   }
 }
 
+variable "repo_url" {
+  description = "Git repository the instance clones at first boot"
+  type        = string
+  default     = "https://github.com/ClaxonAI/PitchMyWeb.git"
+}
+
 variable "s3_bucket_name" {
   description = "S3 bucket name (must be globally unique)"
   type        = string
