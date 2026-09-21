@@ -13,13 +13,20 @@ const validCampaign = {
 };
 
 describe("leadLimitForTarget", () => {
-  // Asking for 5 leads used to scrape 10 — a deliberate cushion, but one no
-  // screen ever mentioned, so the campaign page reported more leads found
-  // than were asked for and looked wrong.
-  it("searches for exactly as many businesses as the user asked to pitch", () => {
-    expect(leadLimitForTarget(5)).toBe(5);
-    expect(leadLimitForTarget(1)).toBe(1);
-    expect(leadLimitForTarget(200)).toBe(200);
+  // This is a search budget, not a delivery count. The number of leads the
+  // user is actually given is capped at targetCount by ingestBusinesses; the
+  // surplus exists so a candidate that turns out to be a repeat, unreachable
+  // or filtered out can be replaced rather than silently costing a lead.
+  it("allows discovery to look at more candidates than the user asked for", () => {
+    expect(leadLimitForTarget(5)).toBeGreaterThan(5);
+    expect(leadLimitForTarget(1)).toBeGreaterThan(1);
+  });
+
+  it("stays within the leadLimit column's own maximum for a large target", () => {
+    // targetCount tops out at 200, which would otherwise budget past the
+    // schema's max of 500.
+    expect(leadLimitForTarget(200)).toBe(500);
+    expect(campaignCreateSchema.safeParse({ ...validCampaign, leadLimit: leadLimitForTarget(200) }).success).toBe(true);
   });
 });
 
