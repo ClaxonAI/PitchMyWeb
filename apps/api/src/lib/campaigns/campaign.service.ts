@@ -123,7 +123,14 @@ export async function updateCampaign(db: PrismaClient, userId: string, campaignI
   // update so it can never become a second, unvalidated way to change
   // status (Rule 7).
   const { status: _status, ...fields } = input;
-  return db.campaign.update({ where: { id: campaign.id }, data: fields });
+
+  // Editing "how many leads" has to move the discovery cap with it. Without
+  // this, a campaign created for 20 and edited down to 5 still scrapes 20:
+  // leadLimit was derived from targetCount once, at creation, and nothing
+  // re-derived it. An explicit leadLimit in the same request still wins.
+  const data = fields.targetCount != null && fields.leadLimit == null ? { ...fields, leadLimit: leadLimitForTarget(fields.targetCount) } : fields;
+
+  return db.campaign.update({ where: { id: campaign.id }, data });
 }
 
 export async function markCampaignReady(db: PrismaClient, userId: string, campaignId: string): Promise<Campaign> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campaignCreateSchema, campaignListQuerySchema, campaignUpdateSchema } from "./campaign";
+import { campaignCreateSchema, campaignListQuerySchema, campaignUpdateSchema, leadLimitForTarget } from "./campaign";
 import { leadListQuerySchema } from "./lead";
 import { businessProviderInputSchema } from "./business";
 import { settingsUpsertSchema } from "./settings";
@@ -11,6 +11,17 @@ const validCampaign = {
   category: "Dental Clinic",
   leadLimit: 25,
 };
+
+describe("leadLimitForTarget", () => {
+  // Asking for 5 leads used to scrape 10 — a deliberate cushion, but one no
+  // screen ever mentioned, so the campaign page reported more leads found
+  // than were asked for and looked wrong.
+  it("searches for exactly as many businesses as the user asked to pitch", () => {
+    expect(leadLimitForTarget(5)).toBe(5);
+    expect(leadLimitForTarget(1)).toBe(1);
+    expect(leadLimitForTarget(200)).toBe(200);
+  });
+});
 
 describe("campaignCreateSchema", () => {
   it("accepts a minimal valid campaign", () => {
