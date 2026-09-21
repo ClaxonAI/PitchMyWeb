@@ -113,3 +113,47 @@ export async function releasePitchCredits(tx: Prisma.TransactionClient, userId: 
   });
   await tx.pitchCreditLedger.create({ data: { userId, type: "RELEASE", amount, referenceId } });
 }
+
+// --- Resolving a single reserved pitch (pipeline.service.ts) --------------
+//
+// Every reservation ends exactly one of these two ways, never both, never
+// neither. Both are called only after pipeline.service.ts's own
+// LeadPipeline.creditOutcome conditional update has already won the right
+// to resolve this specific pipeline (`WHERE creditOutcome IS NULL`) — that
+// is the primary concurrency guard. The ledger's unique `referenceId`
+// (`consume:<pipelineId>` / `refund:<pipelineId>`) is a second, independent
+// backstop: swallowing its P2002 here means even a call that somehow ran
+// twice outside that guard still only ever records one credit movement.
+
+async function recordCreditMovement(
+  tx: Prisma.TransactionClient,
+  input: { userId: string; batchId: string; pipelineId: string; type: "CONSUME" | "REFUND" },
+): Promise<void> {
+  const referenceId = `${input.type === "CONSUME" ? "consume" : "refund"}:${input.pipelineId}`;
+  try {
+    await tx.pitchCreditLedger.create({
+      data: { userId: input.userId, batchId: input.batchId, pipelineId: input.pipelineId, type: input.type, amount: 1, referenceId },
+    });
+  } catch (error) {
+    if (isUniqueConstraintViolation(error)) return;
+    throw error;
+  }
+}
+
+/** A reserved pitch actually sent: reserved -> used. */
+export async function consumeReservedCredit(tx: Prisma.TransactionClient, input: { userId: string; batchId: string; pipelineId: string }): Promise<void> {
+  await tx.pitchWallet.updateMany({
+    where: { userId: input.userId, reservedCredits: { gte: 1 } },
+    data: { reservedCredits: { decrement: 1 }, usedCredits: { increment: 1 } },
+  });
+  await recordCreditMovement(tx, { ...input, type: "CONSUME" });
+}
+
+/** A reserved pitch that finally, non-retryably failed: reserved -> available. */
+export async function refundReservedCredit(tx: Prisma.TransactionClient, input: { userId: string; batchId: string; pipelineId: string }): Promise<void> {
+  await tx.pitchWallet.updateMany({
+    where: { userId: input.userId, reservedCredits: { gte: 1 } },
+    data: { reservedCredits: { decrement: 1 }, availableCredits: { increment: 1 } },
+  });
+  await recordCreditMovement(tx, { ...input, type: "REFUND" });
+}

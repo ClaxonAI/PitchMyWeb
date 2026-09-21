@@ -1,6 +1,13 @@
 import type { PrismaClient } from "@pitchmyweb/db";
 import { emitEvent } from "../observability/events";
-import { onRecordingFinished, retryPipeline, syncDeliveries } from "../pipeline/pipeline.service";
+import {
+  AUTO_RETRY_BASE_DELAY_MS,
+  AUTO_RETRY_MAX_ATTEMPTS,
+  NON_RETRYABLE_REASONS,
+  onRecordingFinished,
+  retryPipeline,
+  syncDeliveries,
+} from "../pipeline/pipeline.service";
 import { getObjectStorage } from "../storage";
 
 // Scheduled pipeline housekeeping (every few minutes, same scheduler as
@@ -56,14 +63,13 @@ async function reconcileRecordings(db: PrismaClient, now: Date): Promise<{ recon
   return { reconciled, timedOut };
 }
 
-// Failed pitches are not dropped: transient failures go back in the queue and
-// are retried automatically, with a growing wait between tries and a hard cap,
-// so a user's pitch is delivered late rather than silently lost. Failures the
-// user or the recipient caused are never retried.
-export const AUTO_RETRY_MAX_ATTEMPTS = 3;
-export const AUTO_RETRY_BASE_DELAY_MS = 10 * 60 * 1000;
+// AUTO_RETRY_MAX_ATTEMPTS / AUTO_RETRY_BASE_DELAY_MS / NON_RETRYABLE_REASONS
+// now live in pipeline.service.ts (imported above) rather than here:
+// failPipeline needs them at the moment a pipeline fails, to decide whether
+// its reserved credit is refunded immediately or stays reserved for a
+// retry — this job's own use of them, on a schedule, is the same policy
+// read from the same place, not a second copy of it.
 const AUTO_RETRY_BATCH = 50;
-const NON_RETRYABLE_REASONS = ["paused", "opted_out", "invalid_number", "recent_duplicate"];
 
 async function requeueFailedPipelines(db: PrismaClient, now: Date): Promise<number> {
   const failed = await db.leadPipeline.findMany({

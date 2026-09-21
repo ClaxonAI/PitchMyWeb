@@ -1000,6 +1000,11 @@ enum PitchBatchStatus {
   COMPLETED
 }
 
+enum CreditOutcome {
+  CONSUMED
+  REFUNDED
+}
+
 enum DeliveryMode {
   AUTO
   DIRECT
@@ -1037,6 +1042,13 @@ model LeadPipeline {
   // startPipelines creates from here on is required to carry one (see its
   // own header comment on why the batchId is what it re-queries by).
   batchId           String?
+  // How this pipeline's reserved credit was resolved — null while still
+  // reserved (active, or FAILED-but-retryable). Set at most once, by
+  // whichever caller's stage-changing UPDATE (`WHERE creditOutcome IS
+  // NULL`) wins the race to resolve it; see pipeline.service.ts::
+  // resolvePipelineCredit, the only place this is ever written.
+  creditOutcome     CreditOutcome?
+  creditResolvedAt  DateTime?
   stage             PipelineStage  @default(SELECTED)
   // Where it failed and why (a fixed reason code, never raw error text).
   failureStage      PipelineStage?
