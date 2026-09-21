@@ -53,7 +53,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const overview = await fetchJson<CampaignOverview>(`/api/campaigns/${id}/overview`, cookie);
   if (!overview) notFound();
 
-  const leadsResult = await fetchJson<{ items: CampaignLeadRow[]; total: number }>(`/api/campaigns/${id}/leads?sort=score`, cookie);
+  const leadsResult = await fetchJson<{ items: CampaignLeadRow[]; total: number }>(`/api/campaigns/${id}/leads`, cookie);
   const leadRows = leadsResult?.items ?? [];
 
   const { campaign, execution, counts } = overview;
@@ -73,7 +73,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Leads found" icon={Building2} value={counts.leads} hint={`You asked for ${campaign.targetCount}`} />
+        <StatTile label="Leads found" icon={Building2} value={counts.leads} hint={counts.leads < campaign.targetCount ? `You asked for ${campaign.targetCount}` : undefined} />
         <StatTile
           label="Selected"
           icon={ListChecks}
@@ -128,7 +128,6 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                   <TableHead>Business</TableHead>
                   <TableHead>Website</TableHead>
                   <TableHead>City</TableHead>
-                  <TableHead>Score</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Pipeline</TableHead>
                   <TableHead>Demo video</TableHead>
@@ -147,7 +146,6 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                     </TableCell>
                     <TableCell>{row.business.website ?? "—"}</TableCell>
                     <TableCell>{row.business.city ?? "—"}</TableCell>
-                    <TableCell>{row.scoreIsEstimated ? <span title="Estimated from the business's own details — this lead has not been analysed yet">~{row.score}</span> : row.score}</TableCell>
                     <TableCell>
                       <StatusBadge status={row.status} />
                     </TableCell>

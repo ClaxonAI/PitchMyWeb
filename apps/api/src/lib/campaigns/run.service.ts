@@ -6,6 +6,7 @@ import { ConflictError } from "../errors";
 import { DemoProvider, type CampaignSearchInput } from "../providers/demo-provider";
 import { getLeadProvider, isAsyncLeadProvider, type AnyLeadProvider } from "../providers";
 import { matchesCampaignFilters } from "./campaign-filters";
+import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { businessProviderInputSchema, type BusinessProviderInput } from "../validation/business";
 import { emitEvent } from "../observability/events";
 
@@ -91,14 +92,44 @@ export type IngestResult = {
 };
 
 /**
- * Ingests raw provider records for one execution. `alreadyCreated` is the
- * number of leads this execution has already produced (from earlier
- * batches), so leadLimit (section 10) is enforced across the whole run.
+ * Bound on the history loaded into memory on a discovery callback. A user
+ * with more leads than this stops gaining new repeat-protection rather than
+ * loading an unbounded set.
+ */
+export const MAX_SEEN_BUSINESSES = 20_000;
+
+/** Leads this campaign already has that WhatsApp could actually reach. */
+async function countPitchableLeads(db: PrismaClient, campaignId: string): Promise<number> {
+  const leads = await db.lead.findMany({
+    where: { campaignId },
+    select: { business: { select: { phone: true } } },
+    take: MAX_SEEN_BUSINESSES,
+  });
+  return leads.filter((lead) => normalizePhoneForWhatsApp(lead.business.phone)).length;
+}
+
+async function seenBusinessKeys(db: PrismaClient, campaign: Campaign): Promise<Set<string>> {
+  const leads = await db.lead.findMany({
+    where: { campaign: { userId: campaign.userId }, campaignId: { not: campaign.id } },
+    select: { businessId: true },
+    take: MAX_SEEN_BUSINESSES,
+  });
+  return new Set(leads.map((lead) => lead.businessId));
+}
+
+/**
+ * Ingests raw provider records for one execution, stopping once the campaign
+ * has targetCount leads that can actually be pitched. `alreadyCreated` is the
+ * number of leads this execution has already produced (from earlier batches),
+ * so the search budget is enforced across the whole run.
  *
- * leadLimit is enforced against genuinely created leads, not the raw record
- * count: stopping once the limit is reached means it can never be exceeded,
- * while every earlier candidate still gets a chance to fill the limit if
- * some ahead of it turn out to be duplicates or fail.
+ * Two different limits are at work. targetCount is the promise to the user —
+ * how many usable leads they asked for — and is counted against leads whose
+ * business has a WhatsApp-reachable number. leadLimit is the search budget:
+ * how many candidates may be looked at while trying to fill that promise,
+ * which has to be larger because candidates get discarded for reasons the
+ * search cannot see (already a lead from an earlier campaign, no phone, or
+ * failing the campaign's own filters).
  */
 export async function ingestBusinesses(
   db: PrismaClient,
@@ -111,7 +142,25 @@ export async function ingestBusinesses(
   let failedCount = 0;
   const failedBusinesses: FailedBusinessDetail[] = [];
 
+  // Businesses this user has already been given as a lead in some earlier
+  // campaign. Discovery keeps finding the same well-known places run after
+  // run — the per-campaign @@unique([campaignId, businessId]) does not stop
+  // that, it only stops a repeat inside one campaign — so without this the
+  // second campaign for a category is largely the first one again.
+  const alreadySeen = await seenBusinessKeys(db, campaign);
+
+  // What the user asked for is targetCount leads they can actually pitch, so
+  // that is what the cap counts. A business with no WhatsApp-reachable
+  // number is still stored — the dashboard shows it with a reason rather
+  // than hiding it — but it does not consume one of the slots, and the
+  // search keeps going to replace it.
+  let pitchable = await countPitchableLeads(db, campaign.id);
+
   for (const providerInput of records) {
+    if (pitchable >= campaign.targetCount) break;
+    // Bound on how many candidates may be looked at, so a campaign whose
+    // results are nearly all unreachable or already-seen stops rather than
+    // ingesting the entire result set.
     if (alreadyCreated + leadsCreated >= campaign.leadLimit) break;
 
     try {
@@ -127,6 +176,18 @@ export async function ingestBusinesses(
       if (!matchesCampaignFilters(validated, campaign)) continue;
 
       const { leadCreated, lead, business } = await ingestBusinessAsLead(db, { campaignId: campaign.id, providerInput: validated });
+
+      // Ingestion resolves the business first, so a repeat is only
+      // recognisable once we have its id. Undo the lead rather than leave
+      // the user looking at a business they were already sold.
+      if (leadCreated && alreadySeen.has(business.id)) {
+        await db.lead.delete({ where: { id: lead.id } }).catch(() => undefined);
+        continue;
+      }
+      if (leadCreated) {
+        alreadySeen.add(business.id);
+        if (normalizePhoneForWhatsApp(business.phone)) pitchable += 1;
+      }
       if (leadCreated) {
         leadsCreated += 1;
         if (validated.insights) {

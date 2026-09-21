@@ -3,7 +3,7 @@ import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { NotFoundError, InvalidCampaignTransitionError, ConflictError } from "../errors";
 import { createCampaign, getCampaignById, listCampaignsForUser, markCampaignReady, prepareCampaignRun, updateCampaign } from "./campaign.service";
-import type { CampaignCreateInput } from "../validation/campaign";
+import { leadLimitForTarget, type CampaignCreateInput } from "../validation/campaign";
 
 const createdUserIds: string[] = [];
 afterAll(async () => {
@@ -65,18 +65,22 @@ describe("updateCampaign", () => {
     expect(updated.status).toBe("DRAFT");
   });
 
-  // "How many leads" on the dashboard is targetCount; leadLimit is the cap
-  // discovery actually searches against. Editing one without the other is
-  // how a campaign edited down to 5 kept scraping its original 20.
+  // "How many leads" on the dashboard is targetCount — the promise. leadLimit
+  // is the search budget derived from it: how many candidates discovery may
+  // look at while trying to keep that promise. Editing one without the other
+  // is how a campaign edited down to 5 kept searching for its original 20.
   it("moves leadLimit with targetCount when the caller does not set it explicitly", async () => {
     const user = await newUser("update-target-count");
     const campaign = await createCampaign(prisma, user.id, { ...baseCampaignInput, leadLimit: undefined, targetCount: 20 });
-    expect(campaign.leadLimit).toBe(20);
+    expect(campaign.leadLimit).toBe(leadLimitForTarget(20));
 
     const updated = await updateCampaign(prisma, user.id, campaign.id, { targetCount: 5 });
 
     expect(updated.targetCount).toBe(5);
-    expect(updated.leadLimit).toBe(5);
+    expect(updated.leadLimit).toBe(leadLimitForTarget(5));
+    // The budget is larger than the promise: candidates get discarded as
+    // repeats or as unreachable, and the surplus is what replaces them.
+    expect(updated.leadLimit).toBeGreaterThan(updated.targetCount);
   });
 
   it("lets an explicit leadLimit win over the one derived from targetCount", async () => {

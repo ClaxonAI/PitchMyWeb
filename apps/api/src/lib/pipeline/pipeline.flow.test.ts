@@ -6,6 +6,7 @@ import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
 import { runCampaign } from "../campaigns/run.service";
 import { autoSelectForUser, listCampaignLeads, selectLeads } from "../campaigns/selection.service";
+import { ingestBusinessAsLead } from "../leads/lead.service";
 import type { AsyncLeadProvider } from "../providers/async-provider";
 import { handleDiscoveryResults } from "../../app/api/internal/pipeline/discovery-results/route";
 import { NotFoundError, UnauthenticatedError, ValidationError } from "../errors";
@@ -75,9 +76,12 @@ async function discoveredCampaign(
   label: string,
   businesses: unknown[],
   settings: { selectionMode?: "MANUAL" | "AUTO"; targetCount?: number; deliveryMode?: "AUTO" | "DIRECT" } = {},
+  // Pass an existing user to give them a second campaign — repeat-lead
+  // protection is per user, so proving it needs two campaigns under one.
+  existingUser?: Awaited<ReturnType<typeof createTestUser>>,
 ) {
-  const user = await createTestUser(`pipeline-${label}`);
-  createdUserIds.push(user.id);
+  const user = existingUser ?? (await createTestUser(`pipeline-${label}`));
+  if (!existingUser) createdUserIds.push(user.id);
   const campaign = await createCampaign(prisma, user.id, {
     name: `Pipeline ${label}`,
     location: "Chennai",
@@ -212,21 +216,45 @@ describe("discovery ingest with insights", () => {
   });
 });
 
+describe("repeat leads", () => {
+  it("never hands the same business back in a later campaign, and searches past it to still deliver targetCount", async () => {
+    const { user, campaign: first } = await discoveredCampaign("repeat-first", [clinic("Repeat Dental")], { targetCount: 1 });
+    const firstLeads = await prisma.lead.findMany({ where: { campaignId: first.id }, include: { business: true } });
+    expect(firstLeads.map((lead) => lead.business.name)).toEqual(["Repeat Dental"]);
+
+    // Same user, second campaign, and discovery finds the same clinic again
+    // at the top of its results — as it does in reality, because the search
+    // is the same search. It must be skipped, and the slot it would have
+    // taken filled by the next clinic instead.
+    const { campaign: second } = await discoveredCampaign(
+      "repeat-second",
+      [clinic("Repeat Dental"), clinic("Fresh Dental")],
+      { targetCount: 1 },
+      user,
+    );
+    const secondLeads = await prisma.lead.findMany({ where: { campaignId: second.id }, include: { business: true } });
+    expect(secondLeads.map((lead) => lead.business.name)).toEqual(["Fresh Dental"]);
+  });
+});
+
 describe("selection", () => {
-  it("auto-selects the top N by score when discovery completes, and builds + publishes their sites", async () => {
+  // Discovery order, not score. "No Phone Dental" sits between the two
+  // reachable clinics and must not consume a slot: targetCount promises
+  // leads that can be pitched, so the search continues past it.
+  it("auto-selects targetCount pitchable leads in discovery order, and builds + publishes their sites", async () => {
     const { campaign } = await discoveredCampaign(
       "auto",
       [
         clinic("Low Dental", { rating: 3.1, reviewCount: 4 }),
+        clinic("No Phone Dental", { phone: null, rating: 5, reviewCount: 999 }),
         clinic("Top Dental", { rating: 4.9, reviewCount: 800 }),
         clinic("Mid Dental", { rating: 4.4, reviewCount: 90 }),
-        clinic("No Phone Dental", { phone: null, rating: 5, reviewCount: 999 }),
       ],
       { selectionMode: "AUTO", targetCount: 2 },
     );
 
     const pipelines = await prisma.leadPipeline.findMany({ where: { campaignId: campaign.id }, include: { lead: { include: { business: true } } } });
-    expect(pipelines.map((p) => p.lead.business.name).sort()).toEqual(["Mid Dental", "Top Dental"]);
+    expect(pipelines.map((p) => p.lead.business.name).sort()).toEqual(["Low Dental", "Top Dental"]);
     for (const pipeline of pipelines) {
       expect(pipeline.stage).toBe("RECORDING");
       const project = await prisma.websiteProject.findUniqueOrThrow({ where: { id: pipeline.websiteProjectId! } });
@@ -242,11 +270,16 @@ describe("selection", () => {
   });
 
   it("manual selection enforces ownership, eligibility and the target count", async () => {
+    // Phoneless first so it is stored without consuming a slot; A and B then
+    // fill targetCount and discovery stops. C is ingested directly afterwards
+    // so a third selectable lead exists to test the slot guard with — through
+    // discovery it could never exist, because the cap stops at two.
     const { user, campaign } = await discoveredCampaign(
       "manual",
-      [clinic("A Dental"), clinic("B Dental"), clinic("C Dental"), clinic("Phoneless", { phone: null })],
+      [clinic("Phoneless", { phone: null }), clinic("A Dental"), clinic("B Dental")],
       { targetCount: 2 },
     );
+    await ingestBusinessAsLead(prisma, { campaignId: campaign.id, providerInput: clinic("C Dental") });
     const { items } = await listCampaignLeads(prisma, user.id, campaign.id);
     const byName = new Map(items.map((row) => [row.business.name, row]));
     expect(byName.get("Phoneless")?.selectable).toBe(false);

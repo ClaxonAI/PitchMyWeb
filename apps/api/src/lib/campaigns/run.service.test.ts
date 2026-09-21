@@ -364,7 +364,11 @@ function createFakeRunDb(campaignId: string) {
     minRating: null,
     minReviews: null,
     websiteRequirement: "ANY",
+    // leadLimit is the search budget, targetCount the delivery promise —
+    // ingestBusinesses stops at targetCount pitchable leads and uses
+    // leadLimit only to bound how many candidates it looks at.
     leadLimit: 50,
+    targetCount: 50,
   };
   let executionSeq = 0;
   const executions = new Map<string, Record<string, unknown>>();
@@ -457,6 +461,22 @@ function createFakeRunDb(campaignId: string) {
     lead: {
       findUnique: async ({ where }: { where: { campaignId_businessId: { campaignId: string; businessId: string } } }) =>
         leads.find((l) => l.campaignId === where.campaignId_businessId.campaignId && l.businessId === where.campaignId_businessId.businessId) ?? null,
+      // Two callers, distinguished by what they select: repeat-lead
+      // protection asks for this user's leads in *other* campaigns (none
+      // here — the fake models a single campaign), and the pitchable count
+      // asks for this campaign's leads with their business phone.
+      findMany: async ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        if (where.campaignId && typeof where.campaignId === "string") {
+          return leads
+            .filter((l) => l.campaignId === where.campaignId)
+            .map((l) => (select?.business ? { business: { phone: (businesses.get(l.businessId as string)?.phone as string | null) ?? null } } : l));
+        }
+        return [];
+      },
+      delete: async ({ where }: { where: { id: string } }) => {
+        const index = leads.findIndex((l) => l.id === where.id);
+        return index === -1 ? null : leads.splice(index, 1)[0];
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         leadSeq += 1;
         const lead = { id: `lead-${leadSeq}`, status: "NEW", ...data };

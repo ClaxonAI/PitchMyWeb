@@ -29,17 +29,23 @@ const campaignFieldsSchema = z.object({
 });
 
 /**
- * Discovery fetches exactly as many businesses as the user asked to pitch.
+ * How many businesses discovery may *look at* to find the leads the user
+ * asked for. This is a search budget, not a delivery count: the number of
+ * leads actually created is capped at targetCount by
+ * run.service.ts::ingestBusinesses, so the surplus never reaches the
+ * dashboard and "Leads found" still shows the number that was requested.
  *
- * This used to over-fetch 2x as a cushion against candidates that turn out
- * to be duplicates or unreachable, but the surplus is what made a request
- * for 5 leads report 8 found — the number on screen never matched the
- * number asked for, and the cushion was invisible. Under-delivery is the
- * honest failure here: if some of the N are dropped, the campaign pitches
- * fewer than N and says so, rather than quietly scraping twice as much.
+ * A budget is needed because a candidate can be discarded for reasons the
+ * search cannot know about — it is already a lead from an earlier campaign,
+ * or it fails the campaign's own filters. Searching for exactly targetCount
+ * meant every discard was a lead the user paid for and did not get, and it
+ * also made ordering irrelevant: discovery stopped at the first N records
+ * regardless of what came after.
  */
+const SEARCH_BUDGET_MULTIPLIER = 3;
+
 export function leadLimitForTarget(targetCount: number): number {
-  return targetCount;
+  return Math.min(targetCount * SEARCH_BUDGET_MULTIPLIER, 500);
 }
 
 // backend_tasks.md section 5.2. Status is intentionally excluded from the
