@@ -240,6 +240,7 @@ model User {
   trialDevice       TrialDevice?
   pitchWallet       PitchWallet?
   pitchCreditLedger PitchCreditLedger[]
+  pitchBatches      PitchBatch[]
 
   @@index([role])
   @@map("users")
@@ -331,10 +332,11 @@ model Campaign {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leads      Lead[]
-  executions CampaignExecution[]
-  pipelines  LeadPipeline[]
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads       Lead[]
+  executions  CampaignExecution[]
+  pipelines   LeadPipeline[]
+  pitchBatches PitchBatch[]
 
   @@index([userId])
   @@index([status])
@@ -988,6 +990,16 @@ enum SelectionMode {
   AUTO
 }
 
+enum PitchBatchMode {
+  MANUAL
+  AUTO
+}
+
+enum PitchBatchStatus {
+  PROCESSING
+  COMPLETED
+}
+
 enum DeliveryMode {
   AUTO
   DIRECT
@@ -1020,6 +1032,11 @@ model LeadPipeline {
   id                String         @id @default(cuid())
   campaignId        String
   leadId            String
+  // The PitchBatch this pipeline's credit reservation belongs to. Nullable
+  // only for rows created before this column existed — every pipeline
+  // startPipelines creates from here on is required to carry one (see its
+  // own header comment on why the batchId is what it re-queries by).
+  batchId           String?
   stage             PipelineStage  @default(SELECTED)
   // Where it failed and why (a fixed reason code, never raw error text).
   failureStage      PipelineStage?
@@ -1033,13 +1050,46 @@ model LeadPipeline {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  campaign Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  batch    PitchBatch? @relation(fields: [batchId], references: [id])
 
   @@unique([campaignId, leadId])
   @@index([campaignId, stage])
   @@index([stage, updatedAt])
+  @@index([batchId])
   @@map("lead_pipelines")
+}
+
+// One row per "send N pitches" action (selectLeads/autoSelectLeads) — the
+// reservation and audit record behind that request. requestedCount is what
+// was asked for; reservedCount is what was actually reserved and given
+// LeadPipeline rows for, which can be lower (fewer eligible leads existed
+// than requested — see selection.service.ts::reservePitchBatch).
+// sent/failed/refundedCount are denormalized counters updated as each child
+// LeadPipeline resolves (same pattern CampaignExecution's businessesFound/
+// leadsCreated already use), not purely derived, for fast dashboard reads.
+model PitchBatch {
+  id             String           @id @default(cuid())
+  campaignId     String
+  userId         String
+  requestedCount Int
+  reservedCount  Int
+  sentCount      Int              @default(0)
+  failedCount    Int              @default(0)
+  refundedCount  Int              @default(0)
+  mode           PitchBatchMode
+  status         PitchBatchStatus @default(PROCESSING)
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+
+  campaign  Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pipelines LeadPipeline[]
+
+  @@index([campaignId])
+  @@index([userId, createdAt])
+  @@map("pitch_batches")
 }
 
 // One Playwright recording of a published preview. Written by

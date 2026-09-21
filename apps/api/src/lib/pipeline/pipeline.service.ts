@@ -138,22 +138,42 @@ async function runPool<T>(items: readonly T[], limit: number, worker: (item: T) 
 // Start
 // ---------------------------------------------------------------------------
 
-export type StartPipelinesInput = { campaignId: string; leadIds: readonly string[] };
+export type StartPipelinesInput = {
+  campaignId: string;
+  leadIds: readonly string[];
+  /**
+   * The PitchBatch this selection belongs to (selection.service.ts::
+   * reservePitchBatch creates it, and reserves this many credits, before
+   * calling here). Every LeadPipeline this creates is tagged with it —
+   * required, not optional: a pipeline created outside a reservation would
+   * have no credit ever consumed or refunded for it, and there is no such
+   * pipeline through any caller in this codebase.
+   */
+  batchId: string;
+};
 
 /**
  * Creates pipeline rows for the given leads (ignoring leads that already
  * have one in this campaign) and runs each new pipeline up to the recording
  * request. Callers validate ownership and eligibility first.
+ *
+ * Re-queries by `batchId` rather than by `{campaignId, leadId, stage}` to
+ * find what it just created: two concurrent calls racing over an
+ * overlapping leadId list can both attempt the same insert, and
+ * skipDuplicates means only one of them actually wins that row. Filtering
+ * by *this call's own* batchId (unique per PitchBatch, set only by the
+ * winner's insert) is what makes `pipelines.length` below the true count
+ * this specific call is responsible for — selection.service.ts relies on
+ * exactly this to know how many of its reserved credits to release when
+ * some of the requested leads turned out to already be taken.
  */
 export async function startPipelines(db: PrismaClient, input: StartPipelinesInput, deps: PipelineDeps = defaultDeps): Promise<LeadPipeline[]> {
   if (input.leadIds.length === 0) return [];
   await db.leadPipeline.createMany({
-    data: input.leadIds.map((leadId) => ({ campaignId: input.campaignId, leadId })),
+    data: input.leadIds.map((leadId) => ({ campaignId: input.campaignId, leadId, batchId: input.batchId })),
     skipDuplicates: true,
   });
-  const pipelines = await db.leadPipeline.findMany({
-    where: { campaignId: input.campaignId, leadId: { in: [...input.leadIds] }, stage: "SELECTED" },
-  });
+  const pipelines = await db.leadPipeline.findMany({ where: { batchId: input.batchId, stage: "SELECTED" } });
   await runPool(pipelines, PIPELINE_BUILD_CONCURRENCY, (pipeline) => runFromBuild(db, pipeline.id, deps));
   return db.leadPipeline.findMany({ where: { id: { in: pipelines.map((p) => p.id) } } });
 }
