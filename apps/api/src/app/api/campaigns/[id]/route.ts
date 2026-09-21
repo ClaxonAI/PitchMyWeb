@@ -5,7 +5,6 @@ import { prisma } from "../../../../lib/db/client";
 import { requireCurrentUser } from "../../../../lib/auth/current-user";
 import { parseJsonBody } from "../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../lib/api/response";
-import { assertFreePitchBudget } from "../../../../lib/checkout/paid-access";
 import { getCampaignById, markCampaignReady, updateCampaign } from "../../../../lib/campaigns/campaign.service";
 import { campaignUpdateSchema } from "../../../../lib/validation/campaign";
 import { cuidSchema } from "../../../../lib/validation/common";
@@ -35,10 +34,9 @@ export async function handlePatchCampaign(db: PrismaClient, request: NextRequest
   const id = cuidSchema.parse(params.id);
   const { status, ...fields } = await parseJsonBody(request, campaignUpdateSchema);
 
-  if (fields.targetCount != null) {
-    await assertFreePitchBudget(db, user.id, fields.targetCount);
-  }
-
+  // targetCount is not gated here: it says how many leads to *find*, and
+  // finding them costs no credits. What a pitch costs is reserved at
+  // selection time, against leads that actually exist.
   let campaign = Object.keys(fields).length > 0 ? await updateCampaign(db, user.id, id, fields) : await getCampaignById(db, user.id, id);
 
   if (status === "READY") {

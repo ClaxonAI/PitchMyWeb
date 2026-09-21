@@ -5,7 +5,7 @@ import { prisma } from "../../../../../lib/db/client";
 import { requireCurrentUser } from "../../../../../lib/auth/current-user";
 import { parseOptionalJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
-import { assertFreePitchBudget, assertMarketAllowed, assertPaidDiscoveryAllowed } from "../../../../../lib/checkout/paid-access";
+import { assertCanStartDiscovery, assertMarketAllowed } from "../../../../../lib/checkout/paid-access";
 import { assertCampaignRunAllowed } from "../../../../../lib/campaigns/run-guards";
 import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { runCampaign } from "../../../../../lib/campaigns/run.service";
@@ -27,10 +27,9 @@ export async function handleRunCampaign(db: PrismaClient, request: NextRequest, 
   const id = cuidSchema.parse(params.id);
   const body = await parseOptionalJsonBody(request, campaignRunRequestSchema);
   await assertCampaignRunAllowed(db, { userId: user.id, campaignId: id, idempotencyKey: body.idempotencyKey });
-  await assertPaidDiscoveryAllowed(db, user.id);
+  await assertCanStartDiscovery(db, user.id);
   const campaign = await loadOwnedCampaign(db, id, user.id);
   await assertMarketAllowed(db, user.id, campaign.market);
-  await assertFreePitchBudget(db, user.id, campaign.targetCount);
   const result = await runCampaign(db, user.id, id, { idempotencyKey: body.idempotencyKey });
   // An async provider (osm) returns with the run still in progress: 202
   // Accepted, and the client polls GET /api/campaigns/:id for the outcome.

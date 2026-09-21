@@ -63,8 +63,14 @@ export function Topbar() {
 
       <div className="flex-1" />
 
-      <Badge variant={session.hasPaidAccess ? "success" : session.canDiscover ? "outline" : "destructive"} className="hidden sm:inline-flex">
-        {session.hasPaidAccess ? "Unlimited pitches" : `${session.freePitchesRemaining ?? 0} pitches left`}
+{/* Credits, not plan status: there is no unlimited state any more, so what
+          matters at a glance is how many pitches this account can still send.
+          Reserved credits are called out separately when there are any —
+          they are neither spent nor spendable, and a balance that looks
+          lower than expected is usually a batch still working. */}
+      <Badge variant={session.availableCredits > 0 ? "success" : "destructive"} className="hidden sm:inline-flex">
+        {session.availableCredits} {session.availableCredits === 1 ? "credit" : "credits"}
+        {session.reservedCredits > 0 ? ` · ${session.reservedCredits} sending` : ""}
       </Badge>
 
       <Button variant="ghost" size="icon" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} aria-label="Toggle dark mode">

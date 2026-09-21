@@ -18,9 +18,12 @@ import { useSession } from "./SessionProvider";
 
 export function DiscoverForm() {
   const router = useRouter();
-  const { canDiscover, hasPaidAccess, allowedMarkets, freePitchesRemaining, freePitchesAllowance } = useSession();
-  const defaultTargetCount = hasPaidAccess ? 20 : Math.min(10, freePitchesRemaining ?? freePitchesAllowance);
-  const maxTargetCount = hasPaidAccess ? 200 : (freePitchesRemaining ?? freePitchesAllowance);
+  const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits } = useSession();
+  // How many leads to *find*, which costs no credits — so the balance no
+  // longer caps this field. It only suggests a sensible default: there is
+  // little point scraping far past what the account could ever pitch.
+  const MAX_TARGET_COUNT = 200;
+  const defaultTargetCount = Math.min(20, Math.max(1, availableCredits + reservedCredits));
   const [nlQuery, setNlQuery] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [parseHint, setParseHint] = useState<string | null>(null);
@@ -77,8 +80,7 @@ export function DiscoverForm() {
       if (parsed.minRating != null) setValue("minRating", parsed.minRating);
       if (parsed.minReviews != null) setValue("minReviews", parsed.minReviews);
       if (parsed.targetCount != null) {
-        const capped = hasPaidAccess ? parsed.targetCount : Math.min(parsed.targetCount, maxTargetCount);
-        setValue("targetCount", capped);
+        setValue("targetCount", Math.min(parsed.targetCount, MAX_TARGET_COUNT));
       }
     } catch (error) {
       setParseHint(error instanceof ApiError ? error.message : "Couldn’t parse that right now.");
@@ -92,7 +94,8 @@ export function DiscoverForm() {
       <Card>
         <CardContent className="flex flex-col gap-3 p-5">
           <p className="text-sm text-dash-foreground">
-            You&apos;ve used your {freePitchesAllowance} free pitches. Pay for a plan to search for more businesses without a website.
+            You&apos;re out of pitch credits. {hasPaidAccess ? "Buy another credit pack" : "Buy a credit pack"} to search for more businesses without a
+            website.
           </p>
           <Button asChild>
             <Link href="/pricing">View pricing</Link>
@@ -104,11 +107,10 @@ export function DiscoverForm() {
 
   return (
     <div className="flex flex-col gap-6">
-      {!hasPaidAccess && (
-        <p className="text-sm text-dash-muted-foreground">
-          {freePitchesRemaining ?? freePitchesAllowance} of {freePitchesAllowance} free pitches left. Upgrade anytime for larger batches.
-        </p>
-      )}
+      <p className="text-sm text-dash-muted-foreground">
+        {availableCredits} pitch {availableCredits === 1 ? "credit" : "credits"} available. Searching costs nothing — you choose how many of the leads to
+        pitch once you can see them.
+      </p>
       <Card>
         <CardContent className="flex flex-col gap-2 p-4">
           <Label htmlFor="nl-search">Describe what you&apos;re looking for</Label>
@@ -175,14 +177,11 @@ export function DiscoverForm() {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="targetCount">How many leads</Label>
-              <Input id="targetCount" type="number" min={1} max={maxTargetCount} {...register("targetCount")} />
+              <Input id="targetCount" type="number" min={1} max={MAX_TARGET_COUNT} {...register("targetCount")} />
               {errors.targetCount && <p className="text-xs text-dash-destructive">{errors.targetCount.message}</p>}
               <p className="text-xs text-dash-muted-foreground">
                 We search for exactly this many businesses. Any without a number WhatsApp can reach are listed but not pitched.
               </p>
-              {!hasPaidAccess && (
-                <p className="text-xs text-dash-muted-foreground">Free accounts can pitch up to {maxTargetCount} leads per run (and {freePitchesAllowance} total).</p>
-              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

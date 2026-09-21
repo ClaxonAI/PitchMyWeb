@@ -28,6 +28,12 @@ export type Plan = {
   summary: string;
   /** Noun for one item in a batch, e.g. "pitches". */
   unitLabel: string;
+  /**
+   * How many pitches the pack contains — and, since pitches are now paid for
+   * as credits, exactly how many credits the purchase grants. Must equal this
+   * plan's `credits` in apps/api/src/lib/checkout/plan-pricing.ts, which is
+   * what the wallet is actually credited with.
+   */
   batchSize: number;
   prices: PlanPrice[];
   features: string[];

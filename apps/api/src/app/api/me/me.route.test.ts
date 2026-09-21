@@ -49,11 +49,10 @@ describe("GET /api/me", () => {
       planId: null,
       hasPaidAccess: true,
       canDiscover: true,
-      freePitchesRemaining: null,
-      freePitchesAllowance: 10,
       // The wallet is ensured (and the one-time free grant applied) on
-      // every /api/me read, gated or not — these are the real, stored
-      // numbers behind the deprecated freePitches* fields above.
+      // every /api/me read, gated or not. These are the only pitch numbers
+      // the API reports now: the derived freePitches* fields are gone, and
+      // with them the "paid means unlimited" state they encoded.
       availableCredits: 10,
       reservedCredits: 0,
       usedCredits: 0,

@@ -5,6 +5,13 @@ import { InsufficientPitchCreditsError } from "../errors";
 import { FREE_PITCH_ALLOWANCE } from "./paid-access";
 import { ensureFreeGrant, getOrCreateWallet, grantCredits, releasePitchCredits, reservePitchCredits } from "./wallet.service";
 
+// These tests exercise the reserve/release primitives on their own, so
+// there is no real PitchBatch behind them. The ledger's batchId carries no
+// foreign key (a credit movement outlives the batch it refers to), so a
+// stand-in id is honest here: what is under test is the wallet arithmetic,
+// not the batch.
+const TEST_BATCH_ID = "wallet-service-test-batch";
+
 const createdUserIds: string[] = [];
 afterAll(async () => {
   await deleteTestUsers(createdUserIds);
@@ -79,7 +86,7 @@ describe("reservePitchCredits", () => {
     const user = await newUser("reserve-basic");
     await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
 
-    await prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 15, `reserve:${user.id}`));
+    await prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 15, referenceId: `reserve:${user.id}` }));
 
     const wallet = await getOrCreateWallet(prisma, user.id);
     expect(wallet).toMatchObject({ availableCredits: 5, reservedCredits: 15 });
@@ -91,10 +98,10 @@ describe("reservePitchCredits", () => {
     const user = await newUser("reserve-insufficient");
     await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
 
-    await expect(prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 21, `reserve:${user.id}`))).rejects.toMatchObject({
+    await expect(prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 21, referenceId: `reserve:${user.id}` }))).rejects.toMatchObject({
       details: { available: 20, requested: 21 },
     });
-    await expect(prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 21, `reserve:${user.id}`))).rejects.toBeInstanceOf(InsufficientPitchCreditsError);
+    await expect(prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 21, referenceId: `reserve:${user.id}` }))).rejects.toBeInstanceOf(InsufficientPitchCreditsError);
 
     const wallet = await getOrCreateWallet(prisma, user.id);
     expect(wallet).toMatchObject({ availableCredits: 20, reservedCredits: 0 });
@@ -108,8 +115,8 @@ describe("reservePitchCredits", () => {
     await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
 
     const results = await Promise.allSettled([
-      prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 15, `reserve:${user.id}:a`)),
-      prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 10, `reserve:${user.id}:b`)),
+      prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 15, referenceId: `reserve:${user.id}:a` })),
+      prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 10, referenceId: `reserve:${user.id}:b` })),
     ]);
 
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -128,10 +135,10 @@ describe("releasePitchCredits", () => {
   it("moves reserved -> available and records a RELEASE ledger entry", async () => {
     const user = await newUser("release-basic");
     await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
-    await prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 15, `reserve:${user.id}`));
+    await prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 15, referenceId: `reserve:${user.id}` }));
 
     // Only 11 of the 15 reserved turned out to be eligible leads; release the shortfall.
-    await prisma.$transaction((tx) => releasePitchCredits(tx, user.id, 4, `release:${user.id}`));
+    await prisma.$transaction((tx) => releasePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 4, referenceId: `release:${user.id}` }));
 
     const wallet = await getOrCreateWallet(prisma, user.id);
     expect(wallet).toMatchObject({ availableCredits: 9, reservedCredits: 11 });
@@ -142,9 +149,9 @@ describe("releasePitchCredits", () => {
   it("is a no-op for a zero amount", async () => {
     const user = await newUser("release-zero");
     await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
-    await prisma.$transaction((tx) => reservePitchCredits(tx, user.id, 15, `reserve:${user.id}`));
+    await prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 15, referenceId: `reserve:${user.id}` }));
 
-    await prisma.$transaction((tx) => releasePitchCredits(tx, user.id, 0, `release:${user.id}`));
+    await prisma.$transaction((tx) => releasePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 0, referenceId: `release:${user.id}` }));
 
     const wallet = await getOrCreateWallet(prisma, user.id);
     expect(wallet).toMatchObject({ availableCredits: 5, reservedCredits: 15 });

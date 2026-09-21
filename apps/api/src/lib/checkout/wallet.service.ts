@@ -30,13 +30,56 @@ export type PitchWalletSnapshot = {
   usedCredits: number;
 };
 
+export type CreditLedgerEntry = {
+  id: string;
+  type: string;
+  amount: number;
+  batchId: string | null;
+  pipelineId: string | null;
+  orderId: string | null;
+  createdAt: Date;
+};
+
+/**
+ * The user's own credit history, newest first, alongside the balance it adds
+ * up to — "where did my credits go?" answered from the ledger rather than
+ * from anybody's recollection. Every movement is here, including the
+ * RESERVE/RELEASE pairs that never cost anything, because a reservation that
+ * was released is exactly the kind of thing a user notices and asks about.
+ *
+ * Scoped by userId in the query, never fetched and filtered afterwards.
+ */
+export async function listCreditLedger(
+  db: PrismaClient,
+  userId: string,
+  query: { page: number; pageSize: number },
+): Promise<{ wallet: PitchWalletSnapshot; items: CreditLedgerEntry[]; page: number; pageSize: number; total: number; totalPages: number }> {
+  const where = { userId };
+  const [wallet, items, total] = await Promise.all([
+    getOrCreateWallet(db, userId),
+    db.pitchCreditLedger.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: { id: true, type: true, amount: true, batchId: true, pipelineId: true, orderId: true, createdAt: true },
+    }),
+    db.pitchCreditLedger.count({ where }),
+  ]);
+  return { wallet, items, page: query.page, pageSize: query.pageSize, total, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) };
+}
+
 export async function getOrCreateWallet(db: Db, userId: string): Promise<PitchWalletSnapshot> {
-  const wallet = await db.pitchWallet.upsert({
+  // Selected rather than returned whole: this snapshot is served straight to
+  // the client by /api/me and the ledger endpoint, and a bare `upsert`
+  // returns the row — userId, timestamps and all — so the response would
+  // quietly carry more than the type says it does.
+  return db.pitchWallet.upsert({
     where: { userId },
     create: { userId },
     update: {},
+    select: { availableCredits: true, reservedCredits: true, usedCredits: true },
   });
-  return wallet;
 }
 
 /**
@@ -79,6 +122,21 @@ export async function ensureFreeGrant(db: PrismaClient, userId: string): Promise
 }
 
 /**
+ * A whole-batch credit movement (RESERVE / RELEASE), as opposed to the
+ * single-pitch CONSUME/REFUND below. `batchId` is recorded on the ledger row
+ * so the credit history can say *which* send this movement belonged to — "12
+ * credits reserved" is only an answer to "where did my credits go?" if the
+ * user can see what they were reserved for.
+ */
+export type BatchCreditMovement = {
+  userId: string;
+  batchId: string;
+  amount: number;
+  /** Idempotency/audit key, e.g. `reserve:<batchId>`. */
+  referenceId: string;
+};
+
+/**
  * The compare-and-swap reservation primitive: moves `amount` from
  * available to reserved, atomically, or throws
  * InsufficientPitchCreditsError with the real current balance. Must run
@@ -86,7 +144,8 @@ export async function ensureFreeGrant(db: PrismaClient, userId: string): Promise
  * LeadPipeline rows this reservation is for, so a crash between the two
  * can never leave credits reserved with nothing to show for them.
  */
-export async function reservePitchCredits(tx: Prisma.TransactionClient, userId: string, amount: number, referenceId: string): Promise<void> {
+export async function reservePitchCredits(tx: Prisma.TransactionClient, input: BatchCreditMovement): Promise<void> {
+  const { userId, amount } = input;
   const claimed = await tx.pitchWallet.updateMany({
     where: { userId, availableCredits: { gte: amount } },
     data: { availableCredits: { decrement: amount }, reservedCredits: { increment: amount } },
@@ -95,7 +154,7 @@ export async function reservePitchCredits(tx: Prisma.TransactionClient, userId: 
     const wallet = await getOrCreateWallet(tx, userId);
     throw new InsufficientPitchCreditsError(wallet.availableCredits, amount);
   }
-  await tx.pitchCreditLedger.create({ data: { userId, type: "RESERVE", amount, referenceId } });
+  await tx.pitchCreditLedger.create({ data: { userId, batchId: input.batchId, type: "RESERVE", amount, referenceId: input.referenceId } });
 }
 
 /**
@@ -105,13 +164,14 @@ export async function reservePitchCredits(tx: Prisma.TransactionClient, userId: 
  * the way CONSUME/REFUND are: this always runs inside the same transaction
  * that performed the RESERVE moments earlier, never replayed independently.
  */
-export async function releasePitchCredits(tx: Prisma.TransactionClient, userId: string, amount: number, referenceId: string): Promise<void> {
+export async function releasePitchCredits(tx: Prisma.TransactionClient, input: BatchCreditMovement): Promise<void> {
+  const { userId, amount } = input;
   if (amount <= 0) return;
   await tx.pitchWallet.update({
     where: { userId },
     data: { reservedCredits: { decrement: amount }, availableCredits: { increment: amount } },
   });
-  await tx.pitchCreditLedger.create({ data: { userId, type: "RELEASE", amount, referenceId } });
+  await tx.pitchCreditLedger.create({ data: { userId, batchId: input.batchId, type: "RELEASE", amount, referenceId: input.referenceId } });
 }
 
 // --- Resolving a single reserved pitch (pipeline.service.ts) --------------

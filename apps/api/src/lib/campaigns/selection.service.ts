@@ -188,7 +188,7 @@ async function reservePitchBatch(
       data: { campaignId: input.campaignId, userId: input.userId, requestedCount: input.requestedCount, reservedCount: 0, mode: input.mode },
     });
     try {
-      await reservePitchCredits(tx, input.userId, input.requestedCount, `reserve:${created.id}`);
+      await reservePitchCredits(tx, { userId: input.userId, batchId: created.id, amount: input.requestedCount, referenceId: `reserve:${created.id}` });
     } catch (error) {
       // Nothing else has committed for this batch yet — remove the empty
       // shell rather than leaving a PROCESSING row with 0 reservedCount
@@ -205,7 +205,7 @@ async function reservePitchBatch(
   const shortfall = input.requestedCount - actualCount;
 
   await db.$transaction(async (tx) => {
-    if (shortfall > 0) await releasePitchCredits(tx, input.userId, shortfall, `release:${batch.id}`);
+    if (shortfall > 0) await releasePitchCredits(tx, { userId: input.userId, batchId: batch.id, amount: shortfall, referenceId: `release:${batch.id}` });
     await tx.pitchBatch.update({
       where: { id: batch.id },
       data: { reservedCount: actualCount, ...(actualCount === 0 ? { status: "COMPLETED", completedAt: new Date() } : {}) },
@@ -328,7 +328,7 @@ export async function recoverStaleBatches(db: PrismaClient, now = new Date()): P
           data: { status: "COMPLETED", completedAt: now },
         });
         if (claimed.count !== 1) return;
-        await releasePitchCredits(tx, batch.userId, batch.requestedCount, `release-stale:${batch.id}`);
+        await releasePitchCredits(tx, { userId: batch.userId, batchId: batch.id, amount: batch.requestedCount, referenceId: `release-stale:${batch.id}` });
       });
       recovered += 1;
     } catch (error) {
