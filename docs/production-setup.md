@@ -83,6 +83,18 @@ WA_AUTH_ENCRYPTION_KEY=...          # decrypts stored WhatsApp credentials
 STORAGE_*=...                       # S3 bucket, not local MinIO
 ```
 
+### apps/sites
+
+```
+SITES_PUBLIC_URL=https://preview.pitchmyweb.in   # absolute link-preview (og:image) URLs
+API_INTERNAL_URL=https://api.pitchmyweb.in       # where preview content is read from
+APP_URL=https://pitchmyweb.in                    # may embed /demo pages in an iframe
+```
+
+`SITES_PUBLIC_URL` is the same value apps/api uses to build preview links.
+Without it the card WhatsApp shows under a pitch link points at `localhost`
+and the preview arrives as bare text.
+
 A web/API Clerk key mismatch is the most common first-deploy failure: every
 social sign-in fails verification and dead-ends at `/login`. The route logs
 which instance its key belongs to when that happens.

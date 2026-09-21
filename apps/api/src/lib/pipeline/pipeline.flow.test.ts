@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { buildDentalContent, buildPreviewContent, dentalContentSchema, pickPreviewTemplate } from "@pitchmyweb/templates";
+import { buildDentalContent, buildPreviewContent, dentalContentSchema, pickPreviewTemplate, PREVIEW_TEMPLATE_CODES } from "@pitchmyweb/templates";
 import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
@@ -504,5 +504,46 @@ describe("pipeline maintenance job", () => {
     const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: stuck.pipeline.id } });
     expect(failed.stage).toBe("FAILED");
     expect(failed.failureReason).toBe("recording_timeout");
+  });
+});
+
+describe("preview design selection", () => {
+  const business = { name: "Spice House", category: "Restaurant", city: "Chennai" };
+
+  it("picks a design at random for verticals that have several, and stores it in the content", () => {
+    expect(buildPreviewContent(business, {}, { random: () => 0 }).design).toBe("classic");
+    expect(buildPreviewContent(business, {}, { random: () => 0.99 }).design).toBe("studio");
+    const seen = new Set(Array.from({ length: 200 }, () => buildPreviewContent(business).design));
+    expect(seen).toEqual(new Set(["classic", "studio"]));
+  });
+
+  it("honours an explicit design and keeps the dental clinic on the classic layout", () => {
+    expect(buildPreviewContent(business, {}, { design: "classic", random: () => 0.99 }).design).toBe("classic");
+    const dental = buildPreviewContent({ name: "Smile", category: "Dentist" }, {}, { random: () => 0.99 });
+    expect(dental.design).toBe("classic");
+  });
+
+  it("still accepts previously stored content that has no design", () => {
+    const { design: _design, ...legacy } = buildPreviewContent(business, {}, { random: () => 0 });
+    expect(dentalContentSchema.safeParse(legacy).success).toBe(true);
+  });
+});
+
+describe("preview content limits", () => {
+  it("keeps FAQ text built from very long names and addresses inside the schema for every template", () => {
+    const business = {
+      name: "Sri Venkateswara Multi-Speciality Wellness and Family Care Centre, Main Branch Opposite the New Bus Stand",
+      city: "Thiruvananthapuram",
+      address: `${"Door 14/2231, Near Government Higher Secondary School, ".repeat(5)}Kerala 695001`,
+      phone: "+91 471 234 5678",
+    };
+    for (const template of PREVIEW_TEMPLATE_CODES) {
+      const content = buildPreviewContent(business, {}, { template });
+      expect(dentalContentSchema.safeParse(content).success).toBe(true);
+      for (const faq of content.faqs) {
+        expect(faq.question.length).toBeLessThanOrEqual(140);
+        expect(faq.answer.length).toBeLessThanOrEqual(400);
+      }
+    }
   });
 });

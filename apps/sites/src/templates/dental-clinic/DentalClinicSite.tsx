@@ -83,7 +83,7 @@ function PreviewRibbon({ name }: { name: string }) {
 
 function Header({ content, links, chrome }: { content: DentalContent; links: Links; chrome: Chrome }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-page/85 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-line/70 bg-page/95 lg:bg-page/85 lg:backdrop-blur-xl">
       <Container className="flex h-[68px] items-center justify-between gap-4">
         <a href="#top" className="flex min-w-0 items-center gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand text-white">
@@ -182,9 +182,10 @@ function Hero({ content, links, chrome }: { content: DentalContent; links: Links
     <section id="top" data-section="hero" className="relative overflow-hidden">
       <div aria-hidden className="absolute -top-40 -left-40 size-[520px] rounded-full bg-brand-soft/70 blur-3xl" />
       <Container className="relative grid items-center gap-12 pt-10 pb-16 sm:pt-14 lg:grid-cols-[1.05fr_.95fr] lg:gap-16 lg:pt-20 lg:pb-24">
-        <div data-reveal>
+        {/* min-w-0 + break-words: a long place name (e.g. Thiruvananthapuram) must wrap, not widen the grid past a 320px screen. */}
+        <div data-reveal className="min-w-0">
           <Kicker>{chrome.noun}{content.area ? ` · ${content.area}` : ""}</Kicker>
-          <h1 className="display mt-6 text-[44px] leading-[1.02] sm:text-6xl lg:text-[76px]">
+          <h1 className="display mt-6 text-[clamp(2.25rem,11vw,2.75rem)] leading-[1.02] break-words sm:text-6xl lg:text-[76px]">
             <Headline content={content} />
           </h1>
           <p className="mt-6 max-w-[34rem] text-[17px] leading-relaxed text-muted sm:text-lg">{content.intro}</p>
@@ -264,7 +265,8 @@ function Services({ content, chrome }: { content: DentalContent; chrome: Chrome 
                 <span className="grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand transition duration-500 group-hover:bg-brand group-hover:text-white">
                   <ServiceIcon icon={service.icon} className="size-7" />
                 </span>
-                <span className="display text-2xl text-line transition group-hover:text-accent">{String(i + 1).padStart(2, "0")}</span>
+                {/* Decorative index, drawn by CSS so it is not read out or contrast-checked as text. */}
+                <span aria-hidden data-index={String(i + 1).padStart(2, "0")} className="display text-2xl text-line transition group-hover:text-accent before:content-[attr(data-index)]" />
               </div>
               <h3 className="mt-8 text-[19px] font-semibold tracking-tight">{service.title}</h3>
               <p className="mt-2.5 text-[15px] leading-relaxed text-muted">{service.description}</p>
@@ -357,7 +359,7 @@ function Location({ content, links }: { content: DentalContent; links: Links }) 
                   <p className="text-[12.5px] text-muted">Address</p>
                   <p className="mt-1 text-[16px] leading-relaxed">{content.address}</p>
                   {links.maps && (
-                    <a href={links.maps} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand hover:underline">
+                    <a href={links.maps} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold text-brand hover:underline">
                       Get directions <ArrowIcon className="size-3.5" />
                     </a>
                   )}
@@ -369,7 +371,7 @@ function Location({ content, links }: { content: DentalContent; links: Links }) 
                 <PhoneIcon className="mt-0.5 size-5 shrink-0 text-brand" />
                 <div>
                   <p className="text-[12.5px] text-muted">Phone & WhatsApp</p>
-                  <a href={links.call} className="mt-1 block text-[16px] hover:text-brand">
+                  <a href={links.call} className="flex min-h-11 items-center text-[16px] hover:text-brand">
                     {content.phone}
                   </a>
                 </div>

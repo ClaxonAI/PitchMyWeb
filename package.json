@@ -17,7 +17,7 @@
     "build:web": "npm run build -w apps/web",
     "build:api": "npm run build -w apps/api",
     "lint": "npm run lint -w apps/web && npm run lint -w apps/sites",
-    "test": "npm run test -w packages/contracts && npm run test -w apps/api && npm run test -w apps/whatsapp-worker && npm run test -w apps/recorder-worker && npm run test -w apps/discovery-worker && npm run test -w apps/verification-worker",
+    "test": "npm run test -w packages/contracts && npm run test -w apps/api && npm run test -w apps/whatsapp-worker && npm run test -w apps/recorder-worker && npm run test -w apps/discovery-worker && npm run test -w apps/verification-worker && npm run test -w apps/sites",
     "test:api": "npm run test -w apps/api",
     "test:worker": "npm run test -w apps/whatsapp-worker",
     "test:discovery": "npm run test -w apps/discovery-worker",
@@ -34,6 +34,7 @@
     "dev:verification": "npm run dev -w apps/verification-worker",
     "dev:python-discovery": "apps/python-discovery/.venv/Scripts/python.exe apps/python-discovery/src/main.py",
     "build:sites": "npm run build -w apps/sites",
-    "test:recorder": "npm run test -w apps/recorder-worker"
+    "test:recorder": "npm run test -w apps/recorder-worker",
+    "test:sites": "npm run test -w apps/sites"
   }
 }
