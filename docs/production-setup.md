@@ -187,6 +187,16 @@ sudo SOURCE_S3=s3://…/deploy/current.tar.gz bash infrastructure/aws/bootstrap.
 of which the stock Ubuntu image carries — then loads secrets, migrates,
 builds, starts pm2 and configures nginx.
 
+The tarball is extracted *over* the existing tree so `node_modules` and build
+output survive, which means extraction alone can never delete anything. Each
+deploy therefore records the paths it laid down in
+`/var/lib/pitchmyweb/deployed-files`, and the next one removes those the new
+tarball no longer contains. Only files a previous deploy created are ever
+deleted — anything untracked was never in a manifest. Without this a file
+deleted upstream lives on forever, and for a route file that means a deleted
+endpoint keeps being served: `/api/webhooks/razorpay` answered for a release
+after the payment-link code was removed from the repository.
+
 Shell scripts must keep LF endings (`.gitattributes` pins them). On Windows
 `core.autocrlf` rewrites them and `git archive` carries that through, which
 ships a tarball whose scripts die on `$'\r': command not found`.
