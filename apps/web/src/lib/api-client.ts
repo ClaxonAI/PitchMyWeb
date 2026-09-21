@@ -274,10 +274,27 @@ export type Business = {
   websiteVerifiedAt: string | null;
 };
 
+/**
+ * One row of GET /api/campaigns/:id/leads. Mirrors the API's own
+ * CampaignLeadRow (apps/api lib/campaigns/selection.service.ts) — it is a
+ * flat lead, not a `{ lead, business }` pair. The older nested shape lingered
+ * here after the API flattened it, so the campaign table silently rendered
+ * every lead's score and status as "—".
+ */
 export type CampaignLeadRow = {
-  lead: { id: string; status: string; score: number | null; recommendedService: string | null } | null;
-  business: Business;
-  pipeline: { id: string; stage: PipelineStage; videoReady?: boolean } | null;
+  id: string;
+  status: LeadStatus;
+  score: number;
+  scoreIsEstimated: boolean;
+  summary: string | null;
+  services: string[];
+  createdAt: string;
+  business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
+  hasValidPhone: boolean;
+  pitch: string | null;
+  pipeline: { id: string; stage: PipelineStage; failureReason: string | null; videoReady: boolean } | null;
+  selectable: boolean;
+  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
 };
 
 export const campaignsApi = {

@@ -65,6 +65,27 @@ describe("updateCampaign", () => {
     expect(updated.status).toBe("DRAFT");
   });
 
+  // "How many leads" on the dashboard is targetCount; leadLimit is the cap
+  // discovery actually searches against. Editing one without the other is
+  // how a campaign edited down to 5 kept scraping its original 20.
+  it("moves leadLimit with targetCount when the caller does not set it explicitly", async () => {
+    const user = await newUser("update-target-count");
+    const campaign = await createCampaign(prisma, user.id, { ...baseCampaignInput, leadLimit: undefined, targetCount: 20 });
+    expect(campaign.leadLimit).toBe(20);
+
+    const updated = await updateCampaign(prisma, user.id, campaign.id, { targetCount: 5 });
+
+    expect(updated.targetCount).toBe(5);
+    expect(updated.leadLimit).toBe(5);
+  });
+
+  it("lets an explicit leadLimit win over the one derived from targetCount", async () => {
+    const user = await newUser("update-target-count-explicit");
+    const campaign = await createCampaign(prisma, user.id, baseCampaignInput);
+    const updated = await updateCampaign(prisma, user.id, campaign.id, { targetCount: 5, leadLimit: 40 });
+    expect(updated.leadLimit).toBe(40);
+  });
+
   it("never writes a client-supplied status as a raw field, even though the schema allows the literal", async () => {
     const user = await newUser("update-status-noop");
     const campaign = await createCampaign(prisma, user.id, baseCampaignInput);

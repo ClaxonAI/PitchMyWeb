@@ -177,6 +177,9 @@ export function DiscoverForm() {
               <Label htmlFor="targetCount">How many leads</Label>
               <Input id="targetCount" type="number" min={1} max={maxTargetCount} {...register("targetCount")} />
               {errors.targetCount && <p className="text-xs text-dash-destructive">{errors.targetCount.message}</p>}
+              <p className="text-xs text-dash-muted-foreground">
+                We search for exactly this many businesses. Any without a number WhatsApp can reach are listed but not pitched.
+              </p>
               {!hasPaidAccess && (
                 <p className="text-xs text-dash-muted-foreground">Free accounts can pitch up to {maxTargetCount} leads per run (and {freePitchesAllowance} total).</p>
               )}

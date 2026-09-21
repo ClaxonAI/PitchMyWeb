@@ -98,6 +98,33 @@ the bare path `parameter/pitchmyweb/prod`, which the wildcard does not cover.
 With only the wildcard the call fails as AccessDenied naming a resource that
 looks like it should already be granted.
 
+### Lead discovery (apps/discovery-worker)
+
+```
+LEAD_PROVIDER=serper                # apps/api — the default, so it may be omitted
+DISCOVERY_SOURCE=serper             # apps/discovery-worker — must match the above
+SERPER_API_KEY=...                  # secret; https://serper.dev/api-key
+OPENAI_API_KEY=sk-...               # optional — AI insights on each lead
+```
+
+Both processes read the same `/etc/pitchmyweb/env`, so one `SERPER_API_KEY`
+parameter serves both halves. Add it as a SecureString under the same path as
+every other secret — the name *is* the variable name:
+
+```bash
+aws ssm put-parameter --region ap-south-1 \n  --name /pitchmyweb/prod/SERPER_API_KEY --type SecureString \n  --value "$SERPER_KEY" --overwrite
+```
+
+`LEAD_PROVIDER` and `DISCOVERY_SOURCE` both default to `serper` in code, so
+neither needs a parameter; set them only to move an environment back to `osm`,
+and set them **together** — apps/api decides *that* a search runs and the
+worker decides *how*, so a half-flip silently searches the wrong source.
+
+`SERPER_API_KEY` is required: `pmw-discovery` refuses to boot without it and
+pm2 will restart-loop it, which shows up as searches sitting queued forever
+rather than as a failure on the dashboard. `OPENAI_API_KEY` is not — without it
+leads still arrive, just with no summary/services/outreach message attached.
+
 ### Two values that must be exactly right
 
 ```

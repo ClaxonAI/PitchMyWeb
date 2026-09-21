@@ -71,7 +71,10 @@ export async function handleDiscoveryResults(db: PrismaClient, request: NextRequ
   emitEvent("lead_discovery.run_completed", {
     executionId: execution.id,
     campaignId: execution.campaignId,
-    provider: "osm",
+    // Whichever async provider this execution actually ran under — this was
+    // hard-coded to "osm" back when osm was the only one, which mislabelled
+    // every serper and python run in the logs.
+    provider: execution.provider,
     businessesFound: totals.businessesFound,
     leadsCreated: totals.leadsCreated,
     failedCount: totals.failedCount,

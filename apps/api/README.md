@@ -95,5 +95,5 @@ Tests sit next to the code they cover (`*.test.ts`, `*.route.test.ts`, `critical
 
 ## Environment
 
-See `.env.example`. Required: `DATABASE_URL`, `AUTH_SECRET`. Integrations: `LEAD_PROVIDER` (demo/osm),
+See `.env.example`. Required: `DATABASE_URL`, `AUTH_SECRET`. Integrations: `LEAD_PROVIDER` (serper by default; osm/python/demo),
 `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `BUSINESS_DATA_API_URL`, `BUSINESS_DATA_API_KEY`.

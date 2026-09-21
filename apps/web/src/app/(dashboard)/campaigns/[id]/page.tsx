@@ -31,6 +31,21 @@ async function fetchJson<T>(path: string, cookie: string): Promise<T | null> {
   }
 }
 
+// Why a discovered lead never entered the delivery pipeline. Leaving these
+// rows blank is what made a run that found 8 businesses and pitched 1 look
+// broken: nothing on the page said the other 7 had no number WhatsApp could
+// reach, so there was no way to tell a stuck campaign from a picky one.
+const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>, string> = {
+  no_phone: "No WhatsApp number",
+  already_selected: "Already selected",
+  not_pitchable_status: "Already pitched",
+};
+
+function BlockedReason({ reason }: { reason: CampaignLeadRow["blockedReason"] }) {
+  if (!reason) return <span className="text-dash-muted-foreground">Not selected</span>;
+  return <span className="text-sm text-dash-muted-foreground">{BLOCKED_REASON_TEXT[reason]}</span>;
+}
+
 export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const cookie = (await cookies()).toString();
@@ -42,6 +57,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const leadRows = leadsResult?.items ?? [];
 
   const { campaign, execution, counts } = overview;
+  const blockedCount = leadRows.filter((row) => !row.pipeline && row.blockedReason).length;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -57,8 +73,13 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Leads found" icon={Building2} value={counts.leads} />
-        <StatTile label="Selected" icon={ListChecks} value={counts.selected} />
+        <StatTile label="Leads found" icon={Building2} value={counts.leads} hint={`You asked for ${campaign.targetCount}`} />
+        <StatTile
+          label="Selected"
+          icon={ListChecks}
+          value={counts.selected}
+          hint={blockedCount > 0 ? `${blockedCount} can't be pitched` : undefined}
+        />
         <StatTile label="Delivered" icon={Send} value={counts.delivered} emphasis={counts.delivered > 0} />
         <div className="flex flex-col gap-2 rounded-dash-lg border border-dash-border bg-dash-card p-4">
           <div className="flex items-center gap-2">
@@ -115,24 +136,24 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               </TableHeader>
               <TableBody>
                 {leadRows.map((row) => (
-                  <TableRow key={row.business.id}>
+                  <TableRow key={row.id}>
                     <TableCell className="font-medium">
                       <span className="inline-flex items-center gap-2">
-                        {row.lead ? (
-                          <Link href={`/leads/${row.lead.id}`} className="hover:underline">
-                            {row.business.name}
-                          </Link>
-                        ) : (
-                          row.business.name
-                        )}
+                        <Link href={`/leads/${row.id}`} className="hover:underline">
+                          {row.business.name}
+                        </Link>
                         <WebsiteVerificationBadge status={row.business.websiteVerificationStatus} />
                       </span>
                     </TableCell>
                     <TableCell>{row.business.website ?? "—"}</TableCell>
                     <TableCell>{row.business.city ?? "—"}</TableCell>
-                    <TableCell>{row.lead?.score ?? "—"}</TableCell>
-                    <TableCell>{row.lead ? <StatusBadge status={row.lead.status} /> : "—"}</TableCell>
-                    <TableCell>{row.pipeline ? <StatusBadge status={row.pipeline.stage} /> : "—"}</TableCell>
+                    <TableCell>{row.scoreIsEstimated ? <span title="Estimated from the business's own details — this lead has not been analysed yet">~{row.score}</span> : row.score}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={row.status} />
+                    </TableCell>
+                    <TableCell>
+                      {row.pipeline ? <StatusBadge status={row.pipeline.stage} /> : <BlockedReason reason={row.blockedReason} />}
+                    </TableCell>
                     <TableCell>
                       {row.pipeline?.videoReady ? (
                         <span className="inline-flex items-center gap-1">

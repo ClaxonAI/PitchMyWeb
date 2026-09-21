@@ -29,7 +29,7 @@ export type RunCampaignOptions = {
   idempotencyKey?: string;
   // Phase 4 code-review finding #7: the provider is injectable so tests and
   // alternative sources don't require editing this file. When omitted, the
-  // provider configured by LEAD_PROVIDER is used (DemoProvider by default).
+  // provider configured by LEAD_PROVIDER is used (SerperLeadProvider by default).
   provider?: AnyLeadProvider;
 };
 

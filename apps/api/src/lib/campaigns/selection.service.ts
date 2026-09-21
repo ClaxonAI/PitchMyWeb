@@ -28,12 +28,27 @@ export type CampaignLeadRow = {
   summary: string | null;
   services: string[];
   createdAt: Date;
-  business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "rating" | "reviewCount">;
+  business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
   pipeline: (Pick<LeadPipeline, "id" | "stage" | "failureReason"> & { videoReady: boolean }) | null;
   selectable: boolean;
+  /**
+   * Why this lead is not selectable, for the dashboard to show instead of
+   * leaving the row blank. A lead with no WhatsApp-reachable phone can never
+   * be pitched, and before this it simply sat in the table with an empty
+   * pipeline column — the single most confusing thing about a run where
+   * discovery found businesses but auto-selection picked almost none.
+   */
+  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
 };
+
+function blockedReasonFor(row: { pipeline: unknown; hasValidPhone: boolean; status: Lead["status"] }): CampaignLeadRow["blockedReason"] {
+  if (row.pipeline) return "already_selected";
+  if (!row.hasValidPhone) return "no_phone";
+  if (!(SELECTABLE_LEAD_STATUSES as readonly string[]).includes(row.status)) return "not_pitchable_status";
+  return null;
+}
 
 function effectiveScore(lead: Lead & { business: Business }): { score: number; estimated: boolean } {
   if (typeof lead.score === "number") return { score: lead.score, estimated: false };
@@ -100,6 +115,8 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
         city: lead.business.city,
         address: lead.business.address,
         phone: lead.business.phone,
+        website: lead.business.website,
+        websiteVerificationStatus: lead.business.websiteVerificationStatus,
         rating: lead.business.rating,
         reviewCount: lead.business.reviewCount,
       },
@@ -107,6 +124,7 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
       pitch: lead.pitches[0]?.content ?? null,
       pipeline: pipeline ? { id: pipeline.id, stage: pipeline.stage, failureReason: pipeline.failureReason, videoReady: pipeline.recordingId ? readyIds.has(pipeline.recordingId) : false } : null,
       selectable: !pipeline && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
+      blockedReason: blockedReasonFor({ pipeline, hasValidPhone, status: lead.status }),
     };
   });
 }

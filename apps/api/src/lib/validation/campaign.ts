@@ -28,9 +28,18 @@ const campaignFieldsSchema = z.object({
   deliveryMode: z.enum(["AUTO", "DIRECT"]),
 });
 
-/** Discovery fetches about twice as many candidates as the user wants to pitch. */
+/**
+ * Discovery fetches exactly as many businesses as the user asked to pitch.
+ *
+ * This used to over-fetch 2x as a cushion against candidates that turn out
+ * to be duplicates or unreachable, but the surplus is what made a request
+ * for 5 leads report 8 found — the number on screen never matched the
+ * number asked for, and the cushion was invisible. Under-delivery is the
+ * honest failure here: if some of the N are dropped, the campaign pitches
+ * fewer than N and says so, rather than quietly scraping twice as much.
+ */
 export function leadLimitForTarget(targetCount: number): number {
-  return Math.min(Math.max(targetCount * 2, targetCount), 200);
+  return targetCount;
 }
 
 // backend_tasks.md section 5.2. Status is intentionally excluded from the
