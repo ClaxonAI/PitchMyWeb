@@ -78,11 +78,57 @@ step "source"
 if [ -n "${SOURCE_S3:-}" ]; then
   install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
   aws s3 cp "$SOURCE_S3" /tmp/src.tar.gz --region "$REGION"
+
   # Extracted over whatever is there: the tarball holds tracked files only, so
-  # node_modules and build output survive and npm ci stays incremental.
+  # node_modules and build output survive and npm ci stays incremental. The
+  # cost of that is deletions: extracting never removes anything, so a file
+  # deleted upstream lives on here forever. For a route file that means a
+  # deleted endpoint keeps being served — which is how /api/webhooks/razorpay
+  # stayed answering after the payment-link code was removed from the repo.
+  #
+  # So each deploy records exactly which paths it laid down, and the next one
+  # removes the ones that are no longer in the tarball. Only files a previous
+  # deploy created are ever deleted: anything untracked (node_modules, .next,
+  # /etc/pitchmyweb/env, a hand-written .env) was never in a manifest and so
+  # is never a candidate. The manifest lives outside APP_DIR so extraction
+  # cannot clobber it.
+  MANIFEST_DIR=/var/lib/pitchmyweb
+  MANIFEST="$MANIFEST_DIR/deployed-files"
+  install -d "$MANIFEST_DIR"
+
+  # Regular files only — directory entries would make comm treat a directory
+  # that merely changed contents as a deletion.
+  tar tzf /tmp/src.tar.gz | grep -v '/$' | LC_ALL=C sort > /tmp/manifest.new
+
+  if [ -s "$MANIFEST" ]; then
+    # In the old manifest but not the new tarball = deleted upstream.
+    LC_ALL=C comm -23 "$MANIFEST" /tmp/manifest.new > /tmp/manifest.gone
+    if [ -s /tmp/manifest.gone ]; then
+      echo "removing $(wc -l < /tmp/manifest.gone) file(s) deleted upstream:"
+      while IFS= read -r gone; do
+        [ -n "$gone" ] || continue
+        echo "  - $gone"
+        rm -f "$APP_DIR/$gone"
+        # Take the directory with it when that file was the last thing in it,
+        # so an emptied route directory does not linger.
+        rmdir -p --ignore-fail-on-non-empty "$(dirname "$APP_DIR/$gone")" 2>/dev/null || true
+      done < /tmp/manifest.gone
+    else
+      echo "no files deleted upstream since the last deploy"
+    fi
+  else
+    # First deploy after this was added: nothing to compare against, so record
+    # the manifest and prune from the next deploy onward. Anything already
+    # orphaned by an earlier deploy has to be cleared by hand once.
+    echo "no previous manifest — recording one, pruning starts next deploy"
+  fi
+
   tar xzf /tmp/src.tar.gz -C "$APP_DIR"
   chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
-  rm -f /tmp/src.tar.gz
+  # Only after a successful extract: a manifest written for a deploy that then
+  # failed would make the *next* one delete files this box still serves.
+  mv /tmp/manifest.new "$MANIFEST"
+  rm -f /tmp/src.tar.gz /tmp/manifest.gone
 elif [ -d "$APP_DIR/.git" ]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch --all --prune
   sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard origin/main
