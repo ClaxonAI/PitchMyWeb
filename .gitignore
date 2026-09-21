@@ -3,6 +3,9 @@ node_modules/
 
 # Build output
 .next/
+# Staging and rollback copies used by the deploy swap (bootstrap.sh).
+.next-build/
+.next-previous/
 out/
 dist/
 *.tsbuildinfo

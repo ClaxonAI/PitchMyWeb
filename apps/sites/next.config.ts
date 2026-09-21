@@ -17,7 +17,11 @@ const frameAncestors = ["'self'", "http://localhost:3000", "http://127.0.0.1:300
 // Public preview sites. Every response is marked noindex: a preview is a
 // sales concept for a real business, not that business's official website,
 // and must never show up in search results.
+
+// Overridable so a deploy can build into a staging directory and swap it in
+// rather than over the live one; infrastructure/aws/bootstrap.sh explains why.
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   transpilePackages: ["@pitchmyweb/templates"],
   outputFileTracingRoot: path.resolve(appDir, "../.."),

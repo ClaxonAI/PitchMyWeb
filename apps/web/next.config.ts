@@ -44,7 +44,10 @@ const scriptSources = `${process.env.NODE_ENV === "development" ? "'self' 'unsaf
 // with NEXT_PUBLIC_SITES_URL, which is what builds the iframe src.
 const sitesOrigin = process.env.NEXT_PUBLIC_SITES_URL?.trim().replace(/\/$/, "") || "http://localhost:3200";
 
+// Overridable so a deploy can build into a staging directory and swap it in
+// rather than over the live one; infrastructure/aws/bootstrap.sh explains why.
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   images: { unoptimized: true },
   experimental: {
     staleTimes: {

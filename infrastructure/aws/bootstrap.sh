@@ -120,7 +120,30 @@ sudo -u "$APP_USER" --preserve-env npm run db:generate
 sudo -u "$APP_USER" --preserve-env npm run db:deploy
 
 step "build"
-sudo -u "$APP_USER" --preserve-env npm run build
+# Built into a staging directory and swapped in, never over the live one.
+# `next start` reads chunk files from disk as it serves them, so rebuilding in
+# place deletes chunks the running server is still handing out: anyone with
+# the page already open gets "Application error: a client-side exception has
+# occurred", and Server Action IDs from the previous build stop resolving —
+# for the whole three minutes a build takes, not just an instant.
+#
+# All three are built before any are swapped, so a failure in the last one
+# leaves the currently-serving build untouched rather than half-replaced.
+BUILD_DIR=.next-build
+for app in web api sites; do
+  rm -rf "apps/$app/$BUILD_DIR"
+  sudo -u "$APP_USER" --preserve-env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"
+done
+
+step "swap in the new build"
+for app in web api sites; do
+  rm -rf "apps/$app/.next-previous"
+  # A rename, so it is atomic and the running process keeps serving from the
+  # old inode until pm2 restarts it.
+  [ -d "apps/$app/.next" ] && mv "apps/$app/.next" "apps/$app/.next-previous"
+  mv "apps/$app/$BUILD_DIR" "apps/$app/.next"
+  chown -R "${APP_USER}:${APP_USER}" "apps/$app/.next"
+done
 
 step "pm2"
 # reload when already running so a redeploy does not drop the WhatsApp socket
@@ -132,6 +155,12 @@ else
 fi
 sudo -u "$APP_USER" --preserve-env pm2 save
 env PATH="$PATH" pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER" | tail -1 | bash || true
+
+# Only once the new build is being served: until pm2 has restarted, the old
+# processes are still reading from these inodes.
+for app in web api sites; do
+  rm -rf "apps/$app/.next-previous"
+done
 
 step "nginx + tls"
 # After pm2, so the backends are already listening when the redirect to HTTPS

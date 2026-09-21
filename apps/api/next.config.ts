@@ -5,7 +5,10 @@ import type { NextConfig } from "next";
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(appDir, "../..");
 
+// Overridable so a deploy can build into a staging directory and swap it in
+// rather than over the live one; infrastructure/aws/bootstrap.sh explains why.
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // @pitchmyweb/db and @pitchmyweb/contracts ship TypeScript source rather
   // than a compiled dist (see packages/db/src/index.ts for why), so Next has
   // to compile them itself. Turbopack already transpiles workspace packages
