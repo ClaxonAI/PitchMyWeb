@@ -6,6 +6,7 @@ import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
 import { runCampaign } from "../campaigns/run.service";
 import { autoSelectForUser, listCampaignLeads, selectLeads } from "../campaigns/selection.service";
+import { grantCredits } from "../checkout/wallet.service";
 import { ingestBusinessAsLead } from "../leads/lead.service";
 import type { AsyncLeadProvider } from "../providers/async-provider";
 import { handleDiscoveryResults } from "../../app/api/internal/pipeline/discovery-results/route";
@@ -81,7 +82,14 @@ async function discoveredCampaign(
   existingUser?: Awaited<ReturnType<typeof createTestUser>>,
 ) {
   const user = existingUser ?? (await createTestUser(`pipeline-${label}`));
-  if (!existingUser) createdUserIds.push(user.id);
+  if (!existingUser) {
+    createdUserIds.push(user.id);
+    // Generous, fixed grant: selectLeads/autoSelectLeads now reserve real
+    // wallet credits, and this file's tests only care about pipeline
+    // behavior once a lead is selected, not about credit exhaustion —
+    // wallet.service.test.ts and selection.service.test.ts cover that.
+    await grantCredits(prisma, { userId: user.id, amount: 500, type: "PURCHASE", referenceId: `test-grant:${user.id}` });
+  }
   const campaign = await createCampaign(prisma, user.id, {
     name: `Pipeline ${label}`,
     location: "Chennai",
@@ -298,7 +306,7 @@ describe("selection", () => {
     expect(jobs).toHaveLength(1);
     await expect(selectLeads(prisma, user.id, campaign.id, [byName.get("A Dental")!.id], deps)).rejects.toThrow(ValidationError);
 
-    const auto = await autoSelectForUser(prisma, user.id, campaign.id, deps);
+    const auto = await autoSelectForUser(prisma, user.id, campaign.id, undefined, deps);
     expect(auto.started).toHaveLength(1); // one slot left
   });
 });

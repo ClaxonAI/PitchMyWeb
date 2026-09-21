@@ -4,6 +4,7 @@ import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { emitEvent } from "../observability/events";
 import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service";
 import { calculateOpportunityScore } from "../scoring/scoring";
+import { releasePitchCredits, reservePitchCredits } from "../checkout/wallet.service";
 import { loadOwnedCampaign } from "./campaign.service";
 
 // Choosing which discovered leads get a site, a video and a pitch.
@@ -154,6 +155,66 @@ function remainingSlots(campaign: Campaign, alreadySelected: number): number {
   return Math.max(0, campaign.targetCount - alreadySelected);
 }
 
+/**
+ * The atomic reservation at the heart of "never send more pitches than were
+ * paid for": reserves `requestedCount` credits, attempts to claim up to
+ * that many of `candidateLeadIds` as new LeadPipeline rows, and releases
+ * whatever of the reservation wasn't actually spent — both because fewer
+ * eligible candidates existed than requested (rule 7: "20 credits, request
+ * 15, only 11 eligible -> reserve only 11") and because a concurrent
+ * request can win a lead this one also wanted (LeadPipeline's
+ * @@unique([campaignId, leadId]) plus skipDuplicates decides that race, not
+ * this function — see startPipelines's own comment on why it re-queries by
+ * batchId rather than trusting the requested list).
+ *
+ * Two transactions, not one spanning the whole call: the reserve+batch-
+ * create commits first, then startPipelines runs (which makes real network
+ * calls — website publish, recording request — that must never happen
+ * inside a DB transaction holding a row lock), then a final small
+ * transaction records the true count and releases any shortfall. A crash in
+ * the gap between the first and last leaves a PitchBatch reserved with
+ * nothing to show for it yet; pipeline-maintenance.job.ts's stale-pipeline
+ * reconciliation (Phase 6) is the safety net for that, not this function.
+ */
+async function reservePitchBatch(
+  db: PrismaClient,
+  input: { campaignId: string; userId: string; requestedCount: number; candidateLeadIds: readonly string[]; mode: "MANUAL" | "AUTO" },
+  deps?: PipelineDeps,
+): Promise<{ started: LeadPipeline[] }> {
+  if (input.requestedCount <= 0) return { started: [] };
+
+  const batch = await db.$transaction(async (tx) => {
+    const created = await tx.pitchBatch.create({
+      data: { campaignId: input.campaignId, userId: input.userId, requestedCount: input.requestedCount, reservedCount: 0, mode: input.mode },
+    });
+    try {
+      await reservePitchCredits(tx, input.userId, input.requestedCount, `reserve:${created.id}`);
+    } catch (error) {
+      // Nothing else has committed for this batch yet — remove the empty
+      // shell rather than leaving a PROCESSING row with 0 reservedCount
+      // (and 0 credits ever reserved against it) sitting around forever.
+      await tx.pitchBatch.delete({ where: { id: created.id } });
+      throw error;
+    }
+    return created;
+  });
+
+  const candidates = input.candidateLeadIds.slice(0, input.requestedCount);
+  const started = await startPipelines(db, { campaignId: input.campaignId, leadIds: candidates, batchId: batch.id }, deps);
+  const actualCount = started.length;
+  const shortfall = input.requestedCount - actualCount;
+
+  await db.$transaction(async (tx) => {
+    if (shortfall > 0) await releasePitchCredits(tx, input.userId, shortfall, `release:${batch.id}`);
+    await tx.pitchBatch.update({
+      where: { id: batch.id },
+      data: { reservedCount: actualCount, ...(actualCount === 0 ? { status: "COMPLETED", completedAt: new Date() } : {}) },
+    });
+  });
+
+  return { started };
+}
+
 /** Manual selection from the dashboard. */
 export async function selectLeads(
   db: PrismaClient,
@@ -187,17 +248,23 @@ export async function selectLeads(
     throw new ValidationError(`This campaign can pitch ${campaign.targetCount} leads; ${slots} slot(s) left`);
   }
 
-  const started = await startPipelines(db, { campaignId: campaign.id, leadIds: unique }, deps);
-  emitEvent("selection.completed", { campaignId: campaign.id, mode: "manual", selected: started.length });
-  return { started };
+  // requestedCount === unique.length: every id here was already validated
+  // selectable above, so there is nothing left to "pick" — the candidate
+  // list *is* the request. InsufficientPitchCreditsError from here (wallet
+  // balance below unique.length) propagates as-is to the route.
+  const result = await reservePitchBatch(db, { campaignId: campaign.id, userId, requestedCount: unique.length, candidateLeadIds: unique, mode: "MANUAL" }, deps);
+  emitEvent("selection.completed", { campaignId: campaign.id, mode: "manual", selected: result.started.length });
+  return result;
 }
 
 /**
- * Starts pipelines for the remaining eligible leads, up to targetCount, in
- * the order discovery found them. System-initiated (discovery completion)
- * or user-initiated (the "auto-select" button).
+ * Starts pipelines for up to `options.count` remaining eligible leads (or
+ * every remaining slot, when omitted — the system-triggered
+ * onDiscoveryCompleted path), in the order discovery found them.
+ * System-initiated (discovery completion) or user-initiated (the
+ * "auto-select" button, or the "how many do you want to pitch?" flow).
  */
-export async function autoSelectLeads(db: PrismaClient, campaignId: string, deps?: PipelineDeps): Promise<{ started: LeadPipeline[] }> {
+export async function autoSelectLeads(db: PrismaClient, campaignId: string, options: { count?: number } = {}, deps?: PipelineDeps): Promise<{ started: LeadPipeline[] }> {
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw new NotFoundError("Campaign", campaignId);
 
@@ -205,30 +272,37 @@ export async function autoSelectLeads(db: PrismaClient, campaignId: string, deps
   // order — the order the user saw the leads arrive in.
   const rows = await loadCampaignLeadRows(db, campaign.id);
   const selectedCount = rows.filter((row) => row.pipeline).length;
-  const picks = rows.filter((row) => row.selectable).slice(0, remainingSlots(campaign, selectedCount));
+  const slots = remainingSlots(campaign, selectedCount);
+  const requestedCount = Math.min(options.count ?? slots, slots);
+  const eligible = rows.filter((row) => row.selectable);
+  const candidateLeadIds = eligible.slice(0, requestedCount).map((row) => row.id);
 
-  const started = await startPipelines(db, { campaignId: campaign.id, leadIds: picks.map((row) => row.id) }, deps);
-  emitEvent("selection.completed", { campaignId: campaign.id, mode: "auto", selected: started.length, eligible: rows.filter((r) => r.selectable).length });
-  return { started };
+  const result = await reservePitchBatch(db, { campaignId: campaign.id, userId: campaign.userId, requestedCount, candidateLeadIds, mode: "AUTO" }, deps);
+  emitEvent("selection.completed", { campaignId: campaign.id, mode: "auto", selected: result.started.length, eligible: eligible.length });
+  return result;
 }
 
-export async function autoSelectForUser(db: PrismaClient, userId: string, campaignId: string, deps?: PipelineDeps) {
+export async function autoSelectForUser(db: PrismaClient, userId: string, campaignId: string, options?: { count?: number }, deps?: PipelineDeps) {
   const campaign = await loadOwnedCampaign(db, campaignId, userId);
   if (!["PROCESSING", "COMPLETED"].includes(campaign.status)) {
     throw new ConflictError("Leads can be selected once discovery has started returning results");
   }
-  return autoSelectLeads(db, campaign.id, deps);
+  return autoSelectLeads(db, campaign.id, options, deps);
 }
 
 /**
  * Hook run when a discovery run completes. Never throws: a selection problem
- * must not turn a successful discovery into a failed webhook delivery.
+ * must not turn a successful discovery into a failed webhook delivery. An
+ * InsufficientPitchCreditsError here (the campaign's own owner ran out of
+ * credits mid-run) is exactly the kind of failure this swallows and logs —
+ * the campaign still completed successfully, it just has nothing auto-
+ * selected until the user adds credits and selects manually.
  */
 export async function onDiscoveryCompleted(db: PrismaClient, campaignId: string, deps?: PipelineDeps): Promise<void> {
   try {
     const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true } });
     if (campaign?.selectionMode !== "AUTO") return;
-    await autoSelectLeads(db, campaignId, deps);
+    await autoSelectLeads(db, campaignId, {}, deps);
   } catch (error) {
     console.error(`Auto-selection failed for campaign ${campaignId}:`, error);
     emitEvent("selection.failed", { campaignId, mode: "auto" }, { level: "error", alert: true });

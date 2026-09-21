@@ -14,6 +14,7 @@ type FakeOrder = {
   couponCode: string | null;
   amount: number;
   currency: string;
+  credits: number;
   status: "PENDING" | "PAID" | "FAILED";
   razorpayOrderId: string;
   razorpayPaymentId: string | null;
@@ -23,6 +24,8 @@ type FakeOrder = {
 function createFakeDb() {
   const orders: FakeOrder[] = [];
   const users: Record<string, { planId: string | null }> = {};
+  const wallets: Record<string, { availableCredits: number; reservedCredits: number; usedCredits: number }> = {};
+  const ledger: Array<{ userId: string; type: string; amount: number; orderId?: string; referenceId?: string }> = [];
   let nextId = 1;
 
   const client = {
@@ -67,9 +70,32 @@ function createFakeDb() {
         return { id: where.id, ...users[where.id] };
       },
     },
+    // Just enough of wallet.service.ts's two models for grantCredits (called
+    // from claimOrder/claimPaidOrdersForUser) to run against this fake.
+    pitchCreditLedger: {
+      create: async ({ data }: { data: { userId: string; type: string; amount: number; orderId?: string; referenceId?: string } }) => {
+        if (data.referenceId && ledger.some((row) => row.referenceId === data.referenceId)) {
+          const error = new Error("Unique constraint failed on the fields: (`referenceId`)");
+          (error as unknown as { code: string }).code = "P2002";
+          throw error;
+        }
+        ledger.push(data);
+        return data;
+      },
+    },
+    pitchWallet: {
+      upsert: async ({ where, create, update }: { where: { userId: string }; create: { userId: string; availableCredits?: number }; update: { availableCredits?: { increment: number } } }) => {
+        if (!wallets[where.userId]) {
+          wallets[where.userId] = { availableCredits: create.availableCredits ?? 0, reservedCredits: 0, usedCredits: 0 };
+        } else if (update.availableCredits?.increment) {
+          wallets[where.userId]!.availableCredits += update.availableCredits.increment;
+        }
+        return { userId: where.userId, ...wallets[where.userId]! };
+      },
+    },
   };
 
-  return { db: client as unknown as Prisma.TransactionClient, orders, users };
+  return { db: client as unknown as Prisma.TransactionClient, orders, users, wallets, ledger };
 }
 
 function fakeRazorpay(overrides: Partial<RazorpayClient> = {}): RazorpayClient {
@@ -116,7 +142,7 @@ describe("dummy payment gateway", () => {
   });
 
   it("creates a PAID order that can be claimed in one step", async () => {
-    const { db, orders, users } = createFakeDb();
+    const { db, orders, users, wallets } = createFakeDb();
     const created = await createDummyPaidOrder(db, { planId: "direct", market: "india" });
     expect(created.dummy).toBe(true);
     expect(created.amount).toBe(28900);
@@ -126,6 +152,8 @@ describe("dummy payment gateway", () => {
     await claimOrder(db, created.orderId, "user-1");
     expect(orders[0]?.userId).toBe("user-1");
     expect(users["user-1"]?.planId).toBe("direct");
+    // Claiming grants the order's own credits (plan-pricing.ts's `direct` pack), not unlimited access.
+    expect(wallets["user-1"]?.availableCredits).toBeGreaterThan(0);
   });
 });
 
@@ -177,7 +205,7 @@ describe("verifyPayment", () => {
 
 describe("claimOrder", () => {
   it("attaches a PAID, unclaimed order to the given user", async () => {
-    const { db, orders, users } = createFakeDb();
+    const { db, orders, users, wallets, ledger } = createFakeDb();
     const razorpay = fakeRazorpay();
     const created = await createOrder(db, razorpay, { planId: "auto", market: "india" });
     const signature = computeRazorpaySignature("test_secret", created.razorpayOrderId, "pay_123");
@@ -187,6 +215,8 @@ describe("claimOrder", () => {
 
     expect(orders[0]?.userId).toBe("user-1");
     expect(users["user-1"]?.planId).toBe("auto");
+    expect(wallets["user-1"]?.availableCredits).toBe(orders[0]?.credits);
+    expect(ledger).toContainEqual(expect.objectContaining({ userId: "user-1", type: "PURCHASE", referenceId: `purchase:${created.orderId}` }));
   });
 
   it("is a no-op for an order that is not PAID", async () => {

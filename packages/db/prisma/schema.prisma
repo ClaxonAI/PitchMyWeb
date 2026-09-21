@@ -179,6 +179,22 @@ enum OrderStatus {
   FAILED
 }
 
+// Every credit movement a user's wallet ever makes, in one append-only
+// table — the audit trail behind PitchWallet's three running counters.
+// PURCHASE/FREE_GRANT add credits; RESERVE moves available->reserved at
+// selection time; RELEASE returns an over-reservation (fewer eligible
+// leads than requested) before any pitch is attempted; CONSUME and REFUND
+// are the only two ways a reservation is ever resolved (see
+// LeadPipeline.creditOutcome).
+enum PitchCreditLedgerType {
+  PURCHASE
+  FREE_GRANT
+  RESERVE
+  RELEASE
+  CONSUME
+  REFUND
+}
+
 // Phase 3: platform roles. USER is the customer dashboard; ADMIN and
 // SUPER_ADMIN share the /admin portal. SUPER_ADMIN is the only role that
 // can change another user's role.
@@ -215,13 +231,16 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  campaigns        Campaign[]
-  sessions         Session[]
-  whatsappAccounts WhatsAppAccount[]
-  whatsappMessages WhatsAppMessage[]
-  orders           Order[]
-  auditLogs        AuditLog[]
-  trialDevice      TrialDevice?
+  campaigns         Campaign[]
+  sessions          Session[]
+  whatsappAccounts  WhatsAppAccount[]
+  whatsappMessages  WhatsAppMessage[]
+  orders            Order[]
+  auditLogs         AuditLog[]
+  trialDevice       TrialDevice?
+  pitchWallet       PitchWallet?
+  pitchCreditLedger PitchCreditLedger[]
+  pitchBatches      PitchBatch[]
 
   @@index([role])
   @@map("users")
@@ -313,10 +332,11 @@ model Campaign {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leads      Lead[]
-  executions CampaignExecution[]
-  pipelines  LeadPipeline[]
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads       Lead[]
+  executions  CampaignExecution[]
+  pipelines   LeadPipeline[]
+  pitchBatches PitchBatch[]
 
   @@index([userId])
   @@index([status])
@@ -970,6 +990,16 @@ enum SelectionMode {
   AUTO
 }
 
+enum PitchBatchMode {
+  MANUAL
+  AUTO
+}
+
+enum PitchBatchStatus {
+  PROCESSING
+  COMPLETED
+}
+
 enum DeliveryMode {
   AUTO
   DIRECT
@@ -1002,6 +1032,11 @@ model LeadPipeline {
   id                String         @id @default(cuid())
   campaignId        String
   leadId            String
+  // The PitchBatch this pipeline's credit reservation belongs to. Nullable
+  // only for rows created before this column existed — every pipeline
+  // startPipelines creates from here on is required to carry one (see its
+  // own header comment on why the batchId is what it re-queries by).
+  batchId           String?
   stage             PipelineStage  @default(SELECTED)
   // Where it failed and why (a fixed reason code, never raw error text).
   failureStage      PipelineStage?
@@ -1015,13 +1050,46 @@ model LeadPipeline {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  campaign Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  batch    PitchBatch? @relation(fields: [batchId], references: [id])
 
   @@unique([campaignId, leadId])
   @@index([campaignId, stage])
   @@index([stage, updatedAt])
+  @@index([batchId])
   @@map("lead_pipelines")
+}
+
+// One row per "send N pitches" action (selectLeads/autoSelectLeads) — the
+// reservation and audit record behind that request. requestedCount is what
+// was asked for; reservedCount is what was actually reserved and given
+// LeadPipeline rows for, which can be lower (fewer eligible leads existed
+// than requested — see selection.service.ts::reservePitchBatch).
+// sent/failed/refundedCount are denormalized counters updated as each child
+// LeadPipeline resolves (same pattern CampaignExecution's businessesFound/
+// leadsCreated already use), not purely derived, for fast dashboard reads.
+model PitchBatch {
+  id             String           @id @default(cuid())
+  campaignId     String
+  userId         String
+  requestedCount Int
+  reservedCount  Int
+  sentCount      Int              @default(0)
+  failedCount    Int              @default(0)
+  refundedCount  Int              @default(0)
+  mode           PitchBatchMode
+  status         PitchBatchStatus @default(PROCESSING)
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+
+  campaign  Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pipelines LeadPipeline[]
+
+  @@index([campaignId])
+  @@index([userId, createdAt])
+  @@map("pitch_batches")
 }
 
 // One Playwright recording of a published preview. Written by
@@ -1076,11 +1144,70 @@ model Order {
   razorpayOrderId   String      @unique
   razorpayPaymentId String?
   razorpaySignature String?
+  // Pitch credits this purchase grants once claimed onto a user (see
+  // wallet.service.ts::grantCredits). Frozen at order-creation time from
+  // plan-pricing.ts, same as `amount` — a later change to a plan's pack
+  // size must never retroactively change what an already-placed order
+  // pays out. Defaults to 0 so historical orders (predating the credit
+  // system) do not grant anything on backfill.
+  credits           Int         @default(0)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  // Declared here so `prisma migrate dev`'s diff stops proposing to drop
+  // this index as drift: it was added by a real migration
+  // (20260919140000_add_order_payer_email) but the corresponding
+  // `@@index` was never added to this model at the time.
+  @@index([payerEmail])
   @@map("orders")
+}
+
+// One row per user, created lazily on first touch (wallet.service.ts::
+// getOrCreateWallet) rather than at registration — most visitors never
+// need one. The three counters are the load-bearing state; PitchCreditLedger
+// below is the audit trail behind them, never the other way around. Every
+// mutation is a single conditional UPDATE guarded by the current balance
+// (e.g. `WHERE availableCredits >= amount`), which is Postgres's own
+// compare-and-swap under the transaction's row lock — no separate version
+// column or SELECT..FOR UPDATE needed.
+model PitchWallet {
+  userId           String   @id
+  availableCredits Int      @default(0)
+  reservedCredits  Int      @default(0)
+  usedCredits      Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("pitch_wallets")
+}
+
+// Append-only. `referenceId` is the idempotency key for every credit
+// movement that must never double-apply — a purchase claimed twice, a
+// refund webhook delivered twice, a free grant issued twice — each gets a
+// fixed, deterministic referenceId (e.g. `refund:<pipelineId>`), and the
+// unique constraint below turns a repeat into a caught, no-op insert
+// rather than a second credit movement. Nullable so ledger rows that don't
+// need this protection (nothing else writes with the same key) don't need
+// one; Postgres does not unique-constrain multiple NULLs against each
+// other, so those rows never collide.
+model PitchCreditLedger {
+  id          String                @id @default(cuid())
+  userId      String
+  batchId     String?
+  pipelineId  String?
+  orderId     String?
+  type        PitchCreditLedgerType
+  amount      Int
+  referenceId String?               @unique
+  createdAt   DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("pitch_credit_ledger")
 }

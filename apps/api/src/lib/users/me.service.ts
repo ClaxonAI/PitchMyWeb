@@ -10,18 +10,25 @@ export type MeProfile = {
   name: string | null;
   role: User["role"];
   planId: string | null;
+  /** @deprecated a paid purchase now grants a credit quantity, not unlimited access — kept for apps/web until it reads the wallet fields instead (Phase 7). */
   hasPaidAccess: boolean;
   allowedMarkets: Array<"india" | "foreign">;
-  /** True when paid, ungated, or free pitches remain. */
+  /** True when the wallet can cover at least one pitch (or discovery is ungated). */
   canDiscover: boolean;
-  /** Remaining free pitches for unpaid users; null when free budget does not apply. */
+  /** @deprecated use `availableCredits` — kept for apps/web until it reads the wallet fields instead (Phase 7). */
   freePitchesRemaining: number | null;
-  /** Total free pitches granted to unpaid accounts. */
+  /** @deprecated see `availableCredits` — kept for apps/web until it reads the wallet fields instead (Phase 7). */
   freePitchesAllowance: number;
+  /** Pitch credits not yet reserved by any batch — what a new "how many to pitch" request can draw from. */
+  availableCredits: number;
+  /** Credits reserved by in-flight batches, not yet consumed or refunded. */
+  reservedCredits: number;
+  /** Credits consumed by pitches that actually sent. */
+  usedCredits: number;
 };
 
 async function toProfile(db: PrismaClient, user: Pick<User, "id" | "email" | "name" | "role" | "planId">): Promise<MeProfile> {
-  const { hasPaidAccess, freePitchesRemaining, canDiscover, allowedMarkets } = await getAccessSnapshot(db, user.id);
+  const { hasPaidAccess, freePitchesRemaining, canDiscover, allowedMarkets, wallet } = await getAccessSnapshot(db, user.id);
   return {
     id: user.id,
     email: user.email,
@@ -33,6 +40,9 @@ async function toProfile(db: PrismaClient, user: Pick<User, "id" | "email" | "na
     canDiscover,
     freePitchesRemaining,
     freePitchesAllowance: FREE_PITCH_ALLOWANCE,
+    availableCredits: wallet.availableCredits,
+    reservedCredits: wallet.reservedCredits,
+    usedCredits: wallet.usedCredits,
   };
 }
 

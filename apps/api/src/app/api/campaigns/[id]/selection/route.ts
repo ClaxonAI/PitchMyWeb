@@ -14,8 +14,11 @@ import { campaignSelectionSchema } from "../../../../../lib/validation/pipeline"
 type RouteParams = { params: Promise<{ id: string }> };
 
 // POST /api/campaigns/:id/selection
-//   { leadIds: [...] }  pitch these leads
-//   { auto: true }      pitch the top-N remaining leads by score
+//   { leadIds: [...] }        pitch these specific leads
+//   { auto: true }            pitch every remaining eligible lead
+//   { auto: true, count: N }  pitch up to N remaining eligible leads (the
+//                             "how many do you want to pitch?" flow) —
+//                             reserves at most N credits; never more.
 // Starts the delivery pipeline (build site -> record -> send) for each.
 export async function handleSelectLeads(
   db: PrismaClient,
@@ -28,7 +31,8 @@ export async function handleSelectLeads(
   const body = await parseJsonBody(request, campaignSelectionSchema);
   await rateLimit(`selection:user:${user.id}`, 30, 10 * 60 * 1000);
 
-  const result = "auto" in body ? await autoSelectForUser(db, user.id, id, deps) : await selectLeads(db, user.id, id, body.leadIds, deps);
+  const result =
+    "auto" in body ? await autoSelectForUser(db, user.id, id, { count: body.count }, deps) : await selectLeads(db, user.id, id, body.leadIds, deps);
   return jsonOk({ started: result.started.length, pipelines: result.started }, 202);
 }
 

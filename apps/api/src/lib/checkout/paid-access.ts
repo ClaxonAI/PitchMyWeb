@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@pitchmyweb/db";
 import { PaymentRequiredError, ValidationError } from "../errors";
+import { ensureFreeGrant } from "./wallet.service";
 
 // Discovery (Maps scrape via apps/python-discovery) is a paid action.
 // Tests skip the gate (NODE_ENV=test) unless REQUIRE_PAID_FOR_DISCOVERY is
@@ -7,17 +8,28 @@ import { PaymentRequiredError, ValidationError } from "../errors";
 // a Razorpay order.
 //
 // Newly registered users still get a small free pitch allowance so they can
-// try the product before paying. Usage is reserved by campaign.targetCount
-// once a campaign has started (left DRAFT/READY).
+// try the product before paying — granted once, lazily, as real pitch
+// credits in PitchWallet (see wallet.service.ts). Usage was previously
+// derived on every read from Campaign.targetCount and LeadPipeline stages;
+// it is now a real, stored balance, reserved/consumed/refunded by the
+// pitch-selection flow (selection.service.ts, pipeline.service.ts) rather
+// than recomputed here.
+//
+// `userHasPaidAccess`'s "paid = unlimited, skip the budget check entirely"
+// bypass below is transitional: a paid purchase is now a *quantity* of
+// credits (Order.credits), not unlimited access, so a paid user's own
+// wallet balance is what should gate them too. This file still treats a
+// paid user as ungated for one more phase — the real, uniform,
+// reservation-based enforcement (every user checked against their actual
+// balance, no bypass) lands in selection.service.ts alongside the atomic
+// reservation primitive it depends on.
 
 type Env = Record<string, string | undefined>;
 export type DiscoveryMarket = "india" | "foreign";
 
-/** Free pitches granted to every unpaid account on first login / signup. */
+/** Free pitch credits granted once, lazily, to every account (paid or not) — see ensureFreeGrant. */
 export const FREE_PITCH_ALLOWANCE = 10;
 const ALL_MARKETS: DiscoveryMarket[] = ["india", "foreign"];
-
-const STARTED_CAMPAIGN_STATUSES = ["RUNNING", "PROCESSING", "COMPLETED", "FAILED"] as const;
 
 export function isPaidDiscoveryRequired(env: Env = process.env): boolean {
   const raw = (env.REQUIRE_PAID_FOR_DISCOVERY ?? "").trim().toLowerCase();
@@ -55,8 +67,11 @@ export async function getAllowedMarkets(db: PrismaClient, userId: string, env: E
 export type AccessSnapshot = {
   hasPaidAccess: boolean;
   allowedMarkets: DiscoveryMarket[];
+  /** @deprecated derived from `wallet.availableCredits` for unpaid users; use `wallet` directly. Removed once apps/web reads `wallet` instead (Phase 7). */
   freePitchesRemaining: number | null;
   canDiscover: boolean;
+  /** The real, stored pitch-credit balance (see wallet.service.ts) — the source of truth going forward. */
+  wallet: { availableCredits: number; reservedCredits: number; usedCredits: number };
 };
 
 /**
@@ -66,8 +81,13 @@ export type AccessSnapshot = {
  * queries several times in sequence.
  */
 export async function getAccessSnapshot(db: PrismaClient, userId: string, env: Env = process.env): Promise<AccessSnapshot> {
+  // Every account gets its wallet ensured (and the one-time free grant
+  // applied if it hasn't been yet) on the very first read, paid or not —
+  // credits from a purchase and from the free grant sit in the same pool.
+  const wallet = await ensureFreeGrant(db, userId);
+
   if (!isPaidDiscoveryRequired(env)) {
-    return { hasPaidAccess: true, allowedMarkets: ALL_MARKETS, freePitchesRemaining: null, canDiscover: true };
+    return { hasPaidAccess: true, allowedMarkets: ALL_MARKETS, freePitchesRemaining: null, canDiscover: true, wallet };
   }
   const [user, paidOrders] = await Promise.all([
     db.user.findUnique({ where: { id: userId }, select: { planId: true } }),
@@ -76,10 +96,13 @@ export async function getAccessSnapshot(db: PrismaClient, userId: string, env: E
   const paid = Boolean(user?.planId) || paidOrders.length > 0;
   const markets = paidOrders.map((order) => order.market).filter((market): market is DiscoveryMarket => ALL_MARKETS.includes(market as DiscoveryMarket));
   const allowedMarkets: DiscoveryMarket[] = markets.length > 0 ? [...new Set(markets)] : user?.planId ? ALL_MARKETS : ["india"];
-  if (paid) return { hasPaidAccess: true, allowedMarkets, freePitchesRemaining: null, canDiscover: true };
+  // Transitional (see header comment): a paid user still bypasses the
+  // budget check entirely for one more phase, so freePitchesRemaining stays
+  // the old "no cap" sentinel for them even though their wallet now holds a
+  // real, finite number.
+  if (paid) return { hasPaidAccess: true, allowedMarkets, freePitchesRemaining: null, canDiscover: true, wallet };
 
-  const freePitchesRemaining = Math.max(0, FREE_PITCH_ALLOWANCE - (await countUsedFreePitches(db, userId)));
-  return { hasPaidAccess: false, allowedMarkets, freePitchesRemaining, canDiscover: freePitchesRemaining > 0 };
+  return { hasPaidAccess: false, allowedMarkets, freePitchesRemaining: wallet.availableCredits, canDiscover: wallet.availableCredits > 0, wallet };
 }
 
 export async function assertMarketAllowed(db: PrismaClient, userId: string, market: string, env: Env = process.env): Promise<void> {
@@ -90,62 +113,18 @@ export async function assertMarketAllowed(db: PrismaClient, userId: string, mark
 }
 
 /**
- * Free pitches consumed by started campaigns. Pitches that failed are
- * refunded automatically because usage is derived, never stored:
- *  - RUNNING / PROCESSING: the campaign reserves targetCount, minus every
- *    lead pipeline that has already failed.
- *  - COMPLETED with pitches: only pitches actually taken on (pipelines that
- *    did not fail) count, so a shortfall is refunded. Older completed
- *    campaigns with no pipeline rows keep charging their full targetCount.
- *  - FAILED: only pitches that actually went through count, so a campaign
- *    that failed outright costs nothing.
- * Failed pitches are re-queued by the maintenance job (see
- * pipeline-maintenance.job.ts); when one is delivered later it counts again.
- */
-export async function countUsedFreePitches(db: PrismaClient, userId: string): Promise<number> {
-  const campaigns = await db.campaign.findMany({
-    where: { userId, status: { in: [...STARTED_CAMPAIGN_STATUSES] } },
-    select: { id: true, status: true, targetCount: true },
-  });
-  if (campaigns.length === 0) return 0;
-
-  const grouped = await db.leadPipeline.groupBy({
-    by: ["campaignId", "stage"],
-    where: { campaignId: { in: campaigns.map((campaign) => campaign.id) } },
-    _count: { _all: true },
-  });
-  const failed = new Map<string, number>();
-  const delivered = new Map<string, number>();
-  for (const row of grouped) {
-    const target = row.stage === "FAILED" ? failed : delivered;
-    target.set(row.campaignId, (target.get(row.campaignId) ?? 0) + row._count._all);
-  }
-
-  let used = 0;
-  for (const campaign of campaigns) {
-    const notFailed = delivered.get(campaign.id) ?? 0;
-    const failedCount = failed.get(campaign.id) ?? 0;
-    const finished = campaign.status === "COMPLETED" || campaign.status === "FAILED";
-    // A finished campaign only costs what it actually took on: a search that
-    // found fewer businesses than the target must not keep the difference
-    // reserved. Campaigns with no pipeline rows at all predate per-pitch
-    // tracking (or never selected anything) and keep the old flat charge, so
-    // they are not silently re-credited.
-    const settled = finished && (notFailed + failedCount > 0 || campaign.status === "FAILED");
-    used += settled ? Math.min(campaign.targetCount, notFailed) : Math.max(notFailed, campaign.targetCount - failedCount);
-  }
-  return used;
-}
-
-/**
- * Free pitches still available for an unpaid user. Paid users (and
- * environments where paid discovery is not required) return null — the free
- * budget does not apply.
+ * Free pitches still available for an unpaid user, read directly from
+ * PitchWallet rather than recomputed from campaign/pipeline state (the old
+ * `countUsedFreePitches` approach — every reservation/consume/refund is now
+ * a real, stored credit movement, so there is nothing left to derive).
+ * Paid users (and environments where paid discovery is not required) return
+ * null — the free budget does not apply.
  */
 export async function getFreePitchesRemaining(db: PrismaClient, userId: string, env: Env = process.env): Promise<number | null> {
   if (!isPaidDiscoveryRequired(env)) return null;
   if (await userHasPaidAccess(db, userId)) return null;
-  return Math.max(0, FREE_PITCH_ALLOWANCE - (await countUsedFreePitches(db, userId)));
+  const wallet = await ensureFreeGrant(db, userId);
+  return wallet.availableCredits;
 }
 
 export async function userCanDiscover(db: PrismaClient, userId: string, env: Env = process.env): Promise<boolean> {
