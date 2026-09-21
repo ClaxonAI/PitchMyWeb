@@ -204,6 +204,12 @@ export class SessionManager {
         // only display, and no Baileys concept ever reaches the client.
         const qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320, errorCorrectionLevel: "M" });
         await this.publisher.publish({ type: "QR_READY", accountId, qrDataUrl, at: nowIso() });
+        // Marks the boundary between "generated" and "delivered". A QR that
+        // never appears on screen is otherwise indistinguishable from one
+        // that was never produced, and the two have entirely different
+        // causes — the length is here because it confirms a real image was
+        // rendered rather than an empty string.
+        logger.info({ accountId, qrDataUrlLength: qrDataUrl.length }, "QR published to subscribers");
       },
 
       onPairingCode: async (code) => {
