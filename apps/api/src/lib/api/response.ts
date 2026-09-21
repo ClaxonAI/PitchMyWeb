@@ -7,10 +7,10 @@ import { DomainError } from "../errors";
 // the single place that maps a thrown error to that shape, so route
 // handlers never build an error response by hand.
 
-export type ApiErrorBody = { error: { code: string; message: string } };
+export type ApiErrorBody = { error: { code: string; message: string } & Record<string, unknown> };
 
-export function jsonError(status: number, code: string, message: string): NextResponse<ApiErrorBody> {
-  return NextResponse.json({ error: { code, message } }, { status });
+export function jsonError(status: number, code: string, message: string, details?: Record<string, unknown>): NextResponse<ApiErrorBody> {
+  return NextResponse.json({ error: { code, message, ...details } }, { status });
 }
 
 /**
@@ -41,7 +41,7 @@ export function errorResponse(error: unknown): NextResponse<ApiErrorBody> {
   }
 
   if (error instanceof DomainError) {
-    return jsonError(error.httpStatus, error.code, error.message);
+    return jsonError(error.httpStatus, error.code, error.message, error.details);
   }
 
   console.error("Unhandled API error:", error);

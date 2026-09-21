@@ -7,6 +7,12 @@ export class DomainError extends Error {
     message: string,
     public readonly code: string,
     public readonly httpStatus: number,
+    // Extra machine-readable fields merged into the {error:{...}} envelope
+    // alongside code/message — e.g. InsufficientPitchCreditsError's
+    // {available, requested}, so the client can render "only 12 left" without
+    // parsing it back out of the message string. Optional: most errors carry
+    // none, and this is never a substitute for a readable `message`.
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = new.target.name;
@@ -194,5 +200,24 @@ export class PaymentVerificationError extends DomainError {
 export class PaymentRequiredError extends DomainError {
   constructor(message = "Pay for a plan before searching for leads.") {
     super(message, "PAYMENT_REQUIRED", 402);
+  }
+}
+
+/**
+ * A pitch request named a count greater than the wallet's `availableCredits`
+ * at reservation time. 400, not 402 — the account is not unpaid (that's
+ * PaymentRequiredError, zero capacity at all), it just asked for more than
+ * its current balance covers.
+ */
+export class InsufficientPitchCreditsError extends DomainError {
+  constructor(available: number, requested: number) {
+    super(
+      available === 0
+        ? "You have no pitch credits available."
+        : `Only ${available} pitch credit${available === 1 ? "" : "s"} available; you asked for ${requested}.`,
+      "INSUFFICIENT_PITCH_CREDITS",
+      400,
+      { available, requested },
+    );
   }
 }

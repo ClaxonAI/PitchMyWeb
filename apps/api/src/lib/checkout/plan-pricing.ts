@@ -15,9 +15,17 @@ export type Market = "india" | "foreign";
 export type Currency = "USD" | "INR";
 
 // Both markets are priced in INR; the market still controls which plan access is unlocked.
-const PLAN_PRICES: Record<PlanId, Record<Market, { amount: number; currency: Currency }>> = {
-  auto: { india: { amount: 149, currency: "INR" }, foreign: { amount: 329, currency: "INR" } },
-  direct: { india: { amount: 289, currency: "INR" }, foreign: { amount: 489, currency: "INR" } },
+//
+// TODO(product): `credits` below are placeholders, not a confirmed pack
+// size — a purchase now grants a fixed quantity of pitch credits instead
+// of unlimited access (see wallet.service.ts), and the real number per
+// plan/market is a pricing decision this file cannot make on its own.
+// Confirm before relying on these in production; nothing else in the
+// credit system depends on the specific values, only on `credits` being
+// present and correct.
+const PLAN_PRICES: Record<PlanId, Record<Market, { amount: number; currency: Currency; credits: number }>> = {
+  auto: { india: { amount: 149, currency: "INR", credits: 20 }, foreign: { amount: 329, currency: "INR", credits: 20 } },
+  direct: { india: { amount: 289, currency: "INR", credits: 50 }, foreign: { amount: 489, currency: "INR", credits: 50 } },
 };
 
 // Demo coupons for the checkout preview (matches apps/web's demoCoupons).
@@ -56,4 +64,17 @@ export function computeOrderAmountWithDiscount(planId: PlanId, market: Market, d
 export function computeOrderAmount(planId: PlanId, market: Market, couponCode?: string | null): OrderAmount {
   const discountRate = couponCode ? (COUPONS[couponCode.toUpperCase()] ?? 0) : 0;
   return computeOrderAmountWithDiscount(planId, market, discountRate);
+}
+
+/**
+ * How many pitch credits a plan/market purchase grants. A coupon discounts
+ * the price, never the credit count — a 50%-off coupon still buys the full
+ * pack, it just costs less.
+ */
+export function creditsForPlan(planId: PlanId, market: Market): number {
+  const prices = PLAN_PRICES[planId];
+  if (!prices) throw new ValidationError(`Unknown plan: ${planId}`);
+  const price = prices[market];
+  if (price === undefined) throw new ValidationError(`Unknown market: ${market}`);
+  return price.credits;
 }

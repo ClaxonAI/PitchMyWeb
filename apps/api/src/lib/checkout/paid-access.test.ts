@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "../db/client";
-import { createCampaign } from "../campaigns/campaign.service";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { PaymentRequiredError, ValidationError } from "../errors";
 import {
@@ -15,10 +14,8 @@ import {
 } from "./paid-access";
 
 const createdUserIds: string[] = [];
-const createdBusinessIds: string[] = [];
 afterAll(async () => {
   await deleteTestUsers(createdUserIds);
-  await prisma.business.deleteMany({ where: { id: { in: createdBusinessIds } } });
   await prisma.$disconnect();
 });
 
@@ -37,13 +34,30 @@ describe("isPaidDiscoveryRequired", () => {
 describe("free pitch allowance", () => {
   const gated = { NODE_ENV: "development", REQUIRE_PAID_FOR_DISCOVERY: "true", VITEST: "false" };
 
-  it("gives unpaid users the full free allowance before any campaign runs", async () => {
+  it("gives every fresh account the full free allowance, granted lazily as real wallet credits", async () => {
     const user = await createTestUser("free-pitch-fresh");
     createdUserIds.push(user.id);
     expect(await getFreePitchesRemaining(prisma, user.id, gated)).toBe(FREE_PITCH_ALLOWANCE);
     expect(await userCanDiscover(prisma, user.id, gated)).toBe(true);
     await expect(assertPaidDiscoveryAllowed(prisma, user.id, gated)).resolves.toBeUndefined();
     await expect(assertFreePitchBudget(prisma, user.id, FREE_PITCH_ALLOWANCE, gated)).resolves.toBeUndefined();
+
+    // The grant is a real, stored PitchWallet row now, not a recomputed number.
+    const wallet = await prisma.pitchWallet.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(wallet.availableCredits).toBe(FREE_PITCH_ALLOWANCE);
+  });
+
+  it("grants the free allowance exactly once, however many times it is touched", async () => {
+    const user = await createTestUser("free-pitch-idempotent");
+    createdUserIds.push(user.id);
+    await getFreePitchesRemaining(prisma, user.id, gated);
+    await getFreePitchesRemaining(prisma, user.id, gated);
+    await getFreePitchesRemaining(prisma, user.id, gated);
+
+    const wallet = await prisma.pitchWallet.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(wallet.availableCredits).toBe(FREE_PITCH_ALLOWANCE);
+    const grants = await prisma.pitchCreditLedger.count({ where: { userId: user.id, type: "FREE_GRANT" } });
+    expect(grants).toBe(1);
   });
 
   it("rejects requests larger than remaining free pitches", async () => {
@@ -52,61 +66,21 @@ describe("free pitch allowance", () => {
     await expect(assertFreePitchBudget(prisma, user.id, FREE_PITCH_ALLOWANCE + 1, gated)).rejects.toThrow(ValidationError);
   });
 
-  it("blocks discovery after free pitches are consumed", async () => {
+  it("blocks discovery once the wallet is empty", async () => {
     const user = await createTestUser("free-pitch-spent");
     createdUserIds.push(user.id);
-    const campaign = await createCampaign(prisma, user.id, {
-      name: "Free Spent",
-      location: "Chennai",
-      category: "Dental Clinic",
-      websiteRequirement: "ANY",
-      leadLimit: 20,
-      targetCount: FREE_PITCH_ALLOWANCE,
-    });
-    await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "COMPLETED" } });
+    // Selection-time reservation (Phase 2) is what actually spends credits in
+    // production; this test only needs an empty wallet, so it sets one up
+    // directly rather than driving a full campaign through discovery+selection.
+    await prisma.pitchWallet.upsert({ where: { userId: user.id }, create: { userId: user.id, availableCredits: 0 }, update: { availableCredits: 0 } });
+    await prisma.pitchCreditLedger.create({ data: { userId: user.id, type: "FREE_GRANT", amount: FREE_PITCH_ALLOWANCE, referenceId: `free-grant:${user.id}` } });
 
     expect(await getFreePitchesRemaining(prisma, user.id, gated)).toBe(0);
     expect(await userCanDiscover(prisma, user.id, gated)).toBe(false);
     await expect(assertPaidDiscoveryAllowed(prisma, user.id, gated)).rejects.toThrow(PaymentRequiredError);
   });
 
-  async function spentCampaign(label: string, status: "RUNNING" | "COMPLETED" | "FAILED", stages: Array<"FAILED" | "SENT">) {
-    const user = await createTestUser(label);
-    createdUserIds.push(user.id);
-    const campaign = await createCampaign(prisma, user.id, {
-      name: label,
-      location: "Chennai",
-      category: "Dental Clinic",
-      websiteRequirement: "ANY",
-      leadLimit: 20,
-      targetCount: 4,
-    });
-    await prisma.campaign.update({ where: { id: campaign.id }, data: { status } });
-    for (const [index, stage] of stages.entries()) {
-      const business = await prisma.business.create({ data: { name: `${label}-${index}`, category: "Dental Clinic", source: "test", externalId: `${label}-${index}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` } as never });
-      createdBusinessIds.push(business.id);
-      const lead = await prisma.lead.create({ data: { campaignId: campaign.id, businessId: business.id } as never });
-      await prisma.leadPipeline.create({ data: { campaignId: campaign.id, leadId: lead.id, stage } });
-    }
-    return user;
-  }
-
-  it("refunds failed pitches while a campaign is still running", async () => {
-    const user = await spentCampaign("refund-running", "RUNNING", ["FAILED", "FAILED", "SENT"]);
-    expect(await getFreePitchesRemaining(prisma, user.id, gated)).toBe(FREE_PITCH_ALLOWANCE - 2);
-  });
-
-  it("refunds failed pitches after a campaign completes", async () => {
-    const user = await spentCampaign("refund-completed", "COMPLETED", ["FAILED", "SENT", "SENT", "SENT"]);
-    expect(await getFreePitchesRemaining(prisma, user.id, gated)).toBe(FREE_PITCH_ALLOWANCE - 3);
-  });
-
-  it("refunds everything that did not go through when the campaign fails", async () => {
-    const user = await spentCampaign("refund-failed", "FAILED", ["SENT", "FAILED"]);
-    expect(await getFreePitchesRemaining(prisma, user.id, gated)).toBe(FREE_PITCH_ALLOWANCE - 1);
-  });
-
-  it("treats planId as paid access with no free-budget cap", async () => {
+  it("treats planId as paid access with no free-budget cap (transitional — see paid-access.ts header comment)", async () => {
     const user = await createTestUser("free-pitch-paid");
     createdUserIds.push(user.id);
     await prisma.user.update({ where: { id: user.id }, data: { planId: "auto" } });

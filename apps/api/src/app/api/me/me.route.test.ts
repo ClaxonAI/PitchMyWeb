@@ -40,7 +40,24 @@ describe("GET /api/me", () => {
     const { user, cookieHeader } = await authedUser("get-me");
     const response = await handleGetMe(prisma, req("http://localhost/api/me", { cookieHeader }));
     const body = await response.json();
-    expect(body).toEqual({ allowedMarkets: ["india", "foreign"], id: user.id, email: user.email, name: null, role: "USER", planId: null, hasPaidAccess: true, canDiscover: true, freePitchesRemaining: null, freePitchesAllowance: 10 });
+    expect(body).toEqual({
+      allowedMarkets: ["india", "foreign"],
+      id: user.id,
+      email: user.email,
+      name: null,
+      role: "USER",
+      planId: null,
+      hasPaidAccess: true,
+      canDiscover: true,
+      freePitchesRemaining: null,
+      freePitchesAllowance: 10,
+      // The wallet is ensured (and the one-time free grant applied) on
+      // every /api/me read, gated or not — these are the real, stored
+      // numbers behind the deprecated freePitches* fields above.
+      availableCredits: 10,
+      reservedCredits: 0,
+      usedCredits: 0,
+    });
   });
 });
 

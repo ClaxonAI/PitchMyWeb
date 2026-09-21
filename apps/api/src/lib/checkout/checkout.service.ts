@@ -1,8 +1,9 @@
 import type { Order, Prisma, PrismaClient } from "@pitchmyweb/db";
 import type { CreateOrderInput, VerifyPaymentInput } from "../validation/checkout";
 import type { RazorpayClient } from "./razorpay-client";
-import { computeOrderAmount, computeOrderAmountWithDiscount } from "./plan-pricing";
+import { computeOrderAmount, computeOrderAmountWithDiscount, creditsForPlan } from "./plan-pricing";
 import { verifyRazorpaySignature } from "./razorpay-signature";
+import { grantCredits } from "./wallet.service";
 import { NotFoundError, ValidationError, PaymentVerificationError } from "../errors";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -70,6 +71,10 @@ export async function createOrder(db: Db, razorpay: RazorpayClient, input: Creat
       couponCode: input.couponCode ?? null,
       amount: totalCents,
       currency,
+      // Frozen at creation from plan-pricing.ts, same as amount — a later
+      // change to a plan's pack size must never retroactively change what
+      // an already-placed order pays out once claimed.
+      credits: creditsForPlan(input.planId, input.market),
       status: "PENDING",
       // Placeholder until the Razorpay call below returns; @unique on this
       // column means two concurrent creates can never collide on it.
@@ -103,6 +108,7 @@ export async function createDummyPaidOrder(db: Db, input: CreateOrderInput): Pro
       couponCode: input.couponCode ?? null,
       amount: totalCents,
       currency,
+      credits: creditsForPlan(input.planId, input.market),
       status: "PAID",
       razorpayOrderId: `dummy_${suffix}`,
       razorpayPaymentId: `dummy_pay_${suffix}`,
@@ -166,7 +172,13 @@ export async function claimOrder(db: Db, orderId: string, userId: string): Promi
   if (result.count !== 1) return;
   const order = await db.order.findUnique({ where: { id: orderId } });
   if (!order) return;
+  // planId is kept on the user record for display/admin purposes only — it
+  // no longer grants unlimited access on its own (see paid-access.ts). The
+  // credits this specific order paid for are what actually unlocks pitching,
+  // granted idempotently keyed on the order id: a retried/duplicated claim
+  // (e.g. this route called twice with the same orderId) grants once.
   await db.user.update({ where: { id: userId }, data: { planId: order.planId } });
+  await grantCredits(db, { userId, amount: order.credits, type: "PURCHASE", orderId: order.id, referenceId: `purchase:${order.id}` });
 }
 
 export async function claimPaidOrdersForUser(db: Db, userId: string, email: string): Promise<void> {
@@ -174,6 +186,16 @@ export async function claimPaidOrdersForUser(db: Db, userId: string, email: stri
     where: { userId: null, payerEmail: email.trim().toLowerCase(), status: "PAID" },
     data: { userId },
   });
-  const order = await db.order.findFirst({ where: { userId, status: "PAID" }, orderBy: { createdAt: "desc" } });
-  if (order) await db.user.update({ where: { id: userId }, data: { planId: order.planId } });
+  // Every PAID order this user now owns — both orders claimed just above and
+  // any claimed by an earlier call — not only the newest. grantCredits is
+  // idempotent per order id, so re-granting an already-credited order here
+  // is always a safe no-op; this is what makes it safe to call this sweep
+  // more than once for the same user (login, then a later login) without a
+  // second credit grant for the same purchase.
+  const orders = await db.order.findMany({ where: { userId, status: "PAID" }, orderBy: { createdAt: "desc" } });
+  if (orders.length === 0) return;
+  await db.user.update({ where: { id: userId }, data: { planId: orders[0]!.planId } });
+  for (const order of orders) {
+    await grantCredits(db, { userId, amount: order.credits, type: "PURCHASE", orderId: order.id, referenceId: `purchase:${order.id}` });
+  }
 }
