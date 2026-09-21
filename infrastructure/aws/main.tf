@@ -215,13 +215,33 @@ resource "aws_elasticache_subnet_group" "main" {
 }
 
 # ElastiCache Redis
+# BullMQ requires noeviction. ElastiCache defaults to volatile-lru, under
+# which Redis discards keys once memory fills — and those keys are the job
+# queues, so campaigns, sends and recordings would disappear with nothing
+# logged. BullMQ warns about it on every connection:
+#   IMPORTANT! Eviction policy is volatile-lru. It should be "noeviction"
+# The default parameter group cannot be edited, hence a custom one.
+resource "aws_elasticache_parameter_group" "redis" {
+  name   = "pitchmyweb-redis7"
+  family = "redis7"
+
+  parameter {
+    name  = "maxmemory-policy"
+    value = "noeviction"
+  }
+
+  tags = {
+    Name = "pitchmyweb-redis-params"
+  }
+}
+
 resource "aws_elasticache_cluster" "redis" {
   cluster_id           = "pitchmyweb-redis"
   engine               = "redis"
   engine_version       = "7.0"
   node_type            = "cache.t3.micro"
   num_cache_nodes      = 1
-  parameter_group_name = "default.redis7"
+  parameter_group_name = aws_elasticache_parameter_group.redis.name
   port                 = 6379
   subnet_group_name    = aws_elasticache_subnet_group.main.name
   security_group_ids   = [aws_security_group.redis.id]
