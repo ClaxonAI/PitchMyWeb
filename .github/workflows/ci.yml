@@ -101,6 +101,16 @@ jobs:
       - name: Apply migrations
         run: npm run db:deploy
 
+      # The suite is not self-contained: it asserts against rows this script
+      # creates. business-validation.test.ts says so outright — "WEBSITE is a
+      # stable, always-seeded, always-active Service (15000-25000) — see
+      # prisma/seed.ts" — and every AI test validates its scripted response
+      # against that configured pricing, so without a seeded database they
+      # fail as AI_ANALYSIS_FAILED rather than as anything resembling the
+      # real cause.
+      - name: Seed reference data
+        run: npm run db:seed
+
       - name: Typecheck
         run: npm run typecheck
 
