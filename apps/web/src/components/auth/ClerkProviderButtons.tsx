@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
 import { exchangeClerkSession } from "@/lib/clerk-session";
@@ -21,10 +21,40 @@ function GoogleIcon() {
 export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
-  const { isSignedIn, getToken, signOut } = useAuth();
+  const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
   const sessionFailed = useSearchParams().get("error") === "session";
   const [pending, setPending] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(sessionFailed ? "We couldn't start your session. Please try again." : null);
+
+  // An SSO round trip can land the visitor back here already signed in with
+  // Clerk but without this app's session cookie — Clerk returns them to
+  // /dashboard, which has no way to mint that cookie and sends them here.
+  // Without this they are stuck being shown a sign-in form they have already
+  // completed, and clicking a provider is the only way out. Running the
+  // exchange on arrival turns that dead end into a redirect they never see.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || pending) return;
+    let active = true;
+    void exchangeClerkSession(getToken).then(async (ok) => {
+      if (!active) return;
+      if (ok) {
+        window.location.assign("/dashboard");
+        return;
+      }
+      // Not exchangeable — most often a Clerk session signed by a rotated
+      // key. Left in place it would retry on every visit and fail the same
+      // way, so drop it and let them sign in cleanly.
+      try {
+        await signOut();
+      } catch {
+        // Nothing useful to do; the form below still works.
+      }
+      if (active) setError("Your previous session has expired. Please sign in again.");
+    });
+    return () => {
+      active = false;
+    };
+  }, [isLoaded, isSignedIn, pending, getToken, signOut]);
 
   async function continueWith(provider: Provider): Promise<void> {
     setPending(provider);
@@ -48,26 +78,23 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
         throw new Error("Your previous session has expired. Please sign in again.");
       }
       const strategy = `oauth_${provider}` as const;
-      // redirectUrl must be a *relative* path — the SDK prefixes it with the
-      // current origin, and an absolute URL stops the flow starting at all
-      // (the button sits on "Connecting…" and no request to Clerk is made).
+      // Left pointing at /dashboard deliberately. Clerk only routes through
+      // redirectCallbackUrl when it needs more input, so landing on
+      // /dashboard without the app's cookie is the ordinary case, not a
+      // failure — the dashboard sends those visitors to /login, and the
+      // effect above completes the exchange there and returns them.
       //
-      // It points at /sso-callback rather than /dashboard because that page
-      // is the only place the Clerk session is traded for this app's own
-      // cookie, and it forwards to the dashboard once that succeeds. Sent
-      // straight to /dashboard, Clerk signs the user in and skips the
-      // exchange: they arrive holding Clerk's cookies but no pmw_session, and
-      // the dashboard turns them away with nothing logged, because
-      // verification was never reached.
-      const callbackPath = "/sso-callback";
-      const redirectCallbackUrl = `${window.location.origin}${callbackPath}`;
+      // Do not "fix" this to /sso-callback: an absolute URL stops the flow
+      // starting at all, and a relative one was no better in testing. The
+      // recovery above is what makes the destination not matter.
+      const redirectCallbackUrl = `${window.location.origin}/sso-callback`;
       if (mode === "sign-in") {
         if (signInFetchStatus === "fetching") return;
-        const result = await signIn.sso({ strategy, redirectUrl: callbackPath, redirectCallbackUrl });
+        const result = await signIn.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl });
         if (result.error) throw new Error(result.error.message);
       } else {
         if (signUpFetchStatus === "fetching") return;
-        const result = await signUp.sso({ strategy, redirectUrl: callbackPath, redirectCallbackUrl });
+        const result = await signUp.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl });
         if (result.error) throw new Error(result.error.message);
       }
     } catch (caught) {

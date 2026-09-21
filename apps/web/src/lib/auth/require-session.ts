@@ -57,6 +57,10 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession();
+  // /login recovers a visitor who is signed in with Clerk but holds no app
+  // session — the state an SSO round trip leaves them in when Clerk returns
+  // them straight here. It performs the exchange on arrival and sends them
+  // back, so this stays a plain redirect.
   if (!session) redirect("/login");
   return session;
 }
