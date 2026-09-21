@@ -3,6 +3,7 @@ import type { Queue } from "bullmq";
 import type { Redis } from "ioredis";
 import type { PrismaClient, WhatsAppStatus } from "@pitchmyweb/db";
 import type { ReconnectJob, WaStatus } from "@pitchmyweb/contracts";
+import { WHATSAPP_QR_TTL_SECONDS, whatsappQrKey } from "@pitchmyweb/contracts";
 import type { WorkerConfig } from "../config.js";
 import { logger, sanitizeError } from "../logger.js";
 import type { ProviderEvents, WhatsAppProvider } from "../providers/whatsapp.provider.js";
@@ -38,7 +39,7 @@ export class SessionManager {
 
   constructor(
     private readonly db: PrismaClient,
-    redis: Redis,
+    private readonly redis: Redis,
     private readonly lockRedis: Redis,
     private readonly provider: WhatsAppProvider,
     private readonly authRepo: AuthStateRepository,
@@ -204,6 +205,12 @@ export class SessionManager {
         // only display, and no Baileys concept ever reaches the client.
         const qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320, errorCorrectionLevel: "M" });
         await this.publisher.publish({ type: "QR_READY", accountId, qrDataUrl, at: nowIso() });
+        // Parked as well as published. The publish is fire-and-forget, so a
+        // client whose stream is not open at this instant never sees it, and
+        // the status poll carries no image to fall back on — which is how a
+        // QR screen ends up permanently blank. The status endpoint reads this
+        // copy, so a late or reconnecting client can still pick it up.
+        await this.redis.set(whatsappQrKey(accountId), qrDataUrl, "EX", WHATSAPP_QR_TTL_SECONDS);
         // Marks the boundary between "generated" and "delivered". A QR that
         // never appears on screen is otherwise indistinguishable from one
         // that was never produced, and the two have entirely different

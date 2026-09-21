@@ -129,7 +129,7 @@ export const whatsappApi = {
   pairingCode: (id: string, phoneNumber: string) =>
     api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/pairing-code`, { phoneNumber }),
   disconnect: (id: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/disconnect`, {}),
-  status: (id: string) => api.get<{ accountId: string; status: WaStatus; phoneNumber: string | null; lastSeenAt: string | null; lastError: string | null }>(`/api/whatsapp/accounts/${id}/status`),
+  status: (id: string) => api.get<{ accountId: string; status: WaStatus; phoneNumber: string | null; lastSeenAt: string | null; lastError: string | null; qrDataUrl: string | null }>(`/api/whatsapp/accounts/${id}/status`),
   previewMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
     api.post<MessagePreview>("/api/whatsapp/messages/preview", input),
   sendMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>

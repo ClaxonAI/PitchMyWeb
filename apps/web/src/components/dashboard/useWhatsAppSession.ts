@@ -125,9 +125,14 @@ export function useWhatsAppSession(accountId: string | null, initialStatus?: WaS
         if (cancelled) return;
         setState((current) => ({
           ...current,
-          // The QR and the pairing code only ever arrive over the stream
-          // (they are never stored), so a poll must not clear them.
           status: status.status,
+          // The stream is still where this normally arrives. The poll carries
+          // it too because a publish is seen only by clients already
+          // listening: one that connects a moment late, or reconnects after a
+          // dropped stream, would otherwise sit on a QR screen with no QR and
+          // no way to ask for it again. Never cleared here — a poll that
+          // arrives without one must not blank a QR the stream delivered.
+          qrDataUrl: status.qrDataUrl ?? current.qrDataUrl,
           phoneNumber: status.phoneNumber ?? current.phoneNumber,
           lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
           error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,

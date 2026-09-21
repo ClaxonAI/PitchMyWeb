@@ -6,6 +6,7 @@ import { requireCurrentUser } from "../../../../../../lib/auth/current-user";
 import { errorResponse, jsonOk } from "../../../../../../lib/api/response";
 import { getAccount } from "../../../../../../lib/whatsapp/account.service";
 import { cuidSchema } from "../../../../../../lib/validation/common";
+import { readCachedQr } from "../../../../../../lib/whatsapp/qr-cache";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -27,6 +28,12 @@ export async function handleGetWhatsAppStatus(db: PrismaClient, request: NextReq
     lastConnectedAt: account.lastConnectedAt,
     lastSeenAt: account.lastSeenAt,
     lastError: account.lastError,
+    // The QR reaches the browser over pub/sub, which is published once and
+    // kept by nobody. A client whose stream was not open at that instant
+    // never receives it, and without this the poll can only report the
+    // status — leaving a QR screen with no QR on it. Serving the parked copy
+    // makes the poll a real fallback rather than a partial one.
+    qrDataUrl: account.status === "QR_READY" ? await readCachedQr(account.id) : null,
   });
 }
 

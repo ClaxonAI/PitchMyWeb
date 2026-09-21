@@ -32,3 +32,23 @@ export function createRedisConnection(url: string, options: RedisOptions = {}): 
     ...options,
   });
 }
+
+/**
+ * Where the current QR for an account is parked, and for how long.
+ *
+ * The QR reaches the browser over pub/sub, which is fire-and-forget: it is
+ * published once, a few seconds after the connect command, and a client whose
+ * stream is not yet established at that instant never receives it. The status
+ * poll cannot recover it either, since a status carries no image — leaving a
+ * QR screen with no QR on it and no way forward.
+ *
+ * Parking a copy makes the poll a real fallback. The TTL outlives the roughly
+ * 60s WhatsApp allows a QR to be scanned, so the cached copy expires slightly
+ * after the code it depicts stops working, and never long enough to show a
+ * stale one on a later attempt.
+ */
+export const WHATSAPP_QR_TTL_SECONDS = 90;
+
+export function whatsappQrKey(accountId: string): string {
+  return `wa:qr:${accountId}`;
+}
