@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "PitchMyWeb",
-  email: "hello@pitchmyweb.com",
+  email: "support@claxonai.in",
 };
 
 export const navLinks = [

@@ -40,7 +40,7 @@ const envSchema = z.object({
   // its usage policy additionally requires a real, identifying User-Agent
   // (NOMINATIM_USER_AGENT below), not a generic one.
   NOMINATIM_API_URL: z.string().url().default("https://nominatim.openstreetmap.org"),
-  NOMINATIM_USER_AGENT: z.string().min(1).default("PitchMyWeb-DiscoveryWorker/1.0 (support@pitchmyweb.com)"),
+  NOMINATIM_USER_AGENT: z.string().min(1).default("PitchMyWeb-DiscoveryWorker/1.0 (support@claxonai.in)"),
 
   // Which BusinessDiscoverySource this worker process runs — keep in sync
   // with apps/api's LEAD_PROVIDER for the same environment (osm <-> osm,
