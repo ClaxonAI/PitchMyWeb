@@ -18,6 +18,7 @@ import {
   markDirectSent,
   onRecordingFinished,
   pauseCampaignSending,
+  prepareDelivery,
   retryPipeline,
   syncDeliveries,
   type PipelineDeps,
@@ -541,6 +542,31 @@ describe("credit resolution", () => {
 
     const batch = await prisma.pitchBatch.findFirstOrThrow({ where: { id: (await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } })).batchId! } });
     expect(batch).toMatchObject({ failedCount: 1, refundedCount: 1, status: "COMPLETED" });
+  });
+
+  it("never queues a second WhatsApp message for a pipeline that already has one in flight", async () => {
+    const { user, pipeline } = await recordingStage("credit-no-double-send", "AUTO");
+    await connectWhatsApp(user.id);
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(queued.stage).toBe("DELIVERY_QUEUED");
+    const firstMessageId = queued.whatsappMessageId!;
+
+    // A second delivery attempt — what a duplicated recorder callback or an
+    // overlapping retry does — must reuse the in-flight message, not create
+    // a second one. enqueueMessage's own BullMQ dedup is keyed on the
+    // message row's id, so a second row would mean a second real send.
+    await prepareDelivery(prisma, pipeline.id);
+    await prepareDelivery(prisma, pipeline.id);
+
+    const messages = await prisma.whatsAppMessage.findMany({ where: { leadId: pipeline.leadId } });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.id).toBe(firstMessageId);
+    const after = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(after.stage).toBe("DELIVERY_QUEUED");
+    expect(after.whatsappMessageId).toBe(firstMessageId);
   });
 
   it("leaves the credit reserved while a failure is still retryable — no refund until the final attempt", async () => {

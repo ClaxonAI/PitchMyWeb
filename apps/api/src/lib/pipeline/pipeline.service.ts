@@ -406,6 +406,26 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
       return;
     }
 
+    // Never queue a second message for a pipeline that already has one in
+    // flight. enqueueMessage's BullMQ dedup is keyed on the *message row's*
+    // id (`send-<messageId>`), so it cannot help here: two retries of the
+    // same pipeline would each create their own row and each enqueue a job
+    // for it — two real WhatsApp sends to the same business. Only a message
+    // that reached a dead state (the send definitively did not happen) may
+    // be replaced.
+    const existing = pipeline.whatsappMessageId
+      ? await db.whatsAppMessage.findUnique({ where: { id: pipeline.whatsappMessageId }, select: { id: true, status: true } })
+      : null;
+    if (existing && !DEAD_STATUSES.has(existing.status)) {
+      // Still queued, sending, or already sent/delivered — syncDeliveries
+      // owns it from here. Re-assert the stage in case a retry arrived
+      // while it sat in DELIVERY_QUEUED, but create nothing new.
+      if (pipeline.stage !== "DELIVERY_QUEUED") {
+        await setStage(db, pipeline, "DELIVERY_QUEUED", { whatsappMessageId: existing.id });
+      }
+      return;
+    }
+
     const account = await db.whatsAppAccount.findFirst({
       where: { userId: pipeline.campaign.userId, status: "CONNECTED" },
       orderBy: { lastConnectedAt: "desc" },
