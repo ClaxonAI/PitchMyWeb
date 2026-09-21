@@ -291,6 +291,54 @@ export async function autoSelectForUser(db: PrismaClient, userId: string, campai
 }
 
 /**
+ * How long a batch may sit mid-reservation before the maintenance job
+ * treats it as abandoned. reservePitchBatch commits its reservation, then
+ * creates pipelines, then records the true count — a crash between the
+ * first and last leaves a PROCESSING batch with reservedCount still 0 and
+ * credits reserved against nothing. A legitimate in-flight request takes
+ * seconds (bounded-concurrency site publish + recording enqueue), never
+ * this long.
+ */
+export const STALE_BATCH_MS = 10 * 60 * 1000;
+
+/**
+ * Releases credits stranded by a crash between reserving them and
+ * recording what they were actually spent on. Returns how many batches
+ * were recovered. Never throws for one bad batch — a single unrecoverable
+ * row must not stop the rest of the sweep.
+ */
+export async function recoverStaleBatches(db: PrismaClient, now = new Date()): Promise<number> {
+  const stale = await db.pitchBatch.findMany({
+    where: { status: "PROCESSING", reservedCount: 0, createdAt: { lte: new Date(now.getTime() - STALE_BATCH_MS) } },
+    take: 50,
+  });
+
+  let recovered = 0;
+  for (const batch of stale) {
+    try {
+      // A pipeline existing at all means startPipelines got far enough to
+      // create one, so this batch is the *pipeline* recovery path's problem
+      // (abandonStalePipeline), not a stranded reservation.
+      const pipelines = await db.leadPipeline.count({ where: { batchId: batch.id } });
+      if (pipelines > 0) continue;
+
+      await db.$transaction(async (tx) => {
+        const claimed = await tx.pitchBatch.updateMany({
+          where: { id: batch.id, status: "PROCESSING", reservedCount: 0 },
+          data: { status: "COMPLETED", completedAt: now },
+        });
+        if (claimed.count !== 1) return;
+        await releasePitchCredits(tx, batch.userId, batch.requestedCount, `release-stale:${batch.id}`);
+      });
+      recovered += 1;
+    } catch (error) {
+      console.error(`Could not recover stale pitch batch ${batch.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return recovered;
+}
+
+/**
  * Hook run when a discovery run completes. Never throws: a selection problem
  * must not turn a successful discovery into a failed webhook delivery. An
  * InsufficientPitchCreditsError here (the campaign's own owner ran out of

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "../db/client";
 import { createTestUser, deleteTestBusinesses, deleteTestUsers, uniqueIndianPhone } from "../testing/db-test-helpers";
 import { createCampaign } from "./campaign.service";
-import { autoSelectLeads, selectLeads } from "./selection.service";
+import { autoSelectLeads, recoverStaleBatches, selectLeads, STALE_BATCH_MS } from "./selection.service";
 import { getOrCreateWallet, grantCredits } from "../checkout/wallet.service";
 import { ingestBusinessAsLead } from "../leads/lead.service";
 import type { CampaignCreateInput } from "../validation/campaign";
@@ -176,5 +176,56 @@ describe("autoSelectLeads reservation", () => {
     expect(batchCount).toBe(1); // only the first call's batch — the second created none
     const wallet = await getOrCreateWallet(prisma, user.id);
     expect(wallet).toMatchObject({ availableCredits: 19, reservedCredits: 1 });
+  });
+});
+
+describe("recoverStaleBatches", () => {
+  // The one window reservePitchBatch cannot make atomic: credits are
+  // reserved and the batch row committed, then the process dies before
+  // startPipelines creates anything. Without recovery those credits stay
+  // reserved against nothing, forever.
+  it("releases credits stranded by a crash between reserving and creating pipelines", async () => {
+    const user = await createTestUser("stale-batch");
+    createdUserIds.push(user.id);
+    const campaign = await createCampaign(prisma, user.id, { ...baseCampaignInput, targetCount: 5 });
+    await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
+
+    // Exactly the state a crash leaves behind: reserved credits, a
+    // PROCESSING batch with reservedCount still 0, and no pipelines.
+    const batch = await prisma.pitchBatch.create({
+      data: { campaignId: campaign.id, userId: user.id, requestedCount: 5, reservedCount: 0, mode: "AUTO" },
+    });
+    await prisma.pitchWallet.update({ where: { userId: user.id }, data: { availableCredits: 15, reservedCredits: 5 } });
+
+    // Too recent to touch — this is indistinguishable from a request still in flight.
+    expect(await recoverStaleBatches(prisma, new Date())).toBe(0);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ availableCredits: 15, reservedCredits: 5 });
+
+    const later = new Date(Date.now() + STALE_BATCH_MS + 60_000);
+    expect(await recoverStaleBatches(prisma, later)).toBe(1);
+
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ availableCredits: 20, reservedCredits: 0 });
+    const recovered = await prisma.pitchBatch.findUniqueOrThrow({ where: { id: batch.id } });
+    expect(recovered.status).toBe("COMPLETED");
+
+    // Idempotent: a second sweep finds nothing left to recover.
+    expect(await recoverStaleBatches(prisma, later)).toBe(0);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ availableCredits: 20, reservedCredits: 0 });
+  });
+
+  it("leaves a batch alone once it has pipelines — those are the pipeline recovery path's problem", async () => {
+    const { user, campaign } = await processingCampaignWithLeads("stale-batch-with-pipelines", 2, { targetCount: 5 });
+    await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `purchase:${user.id}` });
+    await autoSelectLeads(prisma, campaign.id, { count: 2 });
+
+    // Force the batch back to the "mid-reservation" shape while its
+    // pipelines exist, which is what a crash *after* creating them would
+    // look like if reservedCount had not been written yet.
+    const batch = await prisma.pitchBatch.findFirstOrThrow({ where: { campaignId: campaign.id } });
+    await prisma.pitchBatch.update({ where: { id: batch.id }, data: { reservedCount: 0 } });
+
+    const later = new Date(Date.now() + STALE_BATCH_MS + 60_000);
+    expect(await recoverStaleBatches(prisma, later)).toBe(0);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ reservedCredits: 2 });
   });
 });

@@ -450,6 +450,20 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
   }
 }
 
+/**
+ * Force-fails a pipeline that has sat in an active stage with no progress
+ * for far longer than that stage can legitimately take — the recovery path
+ * for a process that died mid-flight (see pipeline-maintenance.job.ts).
+ * Goes through the same failPipeline path as any other failure, so a
+ * pipeline abandoned this way refunds its reserved credit exactly like one
+ * that failed normally: a crash must not cost the customer a pitch.
+ */
+export async function abandonStalePipeline(db: PrismaClient, pipelineId: string, stage: PipelineStage, reason: string): Promise<void> {
+  const pipeline = await db.leadPipeline.findUnique({ where: { id: pipelineId }, select: { id: true, campaignId: true, leadId: true } });
+  if (!pipeline) return;
+  await failPipeline(db, pipeline, stage, new PipelineStepError(reason));
+}
+
 async function markLeadPitched(db: PrismaClient, leadId: string, metadata: Record<string, unknown>): Promise<void> {
   const lead = await db.lead.findUnique({ where: { id: leadId }, select: { status: true } });
   if (lead && isLeadTransitionAllowed(lead.status, "PITCHED")) {

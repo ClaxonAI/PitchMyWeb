@@ -1,13 +1,17 @@
 import type { PrismaClient } from "@pitchmyweb/db";
 import { emitEvent } from "../observability/events";
 import {
+  abandonStalePipeline,
   AUTO_RETRY_BASE_DELAY_MS,
   AUTO_RETRY_MAX_ATTEMPTS,
+  buildAndPublish,
   NON_RETRYABLE_REASONS,
   onRecordingFinished,
+  requestRecording,
   retryPipeline,
   syncDeliveries,
 } from "../pipeline/pipeline.service";
+import { recoverStaleBatches } from "../campaigns/selection.service";
 import { getObjectStorage } from "../storage";
 
 // Scheduled pipeline housekeeping (every few minutes, same scheduler as
@@ -30,8 +34,61 @@ export type PipelineMaintenanceResult = {
   recordingsTimedOut: number;
   recordingsDeleted: number;
   pipelinesRequeued: number;
+  pipelinesResumed: number;
+  pipelinesAbandoned: number;
+  batchesRecovered: number;
   durationMs: number;
 };
+
+/**
+ * A pipeline that was selected (and had a credit reserved for it) but never
+ * advanced past SELECTED — the process that created it died before
+ * startPipelines could build its site. Resume it if it still has attempts
+ * left, otherwise abandon it, which refunds the reserved credit through
+ * the normal failure path. Either way the credit stops being stranded.
+ */
+export const STALE_SELECTED_MS = 10 * 60 * 1000;
+
+async function recoverStalePipelines(db: PrismaClient, now: Date): Promise<{ resumed: number; abandoned: number }> {
+  const stale = await db.leadPipeline.findMany({
+    where: {
+      stage: "SELECTED",
+      batchId: { not: null },
+      creditOutcome: null,
+      updatedAt: { lte: new Date(now.getTime() - STALE_SELECTED_MS) },
+      campaign: { status: { in: ["PROCESSING", "COMPLETED"] } },
+    },
+    orderBy: { updatedAt: "asc" },
+    take: AUTO_RETRY_BATCH,
+  });
+
+  let resumed = 0;
+  let abandoned = 0;
+  for (const pipeline of stale) {
+    try {
+      // Same optimistic claim the requeue path uses: if another worker (or
+      // a request that was merely slow, not dead) moved this row first, its
+      // updatedAt no longer matches and we leave it alone.
+      const claimed = await db.leadPipeline.updateMany({
+        where: { id: pipeline.id, stage: "SELECTED", updatedAt: pipeline.updatedAt },
+        data: { attempts: { increment: 1 } },
+      });
+      if (claimed.count !== 1) continue;
+
+      if (pipeline.attempts + 1 >= AUTO_RETRY_MAX_ATTEMPTS) {
+        await abandonStalePipeline(db, pipeline.id, "SELECTED", "stuck_selected");
+        abandoned += 1;
+        continue;
+      }
+      const published = await buildAndPublish(db, pipeline.id);
+      if (published) await requestRecording(db, pipeline.id);
+      resumed += 1;
+    } catch (error) {
+      console.error(`Could not recover stale pipeline ${pipeline.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return { resumed, abandoned };
+}
 
 async function reconcileRecordings(db: PrismaClient, now: Date): Promise<{ reconciled: number; timedOut: number }> {
   const waiting = await db.leadPipeline.findMany({
@@ -116,6 +173,11 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
   // its backoff instead of being retried immediately.
   const pipelinesRequeued = await requeueFailedPipelines(db, now);
   const { reconciled: recordingsReconciled, timedOut: recordingsTimedOut } = await reconcileRecordings(db, now);
+  // Credit recovery: a reservation must never stay reserved forever because
+  // a process died. Pipelines first (they may still be resumable), then the
+  // batches whose reservation never got as far as creating one.
+  const { resumed: pipelinesResumed, abandoned: pipelinesAbandoned } = await recoverStalePipelines(db, now);
+  const batchesRecovered = await recoverStaleBatches(db, now);
 
   let recordingsDeleted = 0;
   const storage = getObjectStorage();
@@ -140,7 +202,17 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
     }
   }
 
-  const result = { deliveriesSynced, pipelinesRequeued, recordingsReconciled, recordingsTimedOut, recordingsDeleted, durationMs: Date.now() - started };
+  const result = {
+    deliveriesSynced,
+    pipelinesRequeued,
+    pipelinesResumed,
+    pipelinesAbandoned,
+    batchesRecovered,
+    recordingsReconciled,
+    recordingsTimedOut,
+    recordingsDeleted,
+    durationMs: Date.now() - started,
+  };
   emitEvent("preview.cleanup", result);
   return result;
 }

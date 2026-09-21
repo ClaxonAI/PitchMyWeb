@@ -634,4 +634,38 @@ describe("pipeline maintenance job", () => {
     expect(failed.stage).toBe("FAILED");
     expect(failed.failureReason).toBe("recording_timeout");
   });
+
+  it("abandons a pipeline stranded in SELECTED past its attempt cap, refunding its reserved credit", async () => {
+    const { runPipelineMaintenanceJob, STALE_SELECTED_MS } = await import("../jobs/pipeline-maintenance.job");
+    const { AUTO_RETRY_MAX_ATTEMPTS } = await import("./pipeline.service");
+
+    const { user, campaign } = await discoveredCampaign("stale-selected", [clinic("Stale Dental")], { targetCount: 5 });
+    const lead = await prisma.lead.findFirstOrThrow({ where: { campaignId: campaign.id } });
+    const { deps } = fakeDeps();
+    const [pipeline] = (await selectLeads(prisma, user.id, campaign.id, [lead.id], deps)).started;
+
+    // Exactly what a crash right after reservation leaves behind: the
+    // pipeline never advanced past SELECTED, its credit still reserved.
+    // attempts is already at the cap, so recovery abandons rather than
+    // resumes it.
+    await prisma.leadPipeline.update({
+      where: { id: pipeline!.id },
+      data: { stage: "SELECTED", websiteProjectId: null, recordingId: null, attempts: AUTO_RETRY_MAX_ATTEMPTS - 1 },
+    });
+    const before = await getOrCreateWallet(prisma, user.id);
+    expect(before.reservedCredits).toBe(1);
+
+    const later = new Date(Date.now() + STALE_SELECTED_MS + 60_000);
+    const result = await runPipelineMaintenanceJob(prisma, later);
+    expect(result.pipelinesAbandoned).toBeGreaterThanOrEqual(1);
+
+    const abandoned = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    expect(abandoned.stage).toBe("FAILED");
+    expect(abandoned.failureReason).toBe("stuck_selected");
+    expect(abandoned.creditOutcome).toBe("REFUNDED");
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({
+      reservedCredits: before.reservedCredits - 1,
+      availableCredits: before.availableCredits + 1,
+    });
+  });
 });
