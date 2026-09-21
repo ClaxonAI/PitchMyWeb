@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "job:expire-stale-runs": "tsx scripts/expire-stale-runs.ts",
     "job:backfill-business-normalized": "tsx scripts/backfill-business-normalized-fields.ts",
+    "job:backfill-pitch-credits": "tsx scripts/backfill-pitch-credits.ts",
     "job:enqueue-website-verifications": "tsx scripts/enqueue-website-verifications.ts",
     "demo:preview": "tsx scripts/demo-preview.ts",
     "admin:promote": "tsx scripts/promote-admin.ts"
