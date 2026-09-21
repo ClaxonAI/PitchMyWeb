@@ -1,0 +1,10 @@
+/* sachu45 "clinic" design — styled with Tailwind in ClinicStudio.tsx.
+   Only what utilities cannot express lives here. */
+
+/* Overscroll and the area behind the page match the design, not the classic theme. */
+body:has(.clinic-studio) { background: #eae6dc; }
+.clinic-studio { -webkit-tap-highlight-color: rgba(176, 42, 51, .15); }
+.clinic-studio ::selection { background: #c3303a; color: #ffffff; }
+.clinic-studio :focus-visible { outline: 2px solid #b02a33; outline-offset: 3px; border-radius: 6px; }
+.clinic-studio summary { list-style: none; }
+.clinic-studio summary::-webkit-details-marker { display: none; }

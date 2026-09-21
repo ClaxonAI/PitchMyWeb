@@ -29,7 +29,7 @@
   --site-page: #f6f2ea;
   --site-paper: #fffdf8;
   --site-ink: #10292c;
-  --site-muted: #5d6f6f;
+  --site-muted: #536565;
   --site-line: #e3dccf;
   --site-brand: #0f5c57;
   --site-brand-deep: #0a3f3c;
@@ -37,7 +37,8 @@
   --site-accent: #e39266;
 }
 
-[data-theme="sage"] {
+[data-theme="sage"],
+body:has([data-theme="sage"]) {
   --site-page: #f4f3ec;
   --site-paper: #fdfcf7;
   --site-ink: #1c2a21;
@@ -49,7 +50,8 @@
   --site-accent: #c98556;
 }
 
-[data-theme="navy"] {
+[data-theme="navy"],
+body:has([data-theme="navy"]) {
   --site-page: #f5f4f0;
   --site-paper: #fefdfa;
   --site-ink: #121c2e;
@@ -61,7 +63,8 @@
   --site-accent: #d6a045;
 }
 
-[data-theme="amber"] {
+[data-theme="amber"],
+body:has([data-theme="amber"]) {
   --site-page: #f7f1e6;
   --site-paper: #fffaf2;
   --site-ink: #2a1c12;
@@ -73,7 +76,8 @@
   --site-accent: #c47a2b;
 }
 
-[data-theme="violet"] {
+[data-theme="violet"],
+body:has([data-theme="violet"]) {
   --site-page: #f6f3fb;
   --site-paper: #fdfbff;
   --site-ink: #17131f;
@@ -85,7 +89,8 @@
   --site-accent: #c4b5fd;
 }
 
-[data-theme="ember"] {
+[data-theme="ember"],
+body:has([data-theme="ember"]) {
   --site-page: #111111;
   --site-paper: #1a1a1a;
   --site-ink: #f4f1ea;
@@ -97,7 +102,8 @@
   --site-accent: #ffb347;
 }
 
-[data-theme="stone"] {
+[data-theme="stone"],
+body:has([data-theme="stone"]) {
   --site-page: #f4f1ec;
   --site-paper: #fbf9f5;
   --site-ink: #2c2924;
@@ -109,7 +115,8 @@
   --site-accent: #b08968;
 }
 
-[data-theme="wine"] {
+[data-theme="wine"],
+body:has([data-theme="wine"]) {
   --site-page: #f7f0ee;
   --site-paper: #fffaf9;
   --site-ink: #2a1418;
@@ -121,7 +128,8 @@
   --site-accent: #c9a27a;
 }
 
-[data-theme="ink"] {
+[data-theme="ink"],
+body:has([data-theme="ink"]) {
   --site-page: #eef2f6;
   --site-paper: #f7f9fb;
   --site-ink: #0f1720;
@@ -153,6 +161,9 @@
     outline: 2px solid var(--site-brand);
     outline-offset: 3px;
     border-radius: 8px;
+  }
+  [data-theme] {
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--site-brand) 18%, transparent);
   }
   details > summary {
     list-style: none;

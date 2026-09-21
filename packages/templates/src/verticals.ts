@@ -5,10 +5,13 @@ import {
   type DentalLeadInput,
   type DentalService,
   type DentalTheme,
+  type PreviewDesign,
   type PreviewTemplateCode,
   buildDentalContent,
+  clampFaq,
   cleanTemplateText,
   phoneToDigits,
+  pickPreviewDesign,
 } from "./dental";
 
 export type PreviewChrome = {
@@ -63,7 +66,7 @@ function bookingFaqs(kind: string, name: string, phone?: string, address?: strin
     },
   ];
   if (address) faqs.push({ question: `Where is this ${kind}?`, answer: `You can find ${name} at ${address}.` });
-  return faqs;
+  return faqs.map(clampFaq);
 }
 
 const VERTICALS: Record<Exclude<PreviewTemplateCode, "dental-clinic">, VerticalDef> = {
@@ -400,7 +403,14 @@ function servicesFromLead(raw: readonly string[] | null | undefined, fallback: D
   return { services: fallback, generic: true };
 }
 
-export type BuildPreviewContentOptions = { now?: Date; template?: PreviewTemplateCode };
+export type BuildPreviewContentOptions = {
+  now?: Date;
+  template?: PreviewTemplateCode;
+  /** Force a design; when omitted one is picked at random for verticals that have several. */
+  design?: PreviewDesign;
+  /** Random source for the design pick (tests). */
+  random?: () => number;
+};
 
 /**
  * Picks a vertical from the business category, then fills placeholders from
@@ -440,6 +450,7 @@ export function buildPreviewContent(
 
   return dentalContentSchema.parse({
     template,
+    design: options.design ?? pickPreviewDesign(template, options.random),
     theme: vertical.theme,
     businessName,
     ...(area ? { area } : {}),

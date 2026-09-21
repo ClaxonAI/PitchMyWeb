@@ -1,0 +1,14 @@
+/* sachu45 "interiors" design — styled with Tailwind in InteriorsStudio.tsx.
+   Only what utilities cannot express lives here. */
+
+/* Overscroll and the area behind the page match the design, not the classic theme. */
+body:has(.interiors-studio) { background: #ffffff; }
+.interiors-studio { -webkit-tap-highlight-color: rgba(240, 132, 42, .2); }
+.interiors-studio ::selection { background: #f0842a; color: #0d1117; }
+.interiors-studio :focus-visible { outline: 2px solid #f0842a; outline-offset: 3px; border-radius: 4px; }
+
+/* Landscape phones: the decorative panel above the headline becomes a thin
+   band, so the first screen shows the headline. */
+@media (max-height: 560px) and (orientation: landscape) and (max-width: 767px) {
+  .interiors-hero-art { height: 5rem; }
+}

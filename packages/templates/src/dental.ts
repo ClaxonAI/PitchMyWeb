@@ -33,6 +33,26 @@ export function isPreviewTemplate(code: string): code is PreviewTemplateCode {
   return (PREVIEW_TEMPLATE_CODES as readonly string[]).includes(code);
 }
 
+/**
+ * Visual layouts a preview template can be rendered in. `classic` is the
+ * original shared layout; `studio` is the set of standalone sachu45 designs
+ * (one per vertical). Both render the same content contract. Content stored
+ * before this field existed has no `design` and renders as `classic`.
+ */
+export const PREVIEW_DESIGNS = ["classic", "studio"] as const;
+export type PreviewDesign = (typeof PREVIEW_DESIGNS)[number];
+
+/** Verticals that have a studio design. The dental clinic only has the classic one. */
+export function hasStudioDesign(template: PreviewTemplateCode): boolean {
+  return template !== "dental-clinic";
+}
+
+/** Picks a design at random for a template. `random` is injectable so tests can be deterministic. */
+export function pickPreviewDesign(template: PreviewTemplateCode, random: () => number = Math.random): PreviewDesign {
+  if (!hasStudioDesign(template)) return "classic";
+  return PREVIEW_DESIGNS[Math.min(PREVIEW_DESIGNS.length - 1, Math.floor(random() * PREVIEW_DESIGNS.length))]!;
+}
+
 const HTML_LIKE_PATTERN = /<\/?[a-zA-Z][^>]*>/;
 
 const text = (max: number) =>
@@ -74,6 +94,7 @@ export const dentalServiceSchema = z
 export const dentalContentSchema = z
   .object({
     template: z.enum(PREVIEW_TEMPLATE_CODES),
+    design: z.enum(PREVIEW_DESIGNS).optional(),
     theme: z.enum(DENTAL_THEMES),
     businessName: text(120),
     area: text(120).optional(),
@@ -157,6 +178,20 @@ export const cleanTemplateText = (value: string | null | undefined, max: number)
   return collapsed.length > max ? `${collapsed.slice(0, max - 1).trimEnd()}…` : collapsed;
 };
 
+type Faq = DentalContent["faqs"][number];
+
+/**
+ * FAQ text is composed from the business name and address, which can each be
+ * long; clamp it to the schema's limits so a long address can never make
+ * dentalContentSchema.parse throw and fail the whole site build.
+ */
+export function clampFaq(faq: Faq): Faq {
+  return {
+    question: cleanTemplateText(faq.question, 140) ?? faq.question,
+    answer: cleanTemplateText(faq.answer, 400) ?? faq.answer,
+  };
+}
+
 /** Digits-only phone for tel:/wa.me links, or undefined when implausible. */
 export function phoneToDigits(phone: string | null | undefined): string | undefined {
   if (!phone) return undefined;
@@ -206,7 +241,7 @@ function buildFaqs(name: string, phone: string | undefined, address: string | un
   if (address) {
     faqs.push({ question: "Where is the clinic?", answer: `You can find ${name} at ${address}.` });
   }
-  return faqs;
+  return faqs.map(clampFaq);
 }
 
 export type BuildDentalContentOptions = { now?: Date };
@@ -247,6 +282,7 @@ export function buildDentalContent(
 
   const content: DentalContent = {
     template: DENTAL_TEMPLATE_CODE,
+    design: "classic",
     theme: pickTheme(businessName),
     businessName,
     ...(area ? { area } : {}),
