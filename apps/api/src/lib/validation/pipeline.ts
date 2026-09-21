@@ -9,7 +9,7 @@ export const campaignLeadsQuerySchema = z.object({
 
 export type CampaignLeadsQueryInput = z.infer<typeof campaignLeadsQuerySchema>;
 
-/** Either an explicit list of leads, or `{ auto: true }` for top-N by score. */
+/** Either an explicit list of leads, or `{ auto: true }` for every eligible lead up to targetCount. */
 export const campaignSelectionSchema = z.union([
   z.object({ leadIds: z.array(z.string().min(1)).min(1).max(200) }).strict(),
   z.object({ auto: z.literal(true) }).strict(),

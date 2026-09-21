@@ -9,8 +9,14 @@ import { loadOwnedCampaign } from "./campaign.service";
 // Choosing which discovered leads get a site, a video and a pitch.
 //
 //   Manual: the user ticks leads in the dashboard (selectLeads).
-//   Auto:   when discovery completes, the top N by score are chosen
-//           (autoSelectTopLeads), N = campaign.targetCount.
+//   Auto:   when discovery completes, every eligible lead is chosen, in the
+//           order discovery found them (autoSelectLeads).
+//
+// There is deliberately no ranking here. Discovery now stops once it has
+// found targetCount leads the user can actually be given, so by the time
+// selection runs there is nothing to rank: the eligible set is the set that
+// was asked for. Scoring a fixed list and then taking all of it only
+// created the impression that a choice was being made.
 //
 // Both paths end in startPipelines(). A campaign never pitches more than
 // targetCount leads in total, and only leads WhatsApp can reach qualify.
@@ -68,16 +74,6 @@ function effectiveScore(lead: Lead & { business: Business }): { score: number; e
   return { score: total, estimated: true };
 }
 
-/** Best first: score, then rating, then review count, then id (stable). */
-export function compareLeadRows(a: CampaignLeadRow, b: CampaignLeadRow): number {
-  return (
-    b.score - a.score ||
-    (b.business.rating ?? 0) - (a.business.rating ?? 0) ||
-    (b.business.reviewCount ?? 0) - (a.business.reviewCount ?? 0) ||
-    a.id.localeCompare(b.id)
-  );
-}
-
 async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promise<CampaignLeadRow[]> {
   const leads = await db.lead.findMany({
     where: { campaignId },
@@ -129,7 +125,7 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
   });
 }
 
-export type CampaignLeadsQuery = { sort?: "score" | "recent"; search?: string };
+export type CampaignLeadsQuery = { sort?: "found" | "recent" | "score"; search?: string };
 
 export async function listCampaignLeads(
   db: PrismaClient,
@@ -145,7 +141,11 @@ export async function listCampaignLeads(
   if (search) {
     rows = rows.filter((row) => `${row.business.name} ${row.business.city ?? ""} ${row.business.address ?? ""}`.toLowerCase().includes(search));
   }
-  rows = query.sort === "recent" ? rows.reverse() : rows.sort(compareLeadRows);
+  // Discovery order by default (loadCampaignLeadRows orders by createdAt);
+  // "recent" reverses it. Ranking by score is gone — selection no longer
+  // uses it, so offering it here would suggest the order changes which
+  // leads get pitched, which it does not.
+  if (query.sort === "recent") rows = rows.reverse();
 
   return { items: rows, total: rows.length, selectedCount, targetCount: campaign.targetCount };
 }
@@ -193,15 +193,17 @@ export async function selectLeads(
 }
 
 /**
- * Picks the best remaining eligible leads up to targetCount and starts their
- * pipelines. System-initiated (discovery completion) or user-initiated
- * (the "auto-select" button).
+ * Starts pipelines for the remaining eligible leads, up to targetCount, in
+ * the order discovery found them. System-initiated (discovery completion)
+ * or user-initiated (the "auto-select" button).
  */
-export async function autoSelectTopLeads(db: PrismaClient, campaignId: string, deps?: PipelineDeps): Promise<{ started: LeadPipeline[] }> {
+export async function autoSelectLeads(db: PrismaClient, campaignId: string, deps?: PipelineDeps): Promise<{ started: LeadPipeline[] }> {
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw new NotFoundError("Campaign", campaignId);
 
-  const rows = (await loadCampaignLeadRows(db, campaign.id)).sort(compareLeadRows);
+  // loadCampaignLeadRows already orders by createdAt, which is discovery
+  // order — the order the user saw the leads arrive in.
+  const rows = await loadCampaignLeadRows(db, campaign.id);
   const selectedCount = rows.filter((row) => row.pipeline).length;
   const picks = rows.filter((row) => row.selectable).slice(0, remainingSlots(campaign, selectedCount));
 
@@ -215,7 +217,7 @@ export async function autoSelectForUser(db: PrismaClient, userId: string, campai
   if (!["PROCESSING", "COMPLETED"].includes(campaign.status)) {
     throw new ConflictError("Leads can be selected once discovery has started returning results");
   }
-  return autoSelectTopLeads(db, campaign.id, deps);
+  return autoSelectLeads(db, campaign.id, deps);
 }
 
 /**
@@ -226,7 +228,7 @@ export async function onDiscoveryCompleted(db: PrismaClient, campaignId: string,
   try {
     const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true } });
     if (campaign?.selectionMode !== "AUTO") return;
-    await autoSelectTopLeads(db, campaignId, deps);
+    await autoSelectLeads(db, campaignId, deps);
   } catch (error) {
     console.error(`Auto-selection failed for campaign ${campaignId}:`, error);
     emitEvent("selection.failed", { campaignId, mode: "auto" }, { level: "error", alert: true });
