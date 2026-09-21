@@ -5,7 +5,8 @@ import { Check, Lock, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { Country, Market, Plan } from "@/types";
 import { formatPrice } from "@/lib/utils";
-import { paymentLinks } from "@/data/plans";
+import { ApiError, checkoutApi } from "@/lib/api-client";
+import { loadRazorpayCheckout } from "@/lib/checkout/razorpay-loader";
 
 export type CheckoutOrder = {
   plan: Plan;
@@ -17,9 +18,25 @@ export type CheckoutOrder = {
   coupon: string | null;
 };
 
+// Where a buyer lands once the payment is verified. They have no account yet
+// (checkout is deliberately anonymous — see apps/api's checkout.service.ts),
+// so the order id rides along in the URL and register/login claim it onto
+// whichever account is created or signed into next.
+function successUrl(orderId: string, claimed: boolean | undefined): string {
+  return claimed ? "/discover" : `/register?orderId=${encodeURIComponent(orderId)}`;
+}
+
 /**
- * Order summary shown before payment. Payment never starts a scrape — that
- * only happens when the buyer later submits Discover.
+ * Order summary, then Razorpay Standard Checkout in a modal over this page.
+ *
+ * The buyer never sees an amount this component chose: create-order recomputes
+ * the price server-side from the plan, market and coupon *named* here, and
+ * returns the Razorpay order to open. Payment is only real once
+ * /api/checkout/verify recomputes the HMAC signature and says so, which is why
+ * nothing here treats the checkout handler firing as proof of payment.
+ *
+ * Payment never starts a scrape — that only happens when the buyer later
+ * submits Discover.
  */
 export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -31,7 +48,10 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
     if (!dialog) return;
     if (order && !dialog.open) dialog.showModal();
     if (!order && dialog.open) dialog.close();
-    if (order) setError(null);
+    if (order) {
+      setError(null);
+      setPending(false);
+    }
   }, [order]);
 
   const confirm = async () => {
@@ -39,13 +59,82 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
     setError(null);
     setPending(true);
 
-    if (order.coupon) {
-      setError("Coupons are not available for these fixed payment links. Remove the coupon to continue.");
-      setPending(false);
-      return;
-    }
+    try {
+      const created = await checkoutApi.createOrder({
+        planId: order.plan.id,
+        market: order.market,
+        countryCode: order.country.code,
+        // Omitted entirely when there is no coupon: createOrderSchema marks
+        // couponCode optional *and* strict, so an explicit null is a 400
+        // rather than "no coupon".
+        ...(order.coupon ? { couponCode: order.coupon } : {}),
+      });
 
-    window.location.assign(paymentLinks[order.plan.id][order.market]);
+      // Local/dev gateway (PAYMENT_GATEWAY unset): the order comes back
+      // already PAID with no card network involved, so there is no modal to
+      // open and nothing to verify.
+      if (created.dummy) {
+        window.location.assign(successUrl(created.orderId, created.claimed));
+        return;
+      }
+
+      await loadRazorpayCheckout();
+      if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
+
+      const checkout = new window.Razorpay({
+        key: created.keyId,
+        amount: created.amount,
+        currency: created.currency,
+        order_id: created.razorpayOrderId,
+        name: "PitchMyWeb",
+        description: `${order.plan.name} · ${order.plan.batchSize} ${order.plan.unitLabel}`,
+        theme: { color: "#4f39f6" },
+        handler: (response) => {
+          // Razorpay has charged the card, but this callback is client-side
+          // and therefore not trustworthy on its own: the server re-derives
+          // the signature before any order becomes PAID.
+          void (async () => {
+            try {
+              const verified = await checkoutApi.verify({
+                orderId: created.orderId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              });
+              if (verified.status !== "PAID") {
+                setError("We couldn't confirm that payment. Nothing has been charged twice — please contact support with your payment id.");
+                setPending(false);
+                return;
+              }
+              window.location.assign(successUrl(verified.orderId, verified.claimed));
+            } catch (verifyError) {
+              setError(
+                verifyError instanceof ApiError
+                  ? verifyError.message
+                  : "Your payment went through but we couldn't confirm it. Please contact support before paying again.",
+              );
+              setPending(false);
+            }
+          })();
+        },
+        modal: {
+          // Closing Razorpay's own modal is a cancellation, not a failure:
+          // the local order stays PENDING and the buyer can simply pay again.
+          ondismiss: () => {
+            setPending(false);
+          },
+        },
+      });
+
+      checkout.on("payment.failed", (response) => {
+        setError(response.error?.description ?? "The payment failed. Please try again or use a different method.");
+        setPending(false);
+      });
+
+      checkout.open();
+    } catch (createError) {
+      setError(createError instanceof ApiError ? createError.message : "We couldn't start the payment. Please try again.");
+      setPending(false);
+    }
   };
 
   const total = order ? order.subtotal - order.discount : 0;
@@ -100,7 +189,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
           </dl>
 
           <p className="mt-6 rounded-xl bg-mist px-4 py-3 text-[13px] leading-relaxed text-ink/60">
-            You&apos;ll be taken to Razorpay to complete payment. After paying, return here and create your account so your plan can be activated.
+            Razorpay opens over this page to take the payment. After it clears, create your account so your plan can be activated.
           </p>
 
           {error && (

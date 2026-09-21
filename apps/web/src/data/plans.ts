@@ -1,16 +1,5 @@
 import type { Market, Plan, PlanId, PlanPrice } from "@/types";
 
-export const paymentLinks: Record<PlanId, Record<Market, string>> = {
-  auto: {
-    india: "https://rzp.io/rzp/tKFDSNi",
-    foreign: "https://rzp.io/rzp/4i6QO9N",
-  },
-  direct: {
-    india: "https://rzp.io/rzp/5U4CHLK",
-    foreign: "https://rzp.io/rzp/LxT7CIM4",
-  },
-};
-
 // Batch prices: India is priced in INR (no forex fees for Indian buyers),
 // foreign plans are also charged in INR. Every price on the site reads from this file — keep
 // apps/api's lib/checkout/plan-pricing.ts in sync (that's the server-side
