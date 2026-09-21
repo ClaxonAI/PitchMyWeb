@@ -1,0 +1,125 @@
+name: CI
+
+# This repository had no CI at all: three pull requests merged to main, and
+# from there deployed to production, without a single check running. The
+# database-backed tests in particular had never executed anywhere, because
+# they need a real Postgres and most contributors run the suite against their
+# local dev database or not at all.
+#
+# Everything here is disposable: the Postgres and Redis below are service
+# containers that live and die with the job, and every credential is a fixed
+# dummy value. No real secret is needed to run this workflow, which is why it
+# also works on a fork's pull request.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run pointless — cancel it
+# rather than queueing behind it. main is excluded from cancellation so the
+# post-merge run always completes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      # Same major versions as infrastructure/docker/docker-compose.yml, so a
+      # migration that works locally works here. postgres:17-alpine carries
+      # contrib, which the phase2 migration's `CREATE EXTENSION pg_trgm`
+      # needs — the plain alpine image would fail that migration outright.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pitchmyweb
+          POSTGRES_PASSWORD: pitchmyweb_ci
+          POSTGRES_DB: pitchmyweb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pitchmyweb -d pitchmyweb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Throwaway values for throwaway containers. None of these is a secret,
+      # and none may ever be replaced by one: this workflow runs on pull
+      # requests, including from forks.
+      DATABASE_URL: postgresql://pitchmyweb:pitchmyweb_ci@localhost:5432/pitchmyweb_test?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      # Length-checked by the worker configs (>= 24 chars, and 64 hex chars
+      # respectively), so these cannot be shortened to something tidier.
+      INTERNAL_JOBS_SECRET: ci-internal-jobs-secret-0000000000000000
+      WA_AUTH_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      SITES_PUBLIC_URL: http://localhost:3200
+      API_INTERNAL_URL: http://localhost:4000
+      APP_URL: http://localhost:3000
+      # In-memory, so rate-limit tests do not depend on Redis state surviving
+      # between files — matches how apps/api/.env is configured locally.
+      RATE_LIMIT_STORE: memory
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24: apps/api's jobs script uses --env-file-if-exists, which older
+      # releases reject outright rather than ignoring (see bootstrap.sh).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # deploy, not `migrate dev`: dev can silently drop the hand-written
+      # pg_trgm indexes those migrations add through raw SQL.
+      - name: Apply migrations
+        run: npm run db:deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # Catches what typecheck cannot: a build that fails only under Next's
+      # own compilation. main is deployed by building on the production box,
+      # so a build failure that reaches main is a failed deploy.
+      - name: Build
+        env:
+          # next.config.ts refuses to build without a Clerk publishable key.
+          # A pk_test_ key only warns while APP_ENV is not "production", so
+          # this dummy is enough to compile and is deliberately not a real
+          # key — nothing here signs in.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktZHVtbXktbm90LWEtcmVhbC1rZXkk
+          CLERK_SECRET_KEY: sk_test_ci-dummy-not-a-real-key
+          NODE_ENV: production
+        run: npm run build
