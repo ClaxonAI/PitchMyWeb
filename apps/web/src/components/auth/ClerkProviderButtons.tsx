@@ -48,24 +48,20 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
         throw new Error("Your previous session has expired. Please sign in again.");
       }
       const strategy = `oauth_${provider}` as const;
-      // Both point at /sso-callback, and neither may point at /dashboard.
-      // redirectUrl is where Clerk lands once SSO completes, and that landing
-      // has to be the page that trades the Clerk session for this app's own
-      // cookie. Sending it straight to /dashboard skips that exchange
-      // entirely: Clerk signs the user in, no pmw_session cookie is ever
-      // minted, and requireSession() bounces them back to /login — with
-      // nothing logged anywhere, because verification was never attempted.
-      // redirectCallbackUrl covers the case where no session was created and
-      // more input is needed; /sso-callback renders
-      // AuthenticateWithRedirectCallback, so it handles that continuation too.
-      const callbackUrl = `${window.location.origin}/sso-callback`;
+      // redirectUrl is the final destination once the flow completes;
+      // redirectCallbackUrl is the intermediate page Clerk returns to, which
+      // is where the Clerk session is traded for this app's own cookie. They
+      // are not interchangeable: pointing redirectUrl at /sso-callback stops
+      // the flow from starting at all — the button sits on "Connecting…" and
+      // no request to Clerk is ever made.
+      const redirectUrl = `${window.location.origin}/sso-callback`;
       if (mode === "sign-in") {
         if (signInFetchStatus === "fetching") return;
-        const result = await signIn.sso({ strategy, redirectUrl: callbackUrl, redirectCallbackUrl: callbackUrl });
+        const result = await signIn.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl: redirectUrl });
         if (result.error) throw new Error(result.error.message);
       } else {
         if (signUpFetchStatus === "fetching") return;
-        const result = await signUp.sso({ strategy, redirectUrl: callbackUrl, redirectCallbackUrl: callbackUrl });
+        const result = await signUp.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl: redirectUrl });
         if (result.error) throw new Error(result.error.message);
       }
     } catch (caught) {
