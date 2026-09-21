@@ -6,7 +6,7 @@ import { ConflictError } from "../errors";
 import { DemoProvider, type CampaignSearchInput } from "../providers/demo-provider";
 import { getLeadProvider, isAsyncLeadProvider, type AnyLeadProvider } from "../providers";
 import { matchesCampaignFilters } from "./campaign-filters";
-import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
+import { isPitchableBusiness, pitchableBusinessFilter } from "../leads/phone";
 import { businessProviderInputSchema, type BusinessProviderInput } from "../validation/business";
 import { emitEvent } from "../observability/events";
 
@@ -98,14 +98,14 @@ export type IngestResult = {
  */
 export const MAX_SEEN_BUSINESSES = 20_000;
 
-/** Leads this campaign already has that WhatsApp could actually reach. */
+/**
+ * Leads this campaign already has that WhatsApp could actually reach.
+ * Counted in Postgres rather than in JS: the predicate is now a persisted
+ * column (Business.phoneType, see lib/leads/phone.ts) instead of a regex
+ * over free text, so there is no longer any reason to load the rows.
+ */
 async function countPitchableLeads(db: PrismaClient, campaignId: string): Promise<number> {
-  const leads = await db.lead.findMany({
-    where: { campaignId },
-    select: { business: { select: { phone: true } } },
-    take: MAX_SEEN_BUSINESSES,
-  });
-  return leads.filter((lead) => normalizePhoneForWhatsApp(lead.business.phone)).length;
+  return db.lead.count({ where: { campaignId, business: pitchableBusinessFilter() } });
 }
 
 async function seenBusinessKeys(db: PrismaClient, campaign: Campaign): Promise<Set<string>> {
@@ -186,7 +186,7 @@ export async function ingestBusinesses(
       }
       if (leadCreated) {
         alreadySeen.add(business.id);
-        if (normalizePhoneForWhatsApp(business.phone)) pitchable += 1;
+        if (isPitchableBusiness(business)) pitchable += 1;
       }
       if (leadCreated) {
         leadsCreated += 1;

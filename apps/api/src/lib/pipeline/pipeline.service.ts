@@ -2,7 +2,8 @@ import type { LeadPipeline, PipelineStage, Prisma, PrismaClient } from "@pitchmy
 import { buildPreviewContent } from "@pitchmyweb/templates";
 import { ConflictError, DomainError, NotFoundError, ValidationError } from "../errors";
 import { isLeadTransitionAllowed, transitionLeadStatus } from "../leads/lifecycle";
-import { generateWhatsAppAction, normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
+import { isPitchableBusiness } from "../leads/phone";
+import { generateWhatsAppAction } from "../leads/whatsapp.service";
 import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
@@ -36,6 +37,11 @@ export const NON_RETRYABLE_REASONS = [
   "opted_out",
   "invalid_number",
   "recent_duplicate",
+  // A business whose number WhatsApp cannot reach (no valid number at all,
+  // or a landline) will not have gained one by the time a retry runs — the
+  // classification comes from the stored Business row, not from anything
+  // this attempt did. Retrying only delays the refund.
+  "no_valid_phone",
   // A SENT message that never got a delivery receipt within
   // DELIVERY_RECEIPT_TIMEOUT_MS (see syncDeliveries below) is not safe to
   // blindly retry: WhatsApp may have genuinely delivered it, and a retry
@@ -301,7 +307,12 @@ export async function buildAndPublish(db: PrismaClient, pipelineId: string): Pro
   try {
     await setStage(db, pipeline, "BUILDING_SITE", { incrementAttempts: true });
 
-    if (!normalizePhoneForWhatsApp(pipeline.lead.business.phone)) {
+    // The pitch queue's entry condition (and the last place it can still be
+    // enforced cheaply): a lead whose number WhatsApp cannot reach fails
+    // here, before a site is built for it, and Phase 3 refunds its reserved
+    // credit — "no_valid_phone" is in NON_RETRYABLE_REASONS, so that refund
+    // is immediate rather than after three pointless retries.
+    if (!isPitchableBusiness(pipeline.lead.business)) {
       throw new PipelineStepError("no_valid_phone", "The business has no phone number WhatsApp can reach");
     }
 
@@ -438,7 +449,9 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
       pipeline.campaign.userId,
       {
         accountId: account.id,
-        phoneNumber: pipeline.lead.business.phone ?? "",
+        // The validated E.164 number, not the provider's raw string: both
+        // end up as digits, but only one of them was parsed.
+        phoneNumber: pipeline.lead.business.normalizedPhone ?? pipeline.lead.business.phone ?? "",
         leadId: pipeline.leadId,
         body: fillSiteLink(pitch.content, project.publishedUrl),
       },

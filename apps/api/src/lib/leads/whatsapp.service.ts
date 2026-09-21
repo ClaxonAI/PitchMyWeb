@@ -1,5 +1,6 @@
 import type { Outreach, PrismaClient } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import { whatsappDigits } from "./phone";
 
 // POST /api/leads/:id/whatsapp domain service (backend_tasks.md section
 // 32, Phase 7 section 13-16). V1 generates a WhatsApp click-to-chat link
@@ -13,12 +14,19 @@ const MIN_PHONE_DIGITS = 8;
 const MAX_PHONE_DIGITS = 15; // E.164 maximum
 
 /**
- * Normalizes a business phone string (as free-text as "+91-9800000001")
- * into the digits-only form wa.me requires, or null if it isn't a
- * plausible phone number at all (section 14: "validate the phone number
- * before generating the action... do not invent a phone number"). Never
- * invents or pads digits — a too-short/too-long/missing value is simply
- * rejected.
+ * Normalizes an operator-typed phone string (as free-text as
+ * "+91-9800000001") into the digits-only form wa.me requires, or null if
+ * it isn't a plausible phone number at all (section 14: "validate the
+ * phone number before generating the action... do not invent a phone
+ * number"). Never invents or pads digits — a too-short/too-long/missing
+ * value is simply rejected.
+ *
+ * Still the right check for a number a human just typed — linking an
+ * account, recording an opt-out, sending a one-off message — because there
+ * is no Business row behind those and so nothing already parsed to read.
+ * It is no longer what decides whether a *scraped* business may be
+ * pitched: a digit count passes landlines and toll-free numbers just as
+ * happily as mobiles. lib/leads/phone.ts owns that question now.
  */
 export function normalizePhoneForWhatsApp(phone: string | null): string | null {
   if (!phone) return null;
@@ -66,7 +74,7 @@ export async function generateWhatsAppAction(db: PrismaClient, input: GenerateWh
     where: { id: input.leadId },
     include: {
       campaign: { select: { userId: true } },
-      business: { select: { phone: true } },
+      business: { select: { normalizedPhone: true, phoneType: true } },
       pitches: { where: { status: "GENERATED" }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -79,9 +87,12 @@ export async function generateWhatsAppAction(db: PrismaClient, input: GenerateWh
     throw new ConflictError("Generate a pitch for this lead before creating a WhatsApp action");
   }
 
-  const phoneDigits = normalizePhoneForWhatsApp(lead.business.phone);
+  // Reads the classification stored at ingest rather than re-deriving it:
+  // null here means no valid number, or one of a line type WhatsApp cannot
+  // reach, and either way there is nobody to send this to.
+  const phoneDigits = whatsappDigits(lead.business);
   if (!phoneDigits) {
-    throw new ValidationError("This lead's business has no valid phone number on file for WhatsApp");
+    throw new ValidationError("This lead's business has no WhatsApp-reachable phone number on file");
   }
 
   // Message text is exactly the verified Pitch content, URL-encoded for

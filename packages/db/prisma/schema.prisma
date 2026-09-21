@@ -416,6 +416,17 @@ model Business {
   normalizedAddress String?
   normalizedDomain  String?
 
+  // Line type, from the same libphonenumber parse that produces
+  // normalizedPhone above (lib/leads/phone.ts). Deliberately the *only*
+  // new phone column: normalizedPhone is already the validated E.164
+  // number, so "is this number valid" is `normalizedPhone IS NOT NULL` and
+  // needs no duplicate of its own. What could not be answered before is
+  // whether the number is a mobile — MOBILE and FIXED_LINE_OR_MOBILE are
+  // the two WhatsApp can reach (phone.ts::isPitchableType explains why the
+  // ambiguous one counts). Null for rows ingested before this existed,
+  // until the backfill script has run over them.
+  phoneType         String?
+
   // Set when this business was merged into another (lib/business/merge.ts).
   // Never hard-deleted — Lead.business stays onDelete: Restrict — so a
   // merged-away row still exists for history, just excluded from every
@@ -444,6 +455,11 @@ model Business {
   @@index([category])
   @@index([city])
   @@index([normalizedPhone])
+  // "which of this campaign's leads can actually be pitched" is a hot
+  // query now (run.service.ts's pitchable count, the dashboard's lead
+  // list) — with this it is an index scan, not a table read plus a regex
+  // per row in application code.
+  @@index([phoneType])
   @@index([normalizedDomain])
   @@index([normalizedName])
   @@index([mergedIntoId])

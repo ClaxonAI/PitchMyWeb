@@ -1,6 +1,6 @@
 import type { Business, Campaign, Lead, LeadPipeline, PrismaClient } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
+import { isPitchableBusiness } from "../leads/phone";
 import { emitEvent } from "../observability/events";
 import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service";
 import { calculateOpportunityScore } from "../scoring/scoring";
@@ -96,7 +96,7 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
   return leads.map((lead) => {
     const { score, estimated } = effectiveScore(lead);
     const pipeline = lead.pipelines[0] ?? null;
-    const hasValidPhone = normalizePhoneForWhatsApp(lead.business.phone) !== null;
+    const hasValidPhone = isPitchableBusiness(lead.business);
     return {
       id: lead.id,
       status: lead.status,
