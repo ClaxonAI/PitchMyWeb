@@ -111,6 +111,13 @@ jobs:
       - name: Seed reference data
         run: npm run db:seed
 
+      # apps/recorder-worker's integration test drives a real headless
+      # Chromium, exactly as the worker does in production. --with-deps pulls
+      # the shared libraries the runner image does not carry; bootstrap.sh
+      # does the same thing on the production box.
+      - name: Install Chromium for the recorder tests
+        run: npx playwright install --with-deps chromium
+
       - name: Typecheck
         run: npm run typecheck
 
