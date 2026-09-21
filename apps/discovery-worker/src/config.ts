@@ -45,10 +45,11 @@ const envSchema = z.object({
   // Which BusinessDiscoverySource this worker process runs — keep in sync
   // with apps/api's LEAD_PROVIDER for the same environment (osm <-> osm,
   // serper <-> serper), since apps/api decides *that* a search runs and
-  // this worker decides *how*.
-  DISCOVERY_SOURCE: z.enum(["osm", "serper"]).default("osm"),
-  // Google Maps + Google Search, via serper.dev. Required when
-  // DISCOVERY_SOURCE=serper; unused otherwise.
+  // this worker decides *how*. Defaults to serper to match apps/api's own
+  // LEAD_PROVIDER default; osm stays available for free/offline searching.
+  DISCOVERY_SOURCE: z.enum(["osm", "serper"]).default("serper"),
+  // Google Maps + Google Search, via serper.dev. Required for the default
+  // serper source (SSM: /pitchmyweb/prod/SERPER_API_KEY); unused under osm.
   SERPER_API_KEY: z.string().min(1).optional(),
   // AI enrichment (business summary/services/outreach message) for the
   // serper source, via LangChain + OpenAI. Optional even when
