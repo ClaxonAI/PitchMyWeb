@@ -5,6 +5,11 @@ export type SessionUser = { id: string; email: string; name: string | null; role
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
+// Mirrors apps/api's SESSION_COOKIE_NAME. Duplicated rather than imported
+// because the two apps do not share a module graph, and it is only used to
+// name the cookie in a diagnostic — nothing here depends on its value.
+const SESSION_COOKIE_NAME = "pmw_session";
+
 /**
  * Resolves the current session by asking the API (GET /api/me), the same
  * authority that guards every endpoint — not by inspecting the cookie
@@ -22,15 +27,30 @@ const API_URL = process.env.API_URL ?? "http://localhost:4000";
  * the old page's leniency without re-deriving why they differ.
  */
 export async function getSession(): Promise<SessionUser | null> {
-  const cookie = (await cookies()).toString();
+  const jar = await cookies();
+  const cookie = jar.toString();
   try {
     const response = await fetch(`${API_URL}/api/me`, {
       headers: cookie ? { Cookie: cookie } : {},
       cache: "no-store",
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // Says which half failed, because the two look identical from the
+      // browser — both land on /login with nothing else to go on. Either the
+      // session cookie never arrived (the exchange did not run, or its
+      // Set-Cookie was dropped) or it arrived and the API declined it
+      // (expired, revoked, or pointing at a row that no longer exists).
+      // Names only; no cookie values.
+      console.warn(
+        `[auth] /api/me refused with ${response.status}. Session cookie was ${
+          jar.has(SESSION_COOKIE_NAME) ? "present" : "ABSENT"
+        }; cookies on the request: ${jar.getAll().map((c) => c.name).join(", ") || "none"}`,
+      );
+      return null;
+    }
     return (await response.json()) as SessionUser;
-  } catch {
+  } catch (error) {
+    console.warn(`[auth] /api/me unreachable at ${API_URL}:`, error instanceof Error ? error.message : error);
     return null;
   }
 }
