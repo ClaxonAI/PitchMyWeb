@@ -60,16 +60,30 @@ export default async function CampaignsPage() {
             {campaigns.map((campaign) => (
               <TableRow key={campaign.id} className="cursor-pointer">
                 <TableCell className="font-medium">
-                  <Link href={`/campaigns/${campaign.id}`} className="hover:underline">
+                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -ml-4 block px-4 py-3 hover:underline">
                     {campaign.name}
                   </Link>
                 </TableCell>
-                <TableCell>{campaign.category}</TableCell>
-                <TableCell>{campaign.location}</TableCell>
                 <TableCell>
-                  <StatusBadge status={campaign.status} />
+                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
+                    {campaign.category}
+                  </Link>
                 </TableCell>
-                <TableCell className="text-dash-muted-foreground">{new Date(campaign.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
+                    {campaign.location}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
+                    <StatusBadge status={campaign.status} />
+                  </Link>
+                </TableCell>
+                <TableCell className="text-dash-muted-foreground">
+                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
+                    {new Date(campaign.createdAt).toLocaleDateString()}
+                  </Link>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
