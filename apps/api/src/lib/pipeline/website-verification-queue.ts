@@ -22,6 +22,20 @@ export function websiteVerificationQueue(): Queue<WebsiteVerificationJob> {
   return globalForVerification.verificationQueue;
 }
 
+/**
+ * Releases the process-wide connection above. Only the one-shot CLI needs
+ * this: inside the API the queue is meant to outlive any single request, but
+ * a cron invocation that leaves an open ioredis socket behind never exits —
+ * which is exactly how scripts/enqueue-website-verifications.ts hung, one
+ * stuck process per scheduled run.
+ */
+export async function closeWebsiteVerificationQueue(): Promise<void> {
+  await globalForVerification.verificationQueue?.close();
+  await globalForVerification.verificationRedis?.quit();
+  globalForVerification.verificationQueue = undefined;
+  globalForVerification.verificationRedis = undefined;
+}
+
 export async function enqueueWebsiteVerification(job: WebsiteVerificationJob): Promise<void> {
   const payload = websiteVerificationJobSchema.parse(job);
   await websiteVerificationQueue().add("verify", payload, {

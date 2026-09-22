@@ -7,13 +7,21 @@
 // their configuration from the environment PM2 inherits; see
 // docs/production-setup.md for loading it from SSM Parameter Store.
 //
-// All seven entries matter. The three web services are the visible half; if
-// any of the four workers is missing the dashboard still looks healthy while
+// All eight entries matter. The three web services are the visible half; if
+// any of the five workers is missing the dashboard still looks healthy while
 // campaigns quietly stop moving:
-//   whatsapp   nothing sends
-//   discovery  searches sit queued forever
-//   recorder   no demo videos, so pitches have nothing to link to
-//   jobs       stuck runs never expire and failed pitches are never retried
+//   whatsapp      nothing sends
+//   discovery     searches sit queued forever
+//   recorder      no demo videos, so pitches have nothing to link to
+//   jobs          stuck runs never expire and failed pitches are never retried
+//   verification  every business stays UNVERIFIED forever
+//
+// That last one is why this list is worth checking against apps/ rather than
+// trusting: apps/verification-worker existed, was tested, and was simply
+// never added here — so website verification had never run in production at
+// all, and nothing surfaced it because the dashboard deliberately renders
+// UNVERIFIED as no badge. src/lib/jobs/wiring.test.ts now fails if a worker
+// goes missing from this file again.
 //
 // max_memory_restart budgets fit 8 GB with room for the OS and nginx. The
 // recorder gets by far the largest share because it drives headless Chromium.
@@ -60,6 +68,11 @@ module.exports = {
     worker("pmw-whatsapp", "./apps/whatsapp-worker", "600M"),
 
     worker("pmw-discovery", "./apps/discovery-worker", "450M"),
+
+    // Also drives Playwright, but only escalates to it for an ambiguous
+    // "2xx but possibly parked" response, so it needs far less headroom than
+    // the recorder — most checks never open a browser page at all.
+    worker("pmw-verification", "./apps/verification-worker", "600M"),
 
     // Headless Chromium. By far the heaviest process here, and the one to look
     // at first if the box starts swapping.

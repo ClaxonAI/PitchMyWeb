@@ -15,7 +15,17 @@ const BASE_URL = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").repla
 const SECRET = process.env.INTERNAL_JOBS_SECRET?.trim();
 const INTERVAL_MS = Number(process.env.JOBS_INTERVAL_MS ?? 5 * 60 * 1000);
 const REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
-const JOBS = ["/api/internal/jobs/expire-stale-runs", "/api/internal/jobs/pipeline-maintenance"];
+// Every route under src/app/api/internal/jobs belongs here: these are the
+// only callers of any of them, so a route left out of this list is a job that
+// never runs anywhere. enqueue-website-verifications was missing for exactly
+// that reason — the endpoint, the job and the worker all existed and were
+// tested, and no scheduler ever asked for them. src/lib/jobs/wiring.test.ts
+// fails if the two lists drift apart again.
+const JOBS = [
+  "/api/internal/jobs/expire-stale-runs",
+  "/api/internal/jobs/pipeline-maintenance",
+  "/api/internal/jobs/enqueue-website-verifications",
+];
 
 if (!SECRET || SECRET.length < 24) {
   console.error("INTERNAL_JOBS_SECRET must be set (at least 24 characters). Exiting.");
