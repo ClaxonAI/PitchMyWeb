@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import type { Redis } from "ioredis";
 import { createRedisConnection } from "@pitchmyweb/contracts";
-import { RateLimitedError } from "../errors";
+import { RateLimitUnavailableError, RateLimitedError } from "../errors";
 
 // Fixed-window rate limiting (Phase 4 code-review finding #12).
 //
@@ -10,9 +10,8 @@ import { RateLimitedError } from "../errors";
 //   memory (default)  per-process Map. Fine for one instance, local dev and
 //                     tests; counts reset on restart and are not shared.
 //   redis             shared across every API instance (production). If
-//                     Redis is unreachable, the limiter degrades to the
-//                     memory store for that call instead of failing the
-//                     request or silently disabling limits.
+//                     Redis is unreachable, the request fails closed with a
+//                     503 rather than weakening protection per process.
 //
 // Callers use `await rateLimit(key, limit, windowMs)` and never care which
 // store is active. Keys are chosen by the caller (e.g. `login:ip:<ip>`) so
@@ -104,6 +103,9 @@ export type RateLimitOptions = { store?: "memory" | "redis"; redis?: Redis };
  */
 export async function rateLimit(key: string, limit: number, windowMs: number, options: RateLimitOptions = {}): Promise<void> {
   const store = options.store ?? rateLimitStore();
+  if (process.env.APP_ENV?.trim().toLowerCase() === "production" && store !== "redis") {
+    throw new RateLimitUnavailableError();
+  }
   if (store === "memory") {
     enforceRateLimit(key, limit, windowMs);
     return;
@@ -114,8 +116,7 @@ export async function rateLimit(key: string, limit: number, windowMs: number, op
     count = await incrementRedisWindow(options.redis ?? redisClient(), key, windowMs);
   } catch (error) {
     warnFallback(error);
-    enforceRateLimit(key, limit, windowMs);
-    return;
+    throw new RateLimitUnavailableError();
   }
   if (count > limit) throw new RateLimitedError();
 }

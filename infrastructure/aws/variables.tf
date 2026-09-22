@@ -33,6 +33,12 @@ variable "source_s3_url" {
   default     = "s3://pitchmyweb-prod-recordings-claxonai/deploy/current.tar.gz"
 }
 
+variable "ssh_cidr" {
+  description = "Optional administrator CIDR allowed to SSH to EC2; leave empty to require SSM Session Manager"
+  type        = string
+  default     = ""
+}
+
 variable "s3_bucket_name" {
   description = "S3 bucket name (must be globally unique)"
   type        = string
