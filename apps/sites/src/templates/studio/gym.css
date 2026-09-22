@@ -1,0 +1,184 @@
+/* sachu45 "gym" (HyperFit) design, scoped under .training. */
+
+.training {
+  --black: #101111;
+  --lime: #d7ff38;
+  --ash: #d1d1c9;
+  --white: #f4f4ee;
+  --rule: #4c4e49;
+  --soft: #aeaea7;
+  --training-font: var(--font-barlow-condensed), "Arial Narrow", Arial, sans-serif;
+  background: var(--black);
+  color: var(--white);
+  font-family: var(--training-font);
+  overflow-x: hidden;
+  overflow-x: clip;
+  overflow-wrap: break-word;
+  -webkit-tap-highlight-color: rgba(215, 255, 56, .22);
+}
+body:has(.training) { background: #101111; }
+:where(.training) a { color: inherit; }
+.training ::selection { background: var(--lime); color: var(--black); }
+.training :focus-visible { outline: 3px solid var(--lime); outline-offset: 3px; }
+.training-data :focus-visible, .training-faq :focus-visible, .training-voice :focus-visible { outline-color: var(--black); }
+.training [id] { scroll-margin-top: 5rem; }
+
+.training-kicker { margin: 0; color: var(--lime); font-size: .82rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.training h1, .training h2 { margin: 1.4rem 0; font-weight: 900; letter-spacing: -.03em; line-height: .84; text-transform: uppercase; }
+.training h1 { font-size: clamp(4.8rem, 10vw, 10rem); }
+.training h2 { font-size: clamp(3.2rem, 5.5vw, 6rem); }
+.training h1 em, .training h2 em { color: var(--lime); font-style: normal; }
+
+/* Nav */
+.training-nav { position: sticky; z-index: 20; top: 0; display: flex; height: 4.5rem; padding: 0 2rem; gap: 1rem; align-items: center; justify-content: space-between; border-bottom: 1px solid #3e403c; background: rgba(16, 17, 17, .94); backdrop-filter: blur(12px); }
+.training-mark { display: flex; min-width: 0; min-height: 44px; align-items: center; font-size: 1.2rem; font-weight: 900; letter-spacing: -.01em; text-decoration: none; text-transform: uppercase; }
+.training-mark i { margin-right: .55rem; color: var(--lime); font-style: normal; }
+.training-mark span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.training-nav nav { display: flex; height: 100%; align-items: center; }
+.training-nav nav a { display: flex; height: 100%; padding: 0 1.1rem; gap: .45rem; align-items: center; border-left: 1px solid #3e403c; font-size: .82rem; font-weight: 800; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; }
+.training-nav nav span { color: var(--lime); font-size: .72rem; }
+.training-nav nav a:hover { background: var(--lime); color: var(--black); }
+.training-nav nav a:hover span { color: var(--black); }
+.training-contact { display: inline-flex; flex-shrink: 0; min-height: 44px; padding: 0 .95rem; gap: 1.2rem; align-items: center; border: 1px solid var(--lime); color: var(--lime); font-size: .82rem; font-weight: 800; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; }
+.training-contact:hover { background: var(--lime); color: var(--black); }
+
+/* Hero */
+.training-hero { position: relative; display: grid; min-height: 44rem; padding: 6rem clamp(1.25rem, 9vw, 10rem) 4rem; gap: 3rem; grid-template-columns: minmax(0, 1fr) auto; align-items: end; overflow: hidden; background: #171918; }
+.training-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(215, 255, 56, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(215, 255, 56, .09) 1px, transparent 1px); background-size: 4rem 4rem; mask-image: linear-gradient(90deg, #000, transparent 72%); }
+.training-hero-copy { position: relative; z-index: 1; min-width: 0; }
+.training-hero-lead { display: flex; max-width: 32rem; margin-top: 2.5rem; gap: 1.2rem; align-items: start; }
+.training-hero-lead span { padding-top: .2rem; color: var(--lime); font-size: .8rem; font-weight: 800; }
+.training-hero-lead p { margin: 0; color: var(--soft); font-size: 1.2rem; line-height: 1.45; }
+.training-hero-link { display: inline-flex; min-height: 48px; margin-top: 2rem; padding: .75rem 0; gap: 4rem; align-items: center; border-top: 1px solid var(--white); border-bottom: 1px solid var(--white); font-size: .86rem; font-weight: 800; letter-spacing: .11em; text-decoration: none; text-transform: uppercase; }
+.training-hero-link b { color: var(--lime); font-size: 1.15rem; }
+.training-meter { position: relative; z-index: 1; display: grid; width: 18rem; height: 21rem; padding: 6.5rem 1.2rem 1.2rem; gap: .5rem; grid-template-columns: repeat(8, 1fr); align-items: end; border: 1px solid var(--lime); background: #111211; }
+.training-meter strong { position: absolute; top: 1.1rem; left: 1.2rem; color: var(--lime); font-size: 2.6rem; font-weight: 900; line-height: .9; }
+.training-meter > span { position: absolute; top: 1.3rem; right: 1.2rem; color: #a2a29b; font-size: .78rem; font-weight: 800; letter-spacing: .06em; line-height: 1.35; text-align: right; text-transform: uppercase; }
+.training-meter > span b { display: block; margin-top: .15rem; color: var(--white); font-size: 1.5rem; font-weight: 800; letter-spacing: 0; }
+.training-meter i { background: var(--lime); }
+.training-meter i:nth-of-type(1) { height: 25%; }
+.training-meter i:nth-of-type(2) { height: 42%; }
+.training-meter i:nth-of-type(3) { height: 38%; }
+.training-meter i:nth-of-type(4) { height: 60%; }
+.training-meter i:nth-of-type(5) { height: 53%; }
+.training-meter i:nth-of-type(6) { height: 78%; }
+.training-meter i:nth-of-type(7) { height: 70%; }
+.training-meter i:nth-of-type(8) { height: 100%; }
+
+/* Ticker: two identical lists slide by exactly one list width, so it loops seamlessly. */
+.training-ticker { overflow: hidden; background: var(--lime); color: var(--black); }
+.training-ticker-track { display: flex; width: max-content; animation: training-marquee 34s linear infinite; }
+.training-ticker ul { display: flex; margin: 0; padding: 1rem 1.75rem; gap: 3.5rem; list-style: none; font-size: .9rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.training-ticker li + li::before { margin-right: 3.5rem; content: "—"; }
+@keyframes training-marquee { to { transform: translateX(-50%); } }
+
+/* About: the numbers we actually have */
+.training-data { padding: 7rem clamp(1.25rem, 9vw, 10rem); background: var(--ash); color: var(--black); }
+.training-data header, .training-path header, .training-faq header { display: grid; gap: 1.5rem 3rem; grid-template-columns: .7fr 1.3fr; align-items: start; }
+.training-data .training-kicker { color: #3a4f31; }
+.training-data h2, .training-path h2, .training-faq h2 { margin: 0; }
+.training-data h2 em { color: #46603a; }
+.training-stats { display: grid; margin: 5rem 0 0; padding: 0; gap: 1px; border-top: 1px solid var(--black); border-bottom: 1px solid var(--black); background: var(--black); list-style: none; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+.training-stats li { min-height: 13rem; padding: 1.1rem; background: var(--ash); }
+.training-stats span { font-size: .8rem; font-weight: 800; }
+.training-stats strong { display: block; margin-top: 3.5rem; font-size: clamp(3.4rem, 6vw, 6rem); font-weight: 900; letter-spacing: -.02em; line-height: .85; }
+.training-stats p { margin: .8rem 0 0; color: #3b3d38; font-size: .86rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+
+/* Services */
+.training-programs { display: grid; padding: 7rem clamp(1.25rem, 8vw, 9rem); gap: 4rem; grid-template-columns: .7fr 1.3fr; }
+.training-programs-note { max-width: 22rem; margin: 2.5rem 0 0; color: #a2a29b; font-size: 1.05rem; font-weight: 400; line-height: 1.45; }
+.training-program-list { margin: 0; padding: 0; border-top: 1px solid var(--rule); list-style: none; }
+.training-program-list li { display: grid; padding: 1.3rem 0; gap: 1rem; grid-template-columns: 3rem minmax(0, 1.1fr) minmax(0, 1fr) auto; align-items: center; border-bottom: 1px solid var(--rule); }
+.training-program-list li > span { color: var(--lime); font-size: .82rem; font-weight: 800; }
+.training-program-list h3 { margin: 0; font-size: 1.65rem; font-weight: 800; line-height: 1.05; text-transform: uppercase; }
+.training-program-list p { margin: 0; color: var(--soft); font-size: 1.02rem; line-height: 1.45; }
+.training-program-list a { display: inline-flex; min-height: 44px; gap: .4rem; align-items: center; font-size: .82rem; font-weight: 800; letter-spacing: .09em; text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+.training-program-list li:hover h3, .training-program-list a:hover { color: var(--lime); }
+
+/* Visit steps */
+.training-path { padding: 7rem clamp(1.25rem, 9vw, 10rem); background: #242624; }
+.training-steps { display: grid; margin: 5rem 0 0; padding: 0; gap: 1px; border: 1px solid var(--rule); background: var(--rule); list-style: none; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.training-steps li { min-height: 15rem; padding: 1.25rem; background: #242624; }
+.training-steps li > span { color: var(--lime); font-size: .82rem; font-weight: 800; }
+.training-steps h3 { margin: 4rem 0 .8rem; font-size: 1.45rem; font-weight: 800; text-transform: uppercase; }
+.training-steps p { margin: 0; color: #b8b8b1; font-size: 1.05rem; line-height: 1.45; }
+
+/* FAQ */
+.training-faq { padding: 7rem clamp(1.25rem, 8vw, 9rem); background: var(--white); color: var(--black); }
+.training-faq .training-kicker { color: #3a4f31; }
+.training-faq h2 em { color: #46603a; }
+.training-faq-grid { display: grid; margin-top: 5rem; gap: 1px; border: 1px solid var(--black); background: var(--black); grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.training-faq-grid article { min-height: 15rem; padding: 1.4rem; background: var(--white); }
+.training-faq-grid article:first-child { background: var(--lime); }
+.training-faq-grid span { font-size: .82rem; font-weight: 800; }
+.training-faq-grid h3 { margin: 2.5rem 0 .75rem; font-size: 1.65rem; font-weight: 800; line-height: 1.05; text-transform: uppercase; }
+.training-faq-grid p { margin: 0; color: #33352f; font-size: 1.05rem; line-height: 1.45; }
+
+/* Rating */
+.training-voice { padding: 7rem clamp(1.25rem, 13vw, 14rem); background: var(--lime); color: var(--black); }
+.training-voice .training-kicker { color: #2c3a25; }
+.training-voice blockquote { max-width: 62rem; margin: 2rem 0; font-size: clamp(2.4rem, 4.5vw, 4.8rem); font-weight: 900; letter-spacing: -.01em; line-height: .95; text-transform: uppercase; }
+.training-voice-source { margin: 0; font-size: .9rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+
+/* Contact */
+.training-contact-section { display: grid; padding: 7rem clamp(1.25rem, 9vw, 10rem); gap: 4rem 6rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.training-contact-section address { display: grid; gap: .35rem; color: var(--soft); font-size: 1.1rem; font-style: normal; line-height: 1.55; }
+.training-phone { display: inline-flex; min-height: 44px; align-items: center; justify-self: start; color: var(--lime); text-decoration: none; }
+.training-cta-list { display: grid; border-top: 1px solid var(--rule); }
+.training-cta-list a { display: flex; min-height: 56px; padding: .9rem 0; gap: 1rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule); color: var(--lime); font-size: .92rem; font-weight: 800; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; transition: background .2s, color .2s, padding .2s; }
+.training-cta-list a:hover { padding-inline: 1rem; background: var(--lime); color: var(--black); }
+.training-cta-empty { margin: 0; padding: 1rem 0; border-bottom: 1px solid var(--rule); color: var(--soft); font-size: 1.1rem; }
+.training-map { min-height: 18rem; margin-top: 2rem; border: 1px solid var(--rule); background: #171918; }
+.training-map iframe { filter: grayscale(1) invert(.9) contrast(.9); }
+
+/* Footer */
+.training-footer { display: flex; padding: 1.5rem 2rem; gap: 1.5rem; align-items: baseline; justify-content: space-between; border-top: 1px solid var(--rule); color: #a2a29b; font-size: .92rem; line-height: 1.45; }
+.training-footer strong { color: var(--white); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.training-footer p { max-width: 34rem; margin: 0; }
+.training-footer a { display: inline-flex; min-height: 44px; align-items: center; color: var(--lime); font-weight: 800; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+
+@media (max-width: 1023px) {
+  .training-nav { background: #101111; backdrop-filter: none; }
+  .training-footer { padding-bottom: 6rem; }
+}
+
+@media (max-width: 900px) {
+  .training-programs { grid-template-columns: 1fr; gap: 2.5rem; }
+  .training-contact-section { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .training-nav { height: 4rem; padding: 0 1rem; }
+  .training-nav nav { display: none; }
+  .training-contact { padding: 0 .8rem; gap: .6rem; }
+  .training-hero { min-height: 0; padding: 3.5rem 1.25rem 3rem; gap: 2.5rem; grid-template-columns: 1fr; }
+  .training h1 { font-size: clamp(3.8rem, 19vw, 6.5rem); }
+  .training-hero-lead p { font-size: 1.1rem; }
+  .training-hero-link { display: flex; justify-content: space-between; }
+  .training-meter { width: 100%; height: 13rem; padding-top: 5.75rem; }
+  .training-data, .training-programs, .training-path, .training-faq, .training-contact-section, .training-voice { padding: 4.5rem 1.25rem; }
+  .training-data header, .training-path header, .training-faq header { grid-template-columns: 1fr; gap: 1rem; }
+  .training-stats, .training-steps, .training-faq-grid { margin-top: 2.5rem; }
+  .training-stats li { min-height: 0; padding: 1.1rem 1.1rem 1.4rem; }
+  .training-stats strong { margin-top: 1.5rem; }
+  .training-program-list li { grid-template-columns: 2.25rem minmax(0, 1fr); row-gap: .35rem; }
+  .training-program-list li > p, .training-program-list li > a { grid-column: 2; }
+  .training-program-list h3 { font-size: 1.5rem; }
+  .training-steps li, .training-faq-grid article { min-height: 0; }
+  .training-steps h3 { margin-top: 1.75rem; }
+  .training-faq-grid h3 { margin-top: 1.5rem; font-size: 1.45rem; }
+  .training-footer { display: grid; padding-inline: 1.25rem; gap: .75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .training-ticker-track { animation: none; }
+  .training-ticker-track ul + ul { display: none; }
+  .training-ticker ul { flex-wrap: wrap; row-gap: .5rem; white-space: normal; }
+}
+
+/* Landscape phones: the first screen must show the headline, not an empty hero. */
+@media (max-height: 560px) and (orientation: landscape) {
+  .training-hero { min-height: 0; padding-top: 2.5rem; padding-bottom: 3rem; align-items: start; }
+  .training h1 { font-size: clamp(3.6rem, 10vw, 6rem); }
+  .training-meter { height: 15rem; padding-top: 5.5rem; }
+}

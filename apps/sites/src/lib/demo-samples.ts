@@ -2,6 +2,7 @@ import {
   buildPreviewContent,
   isPreviewTemplate,
   type DentalContent,
+  type PreviewDesign,
   type PreviewTemplateCode,
 } from "@pitchmyweb/templates";
 
@@ -114,7 +115,7 @@ export function getDemoSample(template: string): DemoSample | null {
   return DEMO_SAMPLES[template];
 }
 
-export function buildDemoContent(template: PreviewTemplateCode): DentalContent {
+export function buildDemoContent(template: PreviewTemplateCode, design: PreviewDesign = "classic"): DentalContent {
   const sample = DEMO_SAMPLES[template];
   return buildPreviewContent(
     {
@@ -127,6 +128,6 @@ export function buildDemoContent(template: PreviewTemplateCode): DentalContent {
       reviewCount: sample.reviewCount,
     },
     {},
-    { template, now: new Date("2026-01-15T10:00:00.000Z") },
+    { template, design, now: new Date("2026-01-15T10:00:00.000Z") },
   );
 }
