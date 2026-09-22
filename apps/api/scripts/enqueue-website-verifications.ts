@@ -7,7 +7,7 @@
 // apps/api/.env like the API itself.
 import { prisma } from "../src/lib/db/client";
 import { runEnqueueWebsiteVerificationsJob } from "../src/lib/jobs/enqueue-website-verifications.job";
-import { enqueueWebsiteVerification } from "../src/lib/pipeline/website-verification-queue";
+import { closeWebsiteVerificationQueue, enqueueWebsiteVerification } from "../src/lib/pipeline/website-verification-queue";
 
 try {
   const result = await runEnqueueWebsiteVerificationsJob(prisma, (businessId) => enqueueWebsiteVerification({ businessId }));
@@ -17,5 +17,8 @@ try {
   console.error("enqueue-website-verifications failed:", error instanceof Error ? error.message : error);
   process.exitCode = 1;
 } finally {
+  // Both, or the process hangs on an open socket rather than exiting for the
+  // scheduler that invoked it.
+  await closeWebsiteVerificationQueue();
   await prisma.$disconnect();
 }
