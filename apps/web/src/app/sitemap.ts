@@ -17,17 +17,15 @@ type Entry = {
   path: string;
   /** Source file, so lastModified reflects a real content change. */
   source: string;
-  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
-  priority: number;
 };
 
 const ROUTES: Entry[] = [
-  { path: "/", source: "(marketing)/page.tsx", changeFrequency: "weekly", priority: 1 },
-  { path: "/pricing", source: "(marketing)/pricing/page.tsx", changeFrequency: "weekly", priority: 0.9 },
-  { path: "/contact", source: "(marketing)/contact/page.tsx", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/terms", source: "(marketing)/terms/page.tsx", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/privacy", source: "(marketing)/privacy/page.tsx", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/refunds", source: "(marketing)/refunds/page.tsx", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/", source: "(marketing)/page.tsx" },
+  { path: "/pricing", source: "(marketing)/pricing/page.tsx" },
+  { path: "/contact", source: "(marketing)/contact/page.tsx" },
+  { path: "/terms", source: "(marketing)/terms/page.tsx" },
+  { path: "/privacy", source: "(marketing)/privacy/page.tsx" },
+  { path: "/refunds", source: "(marketing)/refunds/page.tsx" },
 ];
 
 // A lastModified that moves on every deploy teaches crawlers to ignore the
@@ -48,7 +46,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return ROUTES.map((route) => ({
     url: absoluteUrl(route.path),
     lastModified: lastModified(route.source),
-    changeFrequency: route.changeFrequency,
-    priority: route.priority,
   }));
 }
