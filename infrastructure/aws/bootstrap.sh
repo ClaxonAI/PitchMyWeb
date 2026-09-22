@@ -24,6 +24,18 @@ echo "=== bootstrap $(date -Is) ==="
 
 step() { echo; echo "--- $* ---"; }
 
+# Every pm2 call goes through here so its state directory is never left to
+# chance. pm2 keeps its daemon state under $HOME/.pm2, and these calls reach
+# it through `sudo -u $APP_USER --preserve-env`, which carries the *caller's*
+# HOME through rather than the target user's. From a login shell that happens
+# to be right. Run from `ssm send-command`, where HOME is unset entirely, and
+# pm2 resolved /root/.pm2 instead: permission denied as the app user, and the
+# deploy died at the very last step, after the new build had already been
+# swapped in but before anything restarted — leaving the box serving the old
+# build with no sign anything was wrong. PM2_HOME is explicit and outranks
+# HOME, so this talks to the one real daemon however the script was invoked.
+app_pm2() { sudo -u "$APP_USER" --preserve-env PM2_HOME="/home/$APP_USER/.pm2" pm2 "$@"; }
+
 # --- system packages ------------------------------------------------------
 step "apt packages"
 export DEBIAN_FRONTEND=noninteractive
@@ -194,12 +206,12 @@ done
 step "pm2"
 # reload when already running so a redeploy does not drop the WhatsApp socket
 # any longer than necessary.
-if sudo -u "$APP_USER" --preserve-env pm2 describe pmw-web >/dev/null 2>&1; then
-  sudo -u "$APP_USER" --preserve-env pm2 reload ecosystem.config.cjs --update-env
+if app_pm2 describe pmw-web >/dev/null 2>&1; then
+  app_pm2 reload ecosystem.config.cjs --update-env
 else
-  sudo -u "$APP_USER" --preserve-env pm2 start ecosystem.config.cjs
+  app_pm2 start ecosystem.config.cjs
 fi
-sudo -u "$APP_USER" --preserve-env pm2 save
+app_pm2 save
 env PATH="$PATH" pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER" | tail -1 | bash || true
 
 # Only once the new build is being served: until pm2 has restarted, the old
@@ -215,7 +227,7 @@ step "nginx + tls"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}" bash infrastructure/aws/setup-nginx.sh
 
 step "status"
-sudo -u "$APP_USER" --preserve-env pm2 list
+app_pm2 list
 
 echo
 echo "=== bootstrap finished $(date -Is) ==="
