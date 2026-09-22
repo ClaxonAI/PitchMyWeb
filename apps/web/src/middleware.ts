@@ -41,7 +41,12 @@ export default clerkMiddleware((_auth, request) => {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // The extension list is what keeps static files out of this middleware.
+    // Anything missing from it gets the hint cookie's Set-Cookie attached,
+    // which stops any shared cache or CDN from serving that file — for a
+    // cookie the request will never send back. webp covers public/images
+    // (every logo there is one); txt|xml cover /robots.txt and /sitemap.xml.
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|webp|ttf|woff2?|ico|csv|docx?|xlsx?|zip|txt|xml|webmanifest)).*)",
     "/(api|trpc)(.*)",
     "/__clerk/:path*",
   ],
