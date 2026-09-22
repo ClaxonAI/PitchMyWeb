@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Fraunces, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -7,7 +6,10 @@ const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
 const fraunces = Fraunces({
   subsets: ["latin"],
   variable: "--font-fraunces",
-  axes: ["opsz", "SOFT"],
+  // opsz keeps the display optical size the headlines are drawn at. The SOFT
+  // axis it used to carry nearly doubled the download (263 KB -> 145 KB for
+  // both styles) for a barely visible rounding of the terminals.
+  axes: ["opsz"],
   style: ["normal", "italic"],
   // next/font's automatic fallback is sized to match Fraunces' x-height, which
   // leaves it 24.5% too wide and re-wrapped the headline when the real font
@@ -18,7 +20,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://pitchmyweb.com"),
+  metadataBase: new URL(process.env.APP_URL?.trim() || "https://pitchmyweb.in"),
   title: {
     default: "PitchMyWeb — Show them the website before they ask for one",
     template: "%s · PitchMyWeb",
@@ -47,13 +49,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     // server-rendered markup. This tells React that specific mismatch is
     // expected, without suppressing hydration warnings anywhere else.
     <html lang="en" className={`${manrope.variable} ${fraunces.variable}`} suppressHydrationWarning>
-      <body>
-        {/* No publishableKey prop: the SDK reads NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-            itself, and clerkMiddleware() reads that same variable and nothing
-            else. Passing it here from a differently-named variable is what
-            previously left the middleware with an empty key. */}
-        <ClerkProvider>{children}</ClerkProvider>
-      </body>
+      {/* ClerkProvider lives in (marketing)/(auth)/layout.tsx, the only pages
+          that sign people in; see that file. */}
+      <body>{children}</body>
     </html>
   );
 }

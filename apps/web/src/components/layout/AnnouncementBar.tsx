@@ -15,7 +15,7 @@ export function AnnouncementBar() {
         href="/pricing"
         className="group mx-auto flex h-14 max-w-[1160px] items-center justify-center gap-2 px-4 text-center text-[12.5px] sm:h-10"
       >
-        <span className="rounded-[5px] bg-lime px-1.5 py-0.5 font-mono text-[10px] font-medium text-ink">NEW</span>
+        <span className="rounded-[5px] bg-lime px-1.5 py-0.5 font-mono text-[11px] font-medium text-ink">NEW</span>
         <span className="text-white/75">Foreign campaigns are live: reach further, pay per batch.</span>
         <ArrowRight size={13} className="text-white/50 transition-transform group-hover:translate-x-0.5" />
       </Link>

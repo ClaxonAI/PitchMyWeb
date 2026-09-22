@@ -17,7 +17,7 @@ export function TrustStrip() {
   return (
     <section aria-label="Businesses we build for" className="border-y border-ink/8 bg-mist-2">
       <div className="flex items-center">
-        <p className="eyebrow hidden shrink-0 border-r border-ink/8 px-8 py-5 text-ink/35 md:block">
+        <p className="eyebrow hidden shrink-0 border-r border-ink/8 px-8 py-5 text-ink/60 md:block">
           Built for
         </p>
         <div className="relative flex-1 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_6%,black_94%,transparent)]">

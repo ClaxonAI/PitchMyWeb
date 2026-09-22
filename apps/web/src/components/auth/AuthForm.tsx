@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { ApiError, authApi } from "@/lib/api-client";
@@ -41,26 +40,37 @@ const googleErrors: Record<string, string> = {
 
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  // Set when this page was reached via a post-payment redirect from
-  // /pricing (CheckoutDialog.tsx) — carried through to register/login so
+  // orderId is set when this page was reached via a post-payment redirect
+  // from /pricing (CheckoutDialog.tsx) — carried through to register/login so
   // apps/api can attach the paid order to the account being created/used
   // (see lib/checkout/checkout.service.ts's claimOrder). Absent for the
   // ordinary sign-up/sign-in flow with no prior purchase.
-  const orderId = searchParams.get("orderId");
-  const oauthError = searchParams.get("error");
+  //
+  // Both query values are read after mount rather than with useSearchParams:
+  // that hook opts the whole form out of static rendering, so the page used
+  // to ship with no form at all and a phone saw an empty page until the
+  // JavaScript arrived. Neither value is needed for the first paint.
+  const [orderId, setOrderId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    oauthError ? googleErrors[oauthError] ?? "Sign-in failed. Please try again." : null,
-  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setOrderId(params.get("orderId"));
+    const oauthError = params.get("error");
+    // "session" belongs to the social buttons, which show their own message.
+    if (oauthError && oauthError !== "session") setError(googleErrors[oauthError] ?? "Sign-in failed. Please try again.");
+  }, []);
   const [pending, setPending] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>();
   const text = copy[mode];
 
   useEffect(() => {
     let active = true;
-    FingerprintJS.load().then((agent) => agent.get()).then((result) => {
+    // Loaded on demand: the form works without it, so it stays out of the
+    // sign-in page bundle.
+    import("@fingerprintjs/fingerprintjs").then(({ default: FingerprintJS }) => FingerprintJS.load()).then((agent) => agent.get()).then((result) => {
       if (active) setFingerprintId(result.visitorId);
     }).catch(() => undefined);
     return () => { active = false; };
@@ -107,7 +117,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
         <div className="my-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-ink/10" />
-          <span className="font-mono text-[10px] tracking-[0.18em] text-ink/35 uppercase">or</span>
+          <span className="font-mono text-[11px] tracking-[0.18em] text-ink/60 uppercase">or</span>
           <span className="h-px flex-1 bg-ink/10" />
         </div>
 
@@ -150,7 +160,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </Button>
         </form>
 
-        <p className="mt-6 text-[13px] text-ink/55">
+        <p className="mt-6 text-[13px] text-ink/60">
           {text.altText}{" "}
           <Link
             href={orderId ? `${text.altHref}?orderId=${encodeURIComponent(orderId)}` : text.altHref}

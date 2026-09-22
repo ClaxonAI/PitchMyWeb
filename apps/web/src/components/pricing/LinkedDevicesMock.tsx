@@ -38,7 +38,7 @@ export function LinkedDevicesMock() {
         <span
           className={cn(
             "rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide",
-            stage === "linked" ? "bg-whatsapp/15 text-[#0a7a3c]" : "bg-ink/5 text-ink/45",
+            stage === "linked" ? "bg-whatsapp/15 text-[#0a7a3c]" : "bg-ink/5 text-ink/60",
           )}
         >
           {stage === "linked" ? "CONNECTED" : "NOT LINKED"}
@@ -48,7 +48,7 @@ export function LinkedDevicesMock() {
       <div className="flex flex-1 items-center justify-center p-4">
         {stage === "idle" && (
           <div className="flex animate-pop flex-col items-center">
-            <div className="flex items-end gap-2 text-ink/25">
+            <div className="flex items-end gap-2 text-ink/60">
               <Smartphone size={34} strokeWidth={1.25} />
               <span className="mb-3 w-8 border-t-2 border-dashed border-ink/15" />
               <Laptop size={44} strokeWidth={1.25} />
@@ -82,13 +82,13 @@ export function LinkedDevicesMock() {
             </button>
             <div className="max-w-[150px]">
               <p className="text-[13px] font-semibold">{stage === "linking" ? "Linking…" : "Scan with WhatsApp"}</p>
-              <p className="mt-1 text-[11px] leading-snug text-ink/50">
-                Settings → Linked devices → Link a device. <span className="text-ink/35">(Tap the code to try it.)</span>
+              <p className="mt-1 text-[11px] leading-snug text-ink/60">
+                Settings → Linked devices → Link a device. <span className="text-ink/60">(Tap the code to try it.)</span>
               </p>
               <button
                 type="button"
                 onClick={() => setStage("idle")}
-                className="mt-2 text-[11px] text-ink/40 underline underline-offset-2 hover:text-ink"
+                className="mt-2 text-[11px] text-ink/60 underline underline-offset-2 hover:text-ink"
               >
                 Cancel
               </button>
@@ -100,11 +100,11 @@ export function LinkedDevicesMock() {
           <div className="flex animate-pop flex-col items-center text-center">
             <CheckCircle2 size={36} className="text-whatsapp" strokeWidth={1.75} />
             <p className="mt-3 text-sm font-semibold">You&apos;re connected</p>
-            <p className="mt-1 text-xs text-ink/50">20 pitches will send from this number.</p>
+            <p className="mt-1 text-xs text-ink/60">20 pitches will send from this number.</p>
             <button
               type="button"
               onClick={() => setStage("idle")}
-              className="mt-3 text-[11px] text-ink/40 underline underline-offset-2 hover:text-ink"
+              className="mt-3 text-[11px] text-ink/60 underline underline-offset-2 hover:text-ink"
             >
               Reset preview
             </button>

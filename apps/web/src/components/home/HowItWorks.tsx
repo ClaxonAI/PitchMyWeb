@@ -26,7 +26,7 @@ function FindVisual() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium">{lead.name}</p>
-            <p className="text-[11px] text-ink/40">{lead.meta}</p>
+            <p className="text-[11px] text-ink/60">{lead.meta}</p>
           </div>
           <span className="shrink-0 rounded-md bg-coral/10 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-[#c2412f]">
             NO SITE
@@ -55,7 +55,7 @@ function RecordVisual() {
         <span className="h-1 flex-1 rounded-full bg-white/10">
           <span className="block h-1 w-2/5 rounded-full bg-lime" />
         </span>
-        <span className="font-mono text-[10px] tabular-nums text-white/45">0:12 / 0:30</span>
+        <span className="font-mono text-[10px] tabular-nums text-white/60">0:12 / 0:30</span>
       </div>
     </div>
   );
@@ -70,7 +70,7 @@ function SendVisual() {
       <div className="max-w-[80%] rounded-[14px] rounded-tl-[4px] bg-white px-3.5 py-2.5 text-[12px] leading-relaxed shadow-sm">
         This is really nice. Can we talk tomorrow?
       </div>
-      <div className="flex items-center gap-1.5 pt-1 font-mono text-[9px] text-ink/35">
+      <div className="flex items-center gap-1.5 pt-1 font-mono text-[9px] text-ink/60">
         <Send size={10} />
         sent from +91 ••••• 43210
       </div>
@@ -111,7 +111,7 @@ export function HowItWorks() {
       <Container>
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
           <SectionHeading eyebrow="How it works" title="Four steps. You only do the last one." />
-          <p className="max-w-[320px] text-[15px] leading-relaxed text-ink/55 lg:pb-2">
+          <p className="max-w-[320px] text-[15px] leading-relaxed text-ink/60 lg:pb-2">
             Everything before the reply is handled for you. Everything after it is where you earn.
           </p>
         </div>
@@ -131,7 +131,7 @@ export function HowItWorks() {
               </span>
 
               <div className="flex h-[168px] items-center">
-                <div className="w-full">{step.visual}</div>
+                <div aria-hidden className="w-full">{step.visual}</div>
               </div>
 
               <div className="mt-6 flex items-center gap-3">
@@ -140,7 +140,7 @@ export function HowItWorks() {
                 </span>
                 <h3 className="text-[16px] font-semibold tracking-tight">{step.title}</h3>
               </div>
-              <p className="mt-2.5 text-[13px] leading-relaxed text-ink/50">{step.body}</p>
+              <p className="mt-2.5 text-[13px] leading-relaxed text-ink/60">{step.body}</p>
             </li>
           ))}
         </ol>

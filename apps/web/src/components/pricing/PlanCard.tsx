@@ -40,13 +40,13 @@ export function PlanCard({ plan, onCheckout }: { plan: Plan; onCheckout: (order:
 
       <header>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="eyebrow flex items-center gap-2 text-ink/55">
+          <span className="eyebrow flex items-center gap-2 text-ink/60">
             <Icon size={14} /> {plan.name}
           </span>
-          <span className="font-mono text-[10px] tracking-[0.12em] text-ink/45 uppercase">{plan.bestFor}</span>
+          <span className="font-mono text-[11px] tracking-[0.12em] text-ink/60 uppercase">{plan.bestFor}</span>
         </div>
         <h2 className="display mt-4 text-[34px] leading-tight">{plan.headline}</h2>
-        <p className="mt-2 max-w-md text-[15px] leading-relaxed text-ink/55">{plan.summary}</p>
+        <p className="mt-2 max-w-md text-[15px] leading-relaxed text-ink/60">{plan.summary}</p>
       </header>
 
       <div className="mt-6">{plan.id === "auto" ? <LinkedDevicesMock /> : <LinkPackMock batchSize={plan.batchSize} />}</div>
@@ -87,10 +87,10 @@ export function PlanCard({ plan, onCheckout }: { plan: Plan; onCheckout: (order:
               <p className="flex items-baseline gap-2">
                 <span className="display text-5xl leading-none">{formatPrice({ amount: total, currency })}</span>
                 {coupon && (
-                  <span className="font-mono text-sm text-ink/35 line-through">{formatPrice({ amount: subtotal, currency })}</span>
+                  <span className="font-mono text-sm text-ink/60 line-through">{formatPrice({ amount: subtotal, currency })}</span>
                 )}
               </p>
-              <p className="mt-1.5 text-[13px] text-ink/45">
+              <p className="mt-1.5 text-[13px] text-ink/60">
                 {plan.batchSize} {plan.unitLabel} · one-time
               </p>
             </div>

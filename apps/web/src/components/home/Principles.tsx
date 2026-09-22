@@ -29,7 +29,7 @@ export function Principles() {
         <p className="eyebrow text-primary">Why PitchMyWeb</p>
         <p className="display mt-6 max-w-4xl text-[34px] leading-[1.1] sm:text-5xl">
           Owners don&apos;t need to be told they need a website.{" "}
-          <span className="text-ink/30">They need to see theirs.</span>
+          <span className="text-ink/60">They need to see theirs.</span>
         </p>
 
         <div className="mt-16 grid gap-10 md:grid-cols-3 md:gap-8">
@@ -40,7 +40,7 @@ export function Principles() {
                   <Icon size={20} strokeWidth={1.75} />
                 </span>
                 <h3 className="mt-5 text-[17px] font-semibold tracking-tight">{title}</h3>
-                <p className="mt-2.5 text-[15px] leading-relaxed text-ink/50">{body}</p>
+                <p className="mt-2.5 text-[15px] leading-relaxed text-ink/60">{body}</p>
               </div>
             </div>
           ))}

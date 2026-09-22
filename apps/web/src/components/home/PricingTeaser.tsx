@@ -40,7 +40,7 @@ export function PricingTeaser() {
                   <span className={cn("grid size-8 place-items-center rounded-xl", dark ? "bg-white/10" : "bg-primary/8")}>
                     <Icon size={15} className={dark ? "text-lilac" : "text-primary"} />
                   </span>
-                  <span className={cn("eyebrow", dark ? "text-white/50" : "text-ink/50")}>{plan.name}</span>
+                  <span className={cn("eyebrow", dark ? "text-white/50" : "text-ink/60")}>{plan.name}</span>
                 </div>
 
                 <h3 className="display mt-5 text-3xl leading-tight">{plan.headline}</h3>
@@ -49,7 +49,7 @@ export function PricingTeaser() {
                   <span className="display text-[4rem] leading-none font-normal tabular-nums">
                     {formatPrice(getPrice(plan, "india"))}
                   </span>
-                  <span className={cn("text-sm leading-snug", dark ? "text-white/40" : "text-ink/40")}>
+                  <span className={cn("text-sm leading-snug", dark ? "text-white/60" : "text-ink/60")}>
                     per batch<br />
                     of {plan.batchSize} {plan.unitLabel}
                   </span>

@@ -142,7 +142,7 @@
   .display {
     font-family: var(--font-display);
     font-weight: 400;
-    font-variation-settings: "opsz" 96, "SOFT" 30;
+    font-variation-settings: "opsz" 96;
     letter-spacing: -0.018em;
   }
   .grid-paper {

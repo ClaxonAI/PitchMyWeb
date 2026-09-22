@@ -5,7 +5,13 @@
  * should feel like the clinic's own site. Three calm themes, picked per
  * clinic by the template builder and applied with data-theme on the root.
  */
-@theme {
+/* `inline` is load-bearing: without it Tailwind declares --color-brand etc. on
+   :root, where var(--site-brand) resolves once to the teal default, and every
+   descendant inherits that finished value — so data-theme="violet" (or amber,
+   ember…) only changed the few spots that read --site-* directly, and every
+   classic preview rendered teal. Inlined, utilities read var(--site-*) at the
+   element, inside the data-theme scope. */
+@theme inline {
   --color-page: var(--site-page);
   --color-paper: var(--site-paper);
   --color-ink: var(--site-ink);

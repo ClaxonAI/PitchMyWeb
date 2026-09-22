@@ -33,7 +33,7 @@ export function Accordion({ items, defaultOpen = 0 }: { items: AccordionItem[]; 
                     "grid size-7 shrink-0 place-items-center rounded-full border transition-all duration-300",
                     isOpen
                       ? "rotate-45 border-primary bg-primary text-white shadow-[0_0_0_4px_rgb(51_54_205/0.1)]"
-                      : "border-ink/12 bg-white text-ink/50 hover:border-primary/40 hover:text-primary",
+                      : "border-ink/12 bg-white text-ink/60 hover:border-primary/40 hover:text-primary",
                   )}
                 >
                   <Plus size={14} strokeWidth={2.5} />
@@ -49,7 +49,7 @@ export function Accordion({ items, defaultOpen = 0 }: { items: AccordionItem[]; 
               )}
             >
               <div className="overflow-hidden">
-                <p className="max-w-xl pr-10 pb-6 text-[15px] leading-[1.7] text-ink/55">{item.answer}</p>
+                <p className="max-w-xl pr-10 pb-6 text-[15px] leading-[1.7] text-ink/60">{item.answer}</p>
               </div>
             </div>
           </div>

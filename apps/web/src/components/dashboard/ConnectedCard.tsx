@@ -32,7 +32,7 @@ export function ConnectedCard({
             <p className="mt-1 font-mono text-[15px] text-ink">
               {state.phoneNumber ? `+${state.phoneNumber}` : "Number syncing…"}
             </p>
-            <p className="mt-1.5 text-[12px] text-ink/50">Last active {formatLastSeen(state.lastSeenAt)}</p>
+            <p className="mt-1.5 text-[12px] text-ink/60">Last active {formatLastSeen(state.lastSeenAt)}</p>
           </div>
         </div>
 
@@ -41,7 +41,7 @@ export function ConnectedCard({
         </Button>
       </div>
 
-      <p className="mt-4 border-t border-whatsapp/20 pt-4 text-[12px] leading-relaxed text-ink/55">
+      <p className="mt-4 border-t border-whatsapp/20 pt-4 text-[12px] leading-relaxed text-ink/60">
         Disconnecting unlinks this device in WhatsApp, deletes the stored credentials, and cancels anything still queued.
         Your message history stays.
       </p>

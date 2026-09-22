@@ -159,7 +159,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="-mt-1 -mr-2 rounded-lg p-2 text-ink/40 hover:bg-ink/5 hover:text-ink"
+              className="-mt-1 -mr-2 rounded-lg p-2 text-ink/60 hover:bg-ink/5 hover:text-ink"
             >
               <X size={18} />
             </button>
@@ -167,13 +167,13 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
 
           <dl className="mt-7 space-y-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-ink/55">Leads from</dt>
+              <dt className="text-ink/60">Leads from</dt>
               <dd className="font-medium">
                 {order.market === "india" ? "India" : order.country.name}
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-ink/55">Batch price</dt>
+              <dt className="text-ink/60">Batch price</dt>
               <dd className="font-mono">{formatPrice({ amount: order.subtotal, currency: order.currency })}</dd>
             </div>
             {order.coupon && (
@@ -202,7 +202,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
             {pending ? <Lock size={15} /> : <Check size={15} />}
             {pending ? "Opening Razorpay…" : "Pay with Razorpay"}
           </Button>
-          <p className="mt-3 text-center text-[11px] text-ink/40">You will be charged {formatPrice({ amount: total, currency: order.currency })}</p>
+          <p className="mt-3 text-center text-[11px] text-ink/60">You will be charged {formatPrice({ amount: total, currency: order.currency })}</p>
         </div>
       )}
     </dialog>

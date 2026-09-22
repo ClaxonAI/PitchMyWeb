@@ -46,7 +46,7 @@ export function ProblemSection() {
             ))}
           </ul>
 
-          <p className="mt-5 text-right font-mono text-[11px] tracking-wide text-ink/40 sm:text-[12px]">
+          <p className="mt-5 text-right font-mono text-[11px] tracking-wide text-ink/60 sm:text-[12px]">
             8 hours a day · Max 7–8 pitches · most people quit here
           </p>
 
@@ -90,7 +90,7 @@ export function ProblemSection() {
             <p className="truncate text-[14px] font-semibold text-white sm:text-[15px]">
               Start a campaign from {foreignAuto}
             </p>
-            <p className="truncate text-[12px] text-white/45">India &amp; Global · Automatic or Direct</p>
+            <p className="truncate text-[12px] text-white/60">India &amp; Global · Automatic or Direct</p>
           </div>
           <Link
             href="/pricing"

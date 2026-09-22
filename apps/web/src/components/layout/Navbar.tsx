@@ -3,28 +3,29 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Show, UserButton, useAuth } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { navLinks } from "@/data/site";
 import { cn } from "@/lib/utils";
-import { exchangeClerkSession } from "@/lib/clerk-session";
+
+// Set by middleware.ts whenever the app session cookie (HttpOnly) exists.
+// Read after mount: the marketing pages are static, so the server-rendered
+// navbar is always the signed-out one.
+function useSignedIn(): boolean {
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    setSignedIn(/(?:^|;\s*)pmw_signed_in=1(?:;|$)/.test(document.cookie));
+  }, []);
+  return signedIn;
+}
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
-  const { getToken } = useAuth();
-
-  const goToDashboard = async (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    // Only enter the dashboard once the app session exists; otherwise it just
-    // redirects back to /login and the user loops.
-    if (await exchangeClerkSession(getToken)) window.location.assign("/dashboard");
-    else window.location.assign("/login?error=session");
-  };
+  const signedIn = useSignedIn();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -38,8 +39,10 @@ export function Navbar() {
       className={cn(
         "sticky top-0 z-50 border-b transition-all duration-300",
         scrolled || open
-          ? "border-ink/10 bg-white/90 shadow-[0_1px_0_0_rgb(10_10_10/0.06)] backdrop-blur-xl"
-          : "border-white/0 bg-white/60 backdrop-blur-md",
+          // Blur only from md up: on phones it re-renders every scroll frame
+          // (jank on budget GPUs) behind a header that is nearly opaque anyway.
+          ? "border-ink/10 bg-white/95 shadow-[0_1px_0_0_rgb(10_10_10/0.06)] md:bg-white/90 md:backdrop-blur-xl"
+          : "border-white/0 bg-white/90 md:bg-white/60 md:backdrop-blur-md",
       )}
     >
       <Container className="flex h-16 items-center justify-between gap-6">
@@ -53,8 +56,8 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "relative px-3 py-2 text-sm transition-colors duration-200 hover:text-ink",
-                  active ? "text-ink font-medium" : "text-ink/50",
+                  "relative inline-flex min-h-11 items-center px-3 text-sm transition-colors duration-200 hover:text-ink",
+                  active ? "text-ink font-medium" : "text-ink/60",
                 )}
               >
                 {link.label}
@@ -67,14 +70,14 @@ export function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Show when="signed-out">
-            <Button href="/login" variant="ghost" size="sm" className="text-ink/60">Sign in</Button>
-            <Button href="/register" variant="primary" size="sm">Start pitching</Button>
-          </Show>
-          <Show when="signed-in">
-            <Button href="/dashboard" onClick={goToDashboard} variant="primary" size="sm">Go To Dashboard</Button>
-            <UserButton />
-          </Show>
+          {signedIn ? (
+            <Button href="/dashboard" variant="primary" size="sm">Go to dashboard</Button>
+          ) : (
+            <>
+              <Button href="/login" variant="ghost" size="sm" className="text-ink/70">Sign in</Button>
+              <Button href="/register" variant="primary" size="sm">Start pitching</Button>
+            </>
+          )}
         </div>
 
         <button
@@ -82,14 +85,14 @@ export function Navbar() {
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="-mr-2 grid size-10 place-items-center rounded-lg transition-colors hover:bg-mist md:hidden"
+          className="-mr-2 grid size-11 place-items-center rounded-lg transition-colors hover:bg-mist md:hidden"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       </Container>
 
       {open && (
-        <div className="animate-rise border-t border-ink/8 bg-white/95 backdrop-blur-xl md:hidden">
+        <div className="animate-rise border-t border-ink/8 bg-white md:hidden">
           <Container className="flex flex-col py-3">
             {navLinks.map((link) => (
               <Link
@@ -104,19 +107,14 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Show when="signed-out">
-              <Button href="/login" variant="ghost" className="mt-3 w-full">Sign in</Button>
-              <Button href="/register" variant="primary" className="mt-2 w-full">Start pitching</Button>
-            </Show>
-            <Show when="signed-in">
-              <div className="mt-3 flex flex-col gap-2 rounded-xl border border-ink/8 px-4 py-3">
-                <Button href="/dashboard" onClick={goToDashboard} variant="primary" className="w-full">Go To Dashboard</Button>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-sm font-medium">Your account</span>
-                  <UserButton />
-                </div>
-              </div>
-            </Show>
+            {signedIn ? (
+              <Button href="/dashboard" variant="primary" className="mt-3 w-full">Go to dashboard</Button>
+            ) : (
+              <>
+                <Button href="/login" variant="ghost" className="mt-3 w-full">Sign in</Button>
+                <Button href="/register" variant="primary" className="mt-2 w-full">Start pitching</Button>
+              </>
+            )}
           </Container>
         </div>
       )}

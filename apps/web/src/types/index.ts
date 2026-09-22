@@ -45,6 +45,8 @@ export type SampleSite = {
   cta: string;
   theme: { bg: string; fg: string; accent: string; muted: string };
   layout: "split" | "centered" | "editorial";
+  /** Which apps/sites layout the demo and its preview image use. */
+  design: "classic" | "studio";
 };
 
 export type Testimonial = {

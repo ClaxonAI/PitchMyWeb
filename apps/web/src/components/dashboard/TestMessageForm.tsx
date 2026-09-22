@@ -57,7 +57,7 @@ export function TestMessageForm({ accountId, onSent }: { accountId: string; onSe
   return (
     <div className="rounded-card border border-ink/8 bg-white p-5 sm:p-6">
       <p className="text-sm font-semibold">Send a test message</p>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-ink/55">
+      <p className="mt-1.5 text-[13px] leading-relaxed text-ink/60">
         Use your own second number, or a contact who has agreed to hear from you.
       </p>
 
@@ -106,7 +106,7 @@ export function TestMessageForm({ accountId, onSent }: { accountId: string; onSe
 
       {preview && (
         <div className="mt-5 rounded-2xl border border-ink/8 bg-mist-2 p-4">
-          <p className="text-[11px] tracking-wide text-ink/45 uppercase">Preview</p>
+          <p className="text-[11px] tracking-wide text-ink/60 uppercase">Preview</p>
           <p className="mt-1 font-mono text-[12px] text-ink/60">to +{preview.phoneNumber}</p>
           <p className="mt-2.5 text-[13px] leading-relaxed whitespace-pre-wrap text-ink/80">{preview.body}</p>
           {!preview.policy.allowed && (
