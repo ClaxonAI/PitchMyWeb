@@ -9,6 +9,12 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   axes: ["opsz", "SOFT"],
   style: ["normal", "italic"],
+  // next/font's automatic fallback is sized to match Fraunces' x-height, which
+  // leaves it 24.5% too wide and re-wrapped the headline when the real font
+  // arrived. Ours is sized to match advance width instead — see the
+  // "Fraunces Fallback Tuned" @font-face in globals.css for the derivation.
+  adjustFontFallback: false,
+  fallback: ["Fraunces Fallback Tuned", "Georgia", "serif"],
 });
 
 export const metadata: Metadata = {

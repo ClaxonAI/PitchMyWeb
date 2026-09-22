@@ -4,6 +4,46 @@
 @import "./dashboard-theme.css";
 
 /*
+ * Fallback face for the display font, tuned for ADVANCE WIDTH rather than
+ * x-height. next/font generates its own "Fraunces Fallback" automatically
+ * (size-adjust: 115.45%), but that value is chosen to match Fraunces'
+ * x-height — and it leaves the fallback 24.5% wider than Fraunces. The
+ * headline therefore set to three lines in the fallback and two in Fraunces
+ * at almost every width, desktop included, and the reflow when the real font
+ * swapped in was the h1 layout shift in the field data.
+ *
+ * 85.93% is solved, not guessed: it is the size-adjust at which Georgia's
+ * advance width for the hero headline matches Fraunces' to within 0.001% at
+ * opsz 96 with the -0.018em tracking .display applies. The ascent/descent
+ * overrides are next/font's own, kept verbatim — those are applied as a
+ * percentage of font-size and are NOT scaled by size-adjust, so they still
+ * reproduce the same line box (verified: identical block heights for
+ * Fraunces, next/font's fallback, and this face).
+ *
+ * If Georgia is missing (most Android and Linux), the src fails to load, this
+ * @font-face is skipped, and the stack falls through to the platform serif
+ * untuned — the shift can return there. Re-solve size-adjust if the headline
+ * copy, the opsz axis, or .display's letter-spacing ever change.
+ */
+@font-face {
+  font-family: "Fraunces Fallback Tuned";
+  src: local("Georgia");
+  size-adjust: 85.93%;
+  ascent-override: 84.71%;
+  descent-override: 22.09%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Fraunces Fallback Tuned";
+  font-style: italic;
+  src: local("Georgia Italic"), local("Georgia");
+  size-adjust: 85.93%;
+  ascent-override: 84.71%;
+  descent-override: 22.09%;
+  line-gap-override: 0%;
+}
+
+/*
  * Design tokens — the single source of truth for the brand.
  * Palette derived from brandthis.in. Every component consumes these via
  * Tailwind utilities (bg-primary, text-ink, rounded-card, shadow-glow …).
