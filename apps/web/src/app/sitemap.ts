@@ -8,22 +8,20 @@ import { SITE_URL } from "@/lib/site-url";
 // (/#how, /#samples, /#faq) are absent too -- they are fragments of a page
 // already listed, not separate documents.
 const routes = [
-  { path: "/", changeFrequency: "weekly", priority: 1 },
-  { path: "/pricing", changeFrequency: "weekly", priority: 0.9 },
-  { path: "/contact", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
-  { path: "/refunds", changeFrequency: "yearly", priority: 0.3 },
-] as const satisfies readonly { path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }[];
+  { path: "/" },
+  { path: "/pricing" },
+  { path: "/contact" },
+  { path: "/terms" },
+  { path: "/privacy" },
+  { path: "/refunds" },
+] as const satisfies readonly { path: string }[];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   // These pages are statically prerendered, so the build is genuinely the last
   // point at which any of them could have changed.
   const lastModified = new Date();
-  return routes.map(({ path, changeFrequency, priority }) => ({
+  return routes.map(({ path }) => ({
     url: `${SITE_URL}${path}`,
     lastModified,
-    changeFrequency,
-    priority,
   }));
 }
