@@ -163,6 +163,31 @@
   }
 }
 
+/* The landing page server-renders all eleven of its sections into the HTML —
+ * SEO and no-JS visitors both need them there — but that is ~200 KB of markup,
+ * and style + layout for it was 1.7s of a phone's main thread before anything
+ * could paint. content-visibility lets the browser skip layout and paint for a
+ * subtree while it is far off-screen, and do the work as it scrolls into range.
+ * The paired contain-intrinsic-size supplies a placeholder height so the
+ * scrollbar stays honest; `auto` tells the browser to remember each section's
+ * real measured height once it has laid it out, so a section is only ever
+ * estimated once and the guess only affects the first scroll through.
+ * 1100px is measured, not arbitrary: these nine sections run 626-1744px at
+ * desktop width (median 926) and 772-1761px on a phone (median 1147), so it
+ * sits between the two medians and keeps the initial scrollbar within a few
+ * hundred px either way. Applied only below the fold — see (marketing)/page.tsx.
+ *
+ * This buys paint speed and pays a little main-thread time for it. Measured on
+ * a production build (Lighthouse mobile, median of 3): style+layout 1862ms ->
+ * 1175ms, FCP 2716ms -> 2567ms, Speed Index 3477ms -> 3241ms, LCP and CLS
+ * unchanged. TBT moves 138ms -> 153ms, the one cost — deferred layout lands in
+ * larger chunks once the page is interactive. Most of what first looked like a
+ * much larger TBT penalty was the placeholder being wrong, not the technique. */
+@utility defer-offscreen {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1100px;
+}
+
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: rgb(10 10 10 / 0.15) transparent;
