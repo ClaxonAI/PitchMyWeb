@@ -1,6 +1,15 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+// This file has to live in src/, next to app/ — not at the package root.
+// Next only looks for middleware beside the app directory, so while this sat
+// at apps/web/middleware.ts it was never compiled: the built
+// middleware-manifest.json listed no middleware at all, and nothing here ran
+// in any environment. It went unnoticed while the file only called
+// clerkMiddleware(), which nothing server-side depended on, and surfaced the
+// moment the navbar started reading the hint cookie below and every visitor
+// rendered as signed out. Moving it back would fail silently again.
+
 // pmw_session, the app's own session cookie, is HttpOnly, so the statically
 // rendered marketing pages cannot see it. Mirror only its presence into a
 // readable hint cookie so the navbar can offer "Dashboard" to anyone who is
