@@ -1,18 +1,26 @@
 import type { Metadata } from "next";
 import { ShieldCheck } from "lucide-react";
 import { FAQSection } from "@/components/home/FAQSection";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { AfterPayment } from "@/components/pricing/AfterPayment";
 import { PlanGrid } from "@/components/pricing/PlanGrid";
 import { Container } from "@/components/ui/Container";
+import { pageMetadata } from "@/lib/seo/metadata";
+import { pricingSchemaGraph } from "@/lib/seo/structured-data";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
+  path: "/pricing",
   title: "Pricing",
   description: "Two ways to pitch: Auto sends from your WhatsApp, Direct gives you one-tap links. Pay per batch.",
-};
+});
 
 export default function PricingPage() {
   return (
     <>
+      {/* Breadcrumb plus the two batches as schema.org Offers, priced from
+          data/plans.ts — the same file PlanGrid renders, so the markup
+          cannot quote a price the page does not show. */}
+      <JsonLd schema={pricingSchemaGraph()} />
       <section className="relative overflow-hidden bg-mist-2 pt-14 pb-20 lg:pt-20 lg:pb-28">
         <div aria-hidden className="grid-paper pointer-events-none absolute inset-0" />
         <Container className="relative">

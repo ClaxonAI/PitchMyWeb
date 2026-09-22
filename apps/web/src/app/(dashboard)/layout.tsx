@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/require-session";
+import { noIndex } from "@/lib/seo/metadata";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
-export const metadata: Metadata = { title: { default: "Dashboard", template: "%s · PitchMyWeb" } };
+export const metadata: Metadata = { title: { default: "Dashboard", template: "%s · PitchMyWeb" }, ...noIndex };
 
 // Every request into this subtree depends on the session cookie, so it can
 // never be static — same reasoning the original /dashboard/whatsapp page

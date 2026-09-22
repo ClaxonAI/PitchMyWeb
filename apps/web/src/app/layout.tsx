@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { siteUrl } from "@/lib/seo/site-url";
 import "./globals.css";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
@@ -20,20 +21,50 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.APP_URL?.trim() || "https://pitchmyweb.in"),
+  // Absolute-URL base for every canonical, og:image and og:url below. Read
+  // from one place so the sitemap and robots.txt cannot drift from it; see
+  // lib/seo/site-url.ts.
+  metadataBase: new URL(siteUrl),
   title: {
     default: "PitchMyWeb — Show them the website before they ask for one",
     template: "%s · PitchMyWeb",
   },
   description:
     "PitchMyWeb finds local businesses without a website, builds each one a real sample site and demo, and pitches it from your WhatsApp.",
+  applicationName: "PitchMyWeb",
+  // Not a canonical: `alternates` is inherited by every route, so setting one
+  // here would point the whole site at "/". Pages set their own via
+  // lib/seo/metadata.ts’s pageMetadata().
   openGraph: {
-    title: "PitchMyWeb",
-    description: "Pitch the website, not the idea.",
     type: "website",
+    siteName: "PitchMyWeb",
+    locale: "en_IN",
+    title: "PitchMyWeb — Show them the website before they ask for one",
+    description: "Pitch the website, not the idea.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PitchMyWeb — Show them the website before they ask for one",
+    description: "Pitch the website, not the idea.",
+  },
+  // Defaults for the whole site. The private routes turn this off for
+  // themselves (see lib/seo/metadata.ts’s noIndex); robots.txt blocks
+  // them too, and the two have to agree.
+  //
+  // The googleBot block is what earns a large image in the search result and
+  // an untruncated snippet — Google caps both conservatively without it.
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
 };
-
 // Kept deliberately minimal: only <html>/<body>, fonts, and base metadata.
 // The marketing chrome (announcement bar/navbar/footer) lives in
 // (marketing)/layout.tsx and must not wrap (dashboard) routes — see that
