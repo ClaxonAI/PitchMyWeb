@@ -61,8 +61,5 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: absoluteUrl("/sitemap.xml"),
-    // Declares which origin is canonical for crawlers that still read the
-    // directive, and costs nothing for those that do not.
-    host: siteUrl,
   };
 }
