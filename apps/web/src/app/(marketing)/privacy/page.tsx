@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/layout/LegalPage";
 import { siteConfig } from "@/data/site";
 
-export const metadata: Metadata = { title: "Privacy Policy" };
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "What PitchMyWeb collects, why it is collected, how long it is kept, and the choices you have over your data.",
+  alternates: { canonical: "/privacy" },
+};
 
 // DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function PrivacyPage() {

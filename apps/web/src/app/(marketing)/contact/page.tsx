@@ -5,7 +5,12 @@ import { ContactForm } from "@/components/contact/ContactForm";
 import { Container } from "@/components/ui/Container";
 import { siteConfig } from "@/data/site";
 
-export const metadata: Metadata = { title: "Contact" };
+export const metadata: Metadata = {
+  title: "Contact",
+  description:
+    "Questions about batches, billing or a refund? Email the PitchMyWeb team and get a reply within one working day.",
+  alternates: { canonical: "/contact" },
+};
 
 const details = [
   { icon: Mail, label: "Email", value: siteConfig.email, href: `mailto:${siteConfig.email}` },

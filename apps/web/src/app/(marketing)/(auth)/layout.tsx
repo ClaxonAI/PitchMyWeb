@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+
+// Sign-in and sign-up carry no content worth ranking, and an indexed /login
+// competing with the landing page on brand queries is a net loss.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 // Clerk is only needed where people actually sign in: social sign-in on
 // /login and /register, and the OAuth return on /sso-callback. Mounting it

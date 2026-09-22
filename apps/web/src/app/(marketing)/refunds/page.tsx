@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/layout/LegalPage";
 import { siteConfig } from "@/data/site";
 
-export const metadata: Metadata = { title: "Refund Policy" };
+export const metadata: Metadata = {
+  title: "Refund Policy",
+  description:
+    "When a PitchMyWeb batch qualifies for a refund, how a short batch is handled, and how to request one.",
+  alternates: { canonical: "/refunds" },
+};
 
 // DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function RefundsPage() {

@@ -8,6 +8,7 @@ import { Container } from "@/components/ui/Container";
 export const metadata: Metadata = {
   title: "Pricing",
   description: "Two ways to pitch: Auto sends from your WhatsApp, Direct gives you one-tap links. Pay per batch.",
+  alternates: { canonical: "/pricing" },
 };
 
 export default function PricingPage() {

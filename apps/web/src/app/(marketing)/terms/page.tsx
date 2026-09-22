@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/layout/LegalPage";
 
-export const metadata: Metadata = { title: "Terms of Service" };
+export const metadata: Metadata = {
+  title: "Terms of Service",
+  description:
+    "The terms that govern use of PitchMyWeb: what a batch includes, how pitches are sent, and the responsibilities on each side.",
+  alternates: { canonical: "/terms" },
+};
 
 // DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function TermsPage() {

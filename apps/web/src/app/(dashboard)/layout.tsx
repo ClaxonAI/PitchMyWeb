@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth/require-session";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
-export const metadata: Metadata = { title: { default: "Dashboard", template: "%s · PitchMyWeb" } };
+export const metadata: Metadata = {
+  title: { default: "Dashboard", template: "%s · PitchMyWeb" },
+  // Kept crawlable in robots.txt on purpose (see app/robots.ts) so a crawler
+  // reaching these URLs actually reads this directive rather than guessing
+  // from an inbound link. Nothing behind sign-in belongs in an index.
+  robots: { index: false, follow: false },
+};
 
 // Every request into this subtree depends on the session cookie, so it can
 // never be static — same reasoning the original /dashboard/whatsapp page
