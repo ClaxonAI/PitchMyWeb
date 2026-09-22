@@ -39,13 +39,13 @@ export function LinkPanel({
           <span
             className={cn(
               "rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide",
-              state.status === "CONNECTED" ? "bg-whatsapp/15 text-[#0a7a3c]" : "bg-ink/5 text-ink/45",
+              state.status === "CONNECTED" ? "bg-whatsapp/15 text-[#0a7a3c]" : "bg-ink/5 text-ink/60",
             )}
           >
             {state.status.replace(/_/g, " ")}
           </span>
           {!state.live && (
-            <span className="font-mono text-[9px] tracking-wide text-ink/35" title="Live updates unavailable; polling instead">
+            <span className="font-mono text-[9px] tracking-wide text-ink/60" title="Live updates unavailable; polling instead">
               POLLING
             </span>
           )}
@@ -63,7 +63,7 @@ export function LinkPanel({
               onClick={() => setTab(value)}
               className={cn(
                 "rounded-t-xl border-b-2 px-3 pb-2.5 text-[13px] transition",
-                tab === value ? "border-primary text-ink" : "border-transparent text-ink/50 hover:text-ink",
+                tab === value ? "border-primary text-ink" : "border-transparent text-ink/60 hover:text-ink",
               )}
             >
               {value === "qr" ? "Scan a QR code" : "Use my phone number"}
@@ -79,12 +79,12 @@ export function LinkPanel({
               {state.qrDataUrl ? (
                 <Image src={state.qrDataUrl} alt="WhatsApp linking QR code" width={216} height={216} unoptimized className="size-[216px]" />
               ) : linking ? (
-                <div className="flex flex-col items-center gap-3 text-ink/35">
+                <div className="flex flex-col items-center gap-3 text-ink/60">
                   <RefreshCw size={28} strokeWidth={1.5} className="animate-spin" />
                   <p className="text-[11px]">Asking WhatsApp for a code…</p>
                 </div>
               ) : (
-                <div className="flex items-end gap-2 text-ink/20">
+                <div className="flex items-end gap-2 text-ink/60">
                   <Smartphone size={34} strokeWidth={1.25} />
                   <span className="mb-3 w-8 border-t-2 border-dashed border-ink/15" />
                   <Laptop size={44} strokeWidth={1.25} />
@@ -106,7 +106,7 @@ export function LinkPanel({
               <Button onClick={onConnect} disabled={pending} size="sm" className="mt-5">
                 {state.qrDataUrl ? "Get a new code" : pending ? "Starting…" : "Show QR code"}
               </Button>
-              <p className="mt-3 text-[11px] leading-snug text-ink/40">
+              <p className="mt-3 text-[11px] leading-snug text-ink/60">
                 A code expires after about a minute. Ask for a new one whenever you need it.
               </p>
             </div>
@@ -121,9 +121,9 @@ export function LinkPanel({
 
             {state.pairingCode ? (
               <div className="mt-5 rounded-2xl border border-whatsapp/30 bg-whatsapp/8 px-5 py-4">
-                <p className="text-[11px] tracking-wide text-ink/50 uppercase">Your pairing code</p>
+                <p className="text-[11px] tracking-wide text-ink/60 uppercase">Your pairing code</p>
                 <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-ink">{state.pairingCode}</p>
-                <p className="mt-2 text-[12px] leading-snug text-ink/55">
+                <p className="mt-2 text-[12px] leading-snug text-ink/60">
                   On your phone: Settings → Linked devices → Link a device → Link with phone number instead.
                 </p>
               </div>

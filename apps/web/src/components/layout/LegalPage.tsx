@@ -27,7 +27,7 @@ export function LegalPage({
                 <li key={s.heading}>
                   <a
                     href={`#section-${i + 1}`}
-                    className="-ml-px block border-l border-transparent pl-4 text-[13px] text-ink/50 transition-colors hover:border-primary hover:text-ink"
+                    className="-ml-px block border-l border-transparent pl-4 text-[13px] text-ink/60 transition-colors hover:border-primary hover:text-ink"
                   >
                     {s.heading}
                   </a>
@@ -39,7 +39,7 @@ export function LegalPage({
 
         <article className="max-w-2xl">
           <h1 className="display text-5xl sm:text-6xl">{title}</h1>
-          <p className="mt-4 font-mono text-xs text-ink/40">Last updated {updated}</p>
+          <p className="mt-4 font-mono text-xs text-ink/60">Last updated {updated}</p>
           <p className="mt-8 text-lg leading-relaxed text-ink/70">{intro}</p>
 
           <div className="mt-12 space-y-12">

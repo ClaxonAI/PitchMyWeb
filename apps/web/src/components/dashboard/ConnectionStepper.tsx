@@ -38,12 +38,12 @@ export function ConnectionStepper({ current }: { current: number }) {
                 "grid size-6 shrink-0 place-items-center rounded-full border font-mono text-[10px] transition",
                 done && "border-whatsapp bg-whatsapp text-white",
                 active && !done && "border-primary bg-primary text-white",
-                !done && !active && "border-ink/15 bg-white text-ink/40",
+                !done && !active && "border-ink/15 bg-white text-ink/60",
               )}
             >
               {done ? <Check size={12} strokeWidth={3} /> : index + 1}
             </span>
-            <span className={cn("text-[13px] whitespace-nowrap", active || done ? "text-ink" : "text-ink/45")}>{label}</span>
+            <span className={cn("text-[13px] whitespace-nowrap", active || done ? "text-ink" : "text-ink/60")}>{label}</span>
             {index < STEPS.length - 1 && <span aria-hidden className="hidden h-px flex-1 bg-ink/10 sm:block" />}
           </li>
         );

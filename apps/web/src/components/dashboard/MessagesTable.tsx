@@ -4,14 +4,14 @@ import { cn } from "@/lib/utils";
 import type { WaMessageStatus, WhatsAppMessage } from "@/lib/api-client";
 
 const TONE: Record<WaMessageStatus, string> = {
-  QUEUED: "bg-ink/5 text-ink/50",
+  QUEUED: "bg-ink/5 text-ink/60",
   SENDING: "bg-primary/10 text-primary",
   SENT: "bg-whatsapp/12 text-[#0a7a3c]",
   DELIVERED: "bg-whatsapp/15 text-[#0a7a3c]",
   READ: "bg-whatsapp/20 text-[#0a7a3c]",
   FAILED: "bg-coral/12 text-[#c2412f]",
   BLOCKED: "bg-coral/12 text-[#c2412f]",
-  CANCELLED: "bg-ink/5 text-ink/40",
+  CANCELLED: "bg-ink/5 text-ink/60",
 };
 
 // `failureReason` holds a policy reason code for BLOCKED rows. Codes are
@@ -39,7 +39,7 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
   if (messages.length === 0) {
     return (
       <div className="rounded-card border border-dashed border-ink/12 bg-white px-5 py-10 text-center">
-        <p className="text-[13px] text-ink/45">Nothing sent yet. Your messages and their delivery status will show up here.</p>
+        <p className="text-[13px] text-ink/60">Nothing sent yet. Your messages and their delivery status will show up here.</p>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-ink/6 text-[11px] tracking-wide text-ink/40 uppercase">
+            <tr className="border-b border-ink/6 text-[11px] tracking-wide text-ink/60 uppercase">
               <th scope="col" className="px-5 py-2.5 font-medium">To</th>
               <th scope="col" className="px-5 py-2.5 font-medium">Message</th>
               <th scope="col" className="px-5 py-2.5 font-medium">Status</th>
@@ -70,9 +70,9 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
                   <span className={cn("rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide", TONE[message.status])}>
                     {message.status}
                   </span>
-                  {describe(message) && <span className="ml-2 text-[11px] text-ink/45">{describe(message)}</span>}
+                  {describe(message) && <span className="ml-2 text-[11px] text-ink/60">{describe(message)}</span>}
                 </td>
-                <td className="px-5 py-3 text-[12px] whitespace-nowrap text-ink/45">{time(message.queuedAt)}</td>
+                <td className="px-5 py-3 text-[12px] whitespace-nowrap text-ink/60">{time(message.queuedAt)}</td>
               </tr>
             ))}
           </tbody>

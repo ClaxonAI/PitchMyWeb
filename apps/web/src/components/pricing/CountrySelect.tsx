@@ -109,7 +109,7 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
       >
         <CodeChip code={country.code} />
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] text-ink/45">Target country</span>
+          <span className="block text-[11px] text-ink/60">Target country</span>
           <span className="block truncate text-[15px] font-medium">{country.name}</span>
         </span>
         <span className="hidden rounded-lg bg-primary/8 px-2 py-1 font-mono text-[11px] whitespace-nowrap text-primary min-[380px]:inline">
@@ -117,7 +117,7 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
         </span>
         <ChevronDown
           size={16}
-          className={cn("shrink-0 text-ink/40 transition-transform duration-200", open && "rotate-180 text-primary")}
+          className={cn("shrink-0 text-ink/60 transition-transform duration-200", open && "rotate-180 text-primary")}
         />
       </button>
 
@@ -129,7 +129,7 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
           )}
         >
           <div className="flex items-center gap-2.5 border-b border-ink/6 px-4">
-            <Search size={15} className="shrink-0 text-ink/35" />
+            <Search size={15} className="shrink-0 text-ink/60" />
             <input
               autoFocus
               role="combobox"
@@ -144,13 +144,13 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
               }}
               onKeyDown={onSearchKey}
               placeholder="Search country or currency"
-              className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-ink/35"
+              className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-ink/60"
             />
           </div>
 
           <ul ref={listRef} id={listId} role="listbox" aria-label="Countries" className="scrollbar-thin max-h-64 overflow-y-auto overscroll-contain p-1.5">
             {results.length === 0 && (
-              <li className="px-3 py-8 text-center text-sm text-ink/45">No country matches “{query}”</li>
+              <li className="px-3 py-8 text-center text-sm text-ink/60">No country matches “{query}”</li>
             )}
             {results.map((c, i) => {
               const selected = c.code === value;
@@ -173,11 +173,11 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
                     <span className={cn("block truncate text-sm", selected ? "font-semibold" : "font-medium")}>
                       {c.name}
                     </span>
-                    <span className="block font-mono text-[11px] text-ink/40">
+                    <span className="block font-mono text-[11px] text-ink/60">
                       1 {c.currency} ≈ {formatInr(c.inrRate)}
                     </span>
                   </span>
-                  <span className="font-mono text-[11px] text-ink/45">{c.currency}</span>
+                  <span className="font-mono text-[11px] text-ink/60">{c.currency}</span>
                   <span className="grid w-4 place-items-center">
                     {selected && <Check size={15} className="text-primary" strokeWidth={2.5} />}
                   </span>
@@ -186,7 +186,7 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
             })}
           </ul>
 
-          <p className="border-t border-ink/6 bg-mist-2 px-4 py-2 text-[11px] text-ink/40">
+          <p className="border-t border-ink/6 bg-mist-2 px-4 py-2 text-[11px] text-ink/60">
             Rates are approximate · ↑↓ to move, Enter to select
           </p>
         </div>

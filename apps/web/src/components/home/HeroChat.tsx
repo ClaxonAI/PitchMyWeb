@@ -20,14 +20,15 @@ export function HeroChat() {
   }, [step]);
 
   return (
-    <div className="relative mx-auto w-full max-w-[400px]">
+    // An illustration of the flow; the surrounding copy says the same in words.
+    <div aria-hidden className="relative mx-auto w-full max-w-[400px]">
       {/* The lead, as found on Maps */}
       <div className="absolute -top-6 -left-4 z-20 w-[210px] -rotate-3 rounded-2xl border border-ink/8 bg-white p-3.5 shadow-soft sm:-left-14">
-        <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-wider text-ink/40 uppercase">
+        <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-wider text-ink/60 uppercase">
           <MapPin size={11} /> Lead found
         </div>
         <p className="mt-1.5 text-sm font-semibold">Morrow Coffee</p>
-        <div className="mt-1 flex items-center gap-1 text-[11px] text-ink/50">
+        <div className="mt-1 flex items-center gap-1 text-[11px] text-ink/60">
           <Star size={11} className="fill-[#f5b400] text-[#f5b400]" /> 4.7 · 318 reviews
         </div>
         <span className="mt-2.5 inline-block rounded-md bg-coral/12 px-1.5 py-0.5 font-mono text-[9px] font-medium text-[#c2412f]">
@@ -89,7 +90,7 @@ export function HeroChat() {
           </span>
           New reply
         </p>
-        <p className="mt-0.5 text-[11px] text-ink/50">Straight to your WhatsApp</p>
+        <p className="mt-0.5 text-[11px] text-ink/60">Straight to your WhatsApp</p>
       </div>
     </div>
   );

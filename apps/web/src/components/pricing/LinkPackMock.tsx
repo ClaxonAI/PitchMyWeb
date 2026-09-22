@@ -21,7 +21,7 @@ export function LinkPackMock({ batchSize }: { batchSize: number }) {
   return (
     <div className="grid h-[248px] grid-cols-[.9fr_1.1fr] overflow-hidden rounded-2xl border border-ink/8 bg-white">
       <div className="flex flex-col border-r border-ink/6">
-        <p className="border-b border-ink/6 px-3 py-3 font-mono text-[9px] tracking-wider text-ink/40">
+        <p className="border-b border-ink/6 px-3 py-3 font-mono text-[9px] tracking-wider text-ink/60">
           YOUR LINKS · {sent.length}/{batchSize} SENT
         </p>
         <ul className="flex-1 space-y-1 p-1.5">
@@ -40,7 +40,7 @@ export function LinkPackMock({ batchSize }: { batchSize: number }) {
                   {sent.includes(i) ? (
                     <span className="size-1.5 shrink-0 rounded-full bg-whatsapp" />
                   ) : (
-                    <ArrowUpRight size={12} className="shrink-0 text-ink/30" />
+                    <ArrowUpRight size={12} className="shrink-0 text-ink/60" />
                   )}
                 </span>
                 <span className="mt-0.5 block truncate font-mono text-[9px] text-primary/80">wa.me/{l.phone}</span>
@@ -48,7 +48,7 @@ export function LinkPackMock({ batchSize }: { batchSize: number }) {
             </li>
           ))}
         </ul>
-        <p className="px-3 pb-2.5 text-[10px] text-ink/35">+ {batchSize - leads.length} more</p>
+        <p className="px-3 pb-2.5 text-[10px] text-ink/60">+ {batchSize - leads.length} more</p>
       </div>
 
       <div className="flex min-w-0 flex-col">
@@ -62,14 +62,14 @@ export function LinkPackMock({ batchSize }: { batchSize: number }) {
         </div>
         <div className="flex items-center gap-1.5 bg-[#f0f2f5] p-2">
           <span className="min-w-0 flex-1 truncate rounded-full bg-white px-3 py-1.5 text-[10.5px] text-ink/70">
-            {isSent ? <span className="text-ink/35">Message</span> : lead.message}
+            {isSent ? <span className="text-ink/60">Message</span> : lead.message}
           </span>
           <button
             type="button"
             disabled={isSent}
             onClick={() => setSent((s) => [...s, active])}
             aria-label="Send pitch"
-            className="grid size-7 shrink-0 place-items-center rounded-full bg-whatsapp-deep text-white transition hover:brightness-110 disabled:opacity-40"
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-whatsapp-deep text-white transition hover:brightness-110 disabled:opacity-40"
           >
             <SendHorizontal size={13} />
           </button>

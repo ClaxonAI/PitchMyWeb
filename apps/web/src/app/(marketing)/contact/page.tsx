@@ -31,7 +31,7 @@ export default function ContactPage() {
                   <Icon size={17} />
                 </span>
                 <div>
-                  <p className="text-xs text-ink/45">{label}</p>
+                  <p className="text-xs text-ink/60">{label}</p>
                   {href ? (
                     <Link href={href} className="text-[15px] font-medium hover:text-primary">
                       {value}

@@ -29,8 +29,8 @@ export function SegmentedControl<T extends string>({
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "flex-1 rounded-[9px] px-3 py-1.5 text-[13px] font-medium transition",
-              active ? "bg-white text-ink shadow-[0_1px_3px_rgb(0_0_0/0.1)]" : "text-ink/50 hover:text-ink",
+              "min-h-10 flex-1 rounded-[9px] px-3 py-2 text-[13px] font-medium transition",
+              active ? "bg-white text-ink shadow-[0_1px_3px_rgb(0_0_0/0.1)]" : "text-ink/60 hover:text-ink",
             )}
           >
             {option.label}

@@ -25,7 +25,7 @@ export function CouponField({ applied, onApply }: Props) {
           type="button"
           onClick={() => onApply(null)}
           aria-label="Remove coupon"
-          className="rounded-md p-1 text-ink/50 hover:bg-white/60 hover:text-ink"
+          className="rounded-md p-1 text-ink/60 hover:bg-white/60 hover:text-ink"
         >
           <X size={14} />
         </button>
@@ -38,7 +38,7 @@ export function CouponField({ applied, onApply }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-[13px] text-ink/50 underline-offset-4 transition-colors hover:text-primary hover:underline"
+        className="flex min-h-11 items-center gap-1.5 text-[13px] text-ink/60 underline-offset-4 transition-colors hover:text-primary hover:underline"
       >
         <Ticket size={14} /> Have a coupon?
       </button>

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
-import { useSearchParams } from "next/navigation";
 import { exchangeClerkSession } from "@/lib/clerk-session";
 import { Github } from "lucide-react";
 
@@ -22,9 +21,16 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
-  const sessionFailed = useSearchParams().get("error") === "session";
   const [pending, setPending] = useState<Provider | null>(null);
-  const [error, setError] = useState<string | null>(sessionFailed ? "We couldn't start your session. Please try again." : null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Read after mount (not useSearchParams) so the sign-in form stays in the
+  // static HTML; see AuthForm.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "session") {
+      setError("We couldn't start your session. Please try again.");
+    }
+  }, []);
 
   // An SSO round trip can land the visitor back here already signed in with
   // Clerk but without this app's session cookie — Clerk returns them to

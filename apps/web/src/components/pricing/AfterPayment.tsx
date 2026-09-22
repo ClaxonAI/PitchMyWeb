@@ -30,7 +30,7 @@ export function AfterPayment() {
             <li key={step.title} className="bg-white p-6">
               <span className="font-mono text-xs text-primary">0{i + 1}</span>
               <h3 className="mt-6 text-base font-semibold tracking-tight">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink/55">{step.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink/60">{step.body}</p>
             </li>
           ))}
         </ol>

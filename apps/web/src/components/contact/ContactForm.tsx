@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const topics = ["Choosing a plan", "A batch I bought", "Refunds", "Partnerships", "Something else"];
 
 const fieldClass =
-  "w-full rounded-2xl border border-ink/10 bg-white px-4 text-[15px] outline-none transition placeholder:text-ink/30 focus:border-primary focus:ring-4 focus:ring-primary/10";
+  "w-full rounded-2xl border border-ink/10 bg-white px-4 text-[15px] outline-none transition placeholder:text-ink/60 focus:border-primary focus:ring-4 focus:ring-primary/10";
 
 /**
  * Opens the visitor's email app with the message pre-filled.
@@ -37,7 +37,7 @@ export function ContactForm() {
               aria-pressed={topic === t}
               onClick={() => setTopic(t)}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 text-[13px] transition",
+                "min-h-11 rounded-full border px-4 py-2 text-[13px] transition",
                 topic === t
                   ? "border-primary bg-primary text-white"
                   : "border-ink/10 text-ink/60 hover:border-ink/25 hover:text-ink",

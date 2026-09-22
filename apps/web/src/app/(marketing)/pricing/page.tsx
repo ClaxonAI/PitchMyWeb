@@ -30,7 +30,7 @@ export default function PricingPage() {
             <PlanGrid />
           </div>
 
-          <p className="mt-8 flex items-center justify-center gap-2 text-center text-[13px] text-ink/55">
+          <p className="mt-8 flex items-center justify-center gap-2 text-center text-[13px] text-ink/60">
             <ShieldCheck size={16} className="shrink-0 text-primary" />
             If a batch finds fewer valid leads than promised, you get a re-run or a full refund.
           </p>

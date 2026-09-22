@@ -4,6 +4,46 @@
 @import "./dashboard-theme.css";
 
 /*
+ * Fallback face for the display font, tuned for ADVANCE WIDTH rather than
+ * x-height. next/font generates its own "Fraunces Fallback" automatically
+ * (size-adjust: 115.45%), but that value is chosen to match Fraunces'
+ * x-height — and it leaves the fallback 24.5% wider than Fraunces. The
+ * headline therefore set to three lines in the fallback and two in Fraunces
+ * at almost every width, desktop included, and the reflow when the real font
+ * swapped in was the h1 layout shift in the field data.
+ *
+ * 85.93% is solved, not guessed: it is the size-adjust at which Georgia's
+ * advance width for the hero headline matches Fraunces' to within 0.001% at
+ * opsz 96 with the -0.018em tracking .display applies. The ascent/descent
+ * overrides are next/font's own, kept verbatim — those are applied as a
+ * percentage of font-size and are NOT scaled by size-adjust, so they still
+ * reproduce the same line box (verified: identical block heights for
+ * Fraunces, next/font's fallback, and this face).
+ *
+ * If Georgia is missing (most Android and Linux), the src fails to load, this
+ * @font-face is skipped, and the stack falls through to the platform serif
+ * untuned — the shift can return there. Re-solve size-adjust if the headline
+ * copy, the opsz axis, or .display's letter-spacing ever change.
+ */
+@font-face {
+  font-family: "Fraunces Fallback Tuned";
+  src: local("Georgia");
+  size-adjust: 85.93%;
+  ascent-override: 84.71%;
+  descent-override: 22.09%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Fraunces Fallback Tuned";
+  font-style: italic;
+  src: local("Georgia Italic"), local("Georgia");
+  size-adjust: 85.93%;
+  ascent-override: 84.71%;
+  descent-override: 22.09%;
+  line-gap-override: 0%;
+}
+
+/*
  * Design tokens — the single source of truth for the brand.
  * Palette derived from brandthis.in. Every component consumes these via
  * Tailwind utilities (bg-primary, text-ink, rounded-card, shadow-glow …).
@@ -102,7 +142,7 @@
   .display {
     font-family: var(--font-display);
     font-weight: 400;
-    font-variation-settings: "opsz" 96, "SOFT" 30;
+    font-variation-settings: "opsz" 96;
     letter-spacing: -0.018em;
   }
   .grid-paper {
@@ -121,6 +161,31 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The landing page server-renders all eleven of its sections into the HTML —
+ * SEO and no-JS visitors both need them there — but that is ~200 KB of markup,
+ * and style + layout for it was 1.7s of a phone's main thread before anything
+ * could paint. content-visibility lets the browser skip layout and paint for a
+ * subtree while it is far off-screen, and do the work as it scrolls into range.
+ * The paired contain-intrinsic-size supplies a placeholder height so the
+ * scrollbar stays honest; `auto` tells the browser to remember each section's
+ * real measured height once it has laid it out, so a section is only ever
+ * estimated once and the guess only affects the first scroll through.
+ * 1100px is measured, not arbitrary: these nine sections run 626-1744px at
+ * desktop width (median 926) and 772-1761px on a phone (median 1147), so it
+ * sits between the two medians and keeps the initial scrollbar within a few
+ * hundred px either way. Applied only below the fold — see (marketing)/page.tsx.
+ *
+ * This buys paint speed and pays a little main-thread time for it. Measured on
+ * a production build (Lighthouse mobile, median of 3): style+layout 1862ms ->
+ * 1175ms, FCP 2716ms -> 2567ms, Speed Index 3477ms -> 3241ms, LCP and CLS
+ * unchanged. TBT moves 138ms -> 153ms, the one cost — deferred layout lands in
+ * larger chunks once the page is interactive. Most of what first looked like a
+ * much larger TBT penalty was the placeholder being wrong, not the technique. */
+@utility defer-offscreen {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1100px;
 }
 
 @utility scrollbar-thin {

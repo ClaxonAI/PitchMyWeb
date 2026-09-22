@@ -56,6 +56,7 @@ export function Testimonials() {
                   <div className="flex items-center gap-2.5 min-w-0">
                     {/* Avatar circle */}
                     <span
+                      aria-hidden
                       className={cn(
                         "grid size-8 shrink-0 place-items-center rounded-full font-mono text-[10px] font-bold",
                         featured ? "bg-white/15 text-white" : "bg-primary/10 text-primary",
@@ -63,7 +64,7 @@ export function Testimonials() {
                     >
                       {initials(t.role)}
                     </span>
-                    <span className={cn("truncate text-[13px]", featured ? "text-white/65" : "text-ink/50")}>
+                    <span className={cn("truncate text-[13px]", featured ? "text-white/65" : "text-ink/60")}>
                       {t.role}
                     </span>
                   </div>
