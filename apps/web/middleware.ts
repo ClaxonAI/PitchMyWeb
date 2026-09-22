@@ -32,7 +32,11 @@ export default clerkMiddleware((_auth, request) => {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // txt|xml keep /robots.txt and /sitemap.xml out of this middleware.
+    // Both are static files, and the hint cookie above would attach a
+    // Set-Cookie to them — which stops any shared cache or CDN from
+    // serving them, for a cookie no crawler will ever send back.
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|txt|xml|webmanifest)).*)",
     "/(api|trpc)(.*)",
     "/__clerk/:path*",
   ],
