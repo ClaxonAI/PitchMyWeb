@@ -219,6 +219,26 @@ restarted, so the box kept serving the old build and looked healthy. The
 script now sets `PM2_HOME` explicitly on every pm2 call, which outranks
 `HOME`; do not replace those calls with bare `pm2`.
 
+`HOME` itself is pinned for the same reason, by the `as_app`/`as_app_path`
+helpers every command the script runs as the app user goes through. Anything
+that caches under `~` is otherwise pointed at root's home: Playwright installs
+and then looks for its browsers in `$HOME/.cache/ms-playwright`, so with
+`HOME=/root` the recorder and verification workers crash-looped on
+`browserType.launch: Executable doesn't exist at /root/.cache/ms-playwright/...`
+while the browsers sat correctly installed under `/home/ubuntu`. pm2 hands its
+own environment to the processes it spawns, so a wrong `HOME` in this script
+reaches every worker. Run new commands through those helpers rather than a
+bare `sudo -u`.
+
+One more thing the box accumulates: `next build` writes a type stub per route
+under `.next/types`, `tsconfig.json` includes them, and the tarball deploy
+keeps `.next` between releases. A route that *moves* upstream therefore leaves
+a stub importing a source file the new release does not have, and the build
+fails type-checking a page that is not in it — which is what moving `login/`
+and `register/` under an `(auth)` route group did. The build step clears
+`.next/types` first; it must not clear the rest of `.next`, which the running
+server is still serving until the swap.
+
 Shell scripts must keep LF endings (`.gitattributes` pins them). On Windows
 `core.autocrlf` rewrites them and `git archive` carries that through, which
 ships a tarball whose scripts die on `$'\r': command not found`.

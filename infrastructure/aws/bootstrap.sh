@@ -24,6 +24,20 @@ echo "=== bootstrap $(date -Is) ==="
 
 step() { echo; echo "--- $* ---"; }
 
+# Every command this script runs as the app user goes through one of these
+# two helpers, and both pin HOME. Nothing here inherits a usable one: SSM runs
+# commands with HOME unset and the outer sudo sets it to /root, so
+# `sudo --preserve-env` was handing the app user root's home. Anything that
+# caches under ~ then looked in a directory the app user cannot read. That is
+# how the recorder and verification workers ended up crash-looping on
+#   browserType.launch: Executable doesn't exist at
+#   /root/.cache/ms-playwright/chromium_headless_shell-1243/...
+# while the browsers sat correctly installed in /home/ubuntu/.cache. pm2
+# passes its own environment to the processes it spawns, so a wrong HOME here
+# reaches every worker, not just this script.
+as_app() { sudo -u "$APP_USER" --preserve-env HOME="/home/$APP_USER" "$@"; }
+as_app_path() { sudo -u "$APP_USER" --preserve-env=PATH HOME="/home/$APP_USER" "$@"; }
+
 # Every pm2 call goes through here so its state directory is never left to
 # chance. pm2 keeps its daemon state under $HOME/.pm2, and these calls reach
 # it through `sudo -u $APP_USER --preserve-env`, which carries the *caller's*
@@ -34,7 +48,7 @@ step() { echo; echo "--- $* ---"; }
 # swapped in but before anything restarted — leaving the box serving the old
 # build with no sign anything was wrong. PM2_HOME is explicit and outranks
 # HOME, so this talks to the one real daemon however the script was invoked.
-app_pm2() { sudo -u "$APP_USER" --preserve-env PM2_HOME="/home/$APP_USER/.pm2" pm2 "$@"; }
+app_pm2() { as_app env PM2_HOME="/home/$APP_USER/.pm2" pm2 "$@"; }
 
 # --- system packages ------------------------------------------------------
 step "apt packages"
@@ -166,16 +180,16 @@ set +a
 : "${REDIS_URL:?not in SSM}"
 
 step "npm ci"
-sudo -u "$APP_USER" --preserve-env=PATH npm ci
+as_app_path npm ci
 
 step "playwright chromium"
 # --with-deps pulls the shared libraries headless Chromium needs; they are not
 # part of the base image and npm ci does not install them.
-sudo -u "$APP_USER" --preserve-env=PATH npx playwright install --with-deps chromium
+as_app_path npx playwright install --with-deps chromium
 
 step "database"
-sudo -u "$APP_USER" --preserve-env npm run db:generate
-sudo -u "$APP_USER" --preserve-env npm run db:deploy
+as_app npm run db:generate
+as_app npm run db:deploy
 
 step "build"
 # Built into a staging directory and swapped in, never over the live one.
@@ -190,7 +204,15 @@ step "build"
 BUILD_DIR=.next-build
 for app in web api sites; do
   rm -rf "apps/$app/$BUILD_DIR"
-  sudo -u "$APP_USER" --preserve-env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"
+  # The previous build's generated route types also have to go. next build
+  # writes a stub per route under .next/types, tsconfig includes them, and a
+  # route that MOVED upstream leaves a stub importing a source file this
+  # release no longer has — so the build fails type-checking a page that is
+  # not in it. Moving login/ and register/ under an (auth) group did exactly
+  # that. Only types/: the rest of .next is what the running server is still
+  # serving until the swap below.
+  rm -rf "apps/$app/.next/types"
+  as_app env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"
 done
 
 step "swap in the new build"
