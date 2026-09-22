@@ -24,6 +24,7 @@ const business: Business = {
   normalizedPhone: null,
   normalizedAddress: null,
   normalizedDomain: null,
+  phoneType: null,
   mergedIntoId: null,
   websiteVerificationStatus: "UNVERIFIED",
   websiteVerifiedAt: null,

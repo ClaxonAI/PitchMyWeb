@@ -1,4 +1,12 @@
-import { parsePhoneNumberWithError, type CountryCode } from "libphonenumber-js";
+// Same "max" metadata lib/leads/phone.ts uses, deliberately: normalizedPhone
+// ("is this a valid number, and what is its E.164 form?") and phoneType
+// ("what kind of line is it?") are two answers about one number, and they
+// have to come from one metadata set. Under the default "min" metadata a
+// number can be valid here while having no type at all, which would make
+// "valid number, not yet classified" and "valid number, no such range"
+// indistinguishable — and lib/leads/phone.ts treats the first as pitchable.
+import { parsePhoneNumberWithError, type CountryCode } from "libphonenumber-js/max";
+import { classifyPhoneType } from "../leads/phone";
 import type { BusinessProviderInput } from "../validation/business";
 
 export type NormalizedBusiness = {
@@ -25,6 +33,11 @@ export type NormalizedBusiness = {
   normalizedPhone: string | null;
   normalizedAddress: string | null;
   normalizedDomain: string | null;
+  // Line type (lib/leads/phone.ts), classified at the same point the E.164
+  // form above is derived, so a Business row is never written without it.
+  // "Can WhatsApp reach this" is then a stored column rather than
+  // something every reader re-derives.
+  phoneType: string | null;
 };
 
 // Company-suffix noise that would otherwise make two names that are
@@ -142,5 +155,6 @@ export function normalizeBusinessInput(input: BusinessProviderInput): Normalized
     normalizedPhone: normalizePhone(nullableText(input.phone ?? null)),
     normalizedAddress: normalizeAddress(nullableText(input.address ?? null)),
     normalizedDomain: normalizeDomain(nullableText(input.website ?? null)),
+    phoneType: classifyPhoneType(nullableText(input.phone ?? null)),
   };
 }

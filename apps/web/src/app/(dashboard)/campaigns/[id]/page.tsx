@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { Activity, Building2, Download, ListChecks, Play, Search, Send } from "lucide-react";
-import type { CampaignLeadRow, CampaignOverview } from "@/lib/api-client";
+import type { CampaignLeadRow, CampaignOverview, PitchBatch } from "@/lib/api-client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CampaignActions } from "@/components/dashboard/CampaignActions";
 import { DiscoveryProgress } from "@/components/dashboard/DiscoveryProgress";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PitchBatchPanel } from "@/components/dashboard/PitchBatchPanel";
 import { WebsiteVerificationBadge } from "@/components/dashboard/WebsiteVerificationBadge";
 
 export const metadata: Metadata = { title: "Campaign" };
@@ -53,11 +54,21 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const overview = await fetchJson<CampaignOverview>(`/api/campaigns/${id}/overview`, cookie);
   if (!overview) notFound();
 
-  const leadsResult = await fetchJson<{ items: CampaignLeadRow[]; total: number }>(`/api/campaigns/${id}/leads`, cookie);
+  const leadsResult = await fetchJson<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }>(
+    `/api/campaigns/${id}/leads`,
+    cookie,
+  );
   const leadRows = leadsResult?.items ?? [];
+  const batchesResult = await fetchJson<{ items: PitchBatch[] }>(`/api/campaigns/${id}/batches`, cookie);
 
   const { campaign, execution, counts } = overview;
   const blockedCount = leadRows.filter((row) => !row.pipeline && row.blockedReason).length;
+  // The three limits the pitch step is bounded by, exactly as the API bounds
+  // it: leads that can actually be pitched, and how many of this campaign's
+  // own targetCount slots are left. (Credits, the third, come from the
+  // session inside the panel.)
+  const eligibleCount = leadRows.filter((row) => row.selectable).length;
+  const remainingSlots = Math.max(0, (leadsResult?.targetCount ?? campaign.targetCount) - (leadsResult?.selectedCount ?? counts.selected));
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -96,6 +107,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           )}
         </div>
       </div>
+
+      {(leadRows.length > 0 || (batchesResult?.items.length ?? 0) > 0) && (
+        <PitchBatchPanel
+          campaignId={id}
+          eligibleCount={eligibleCount}
+          remainingSlots={remainingSlots}
+          initialBatches={batchesResult?.items ?? []}
+        />
+      )}
 
       <Card>
         <CardHeader>

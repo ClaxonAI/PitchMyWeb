@@ -58,6 +58,7 @@ describe("pgTrgmFuzzyMatcher.findFuzzyCandidates (real Postgres)", () => {
       normalizedPhone: null,
       normalizedAddress: normalizeAddress("12 M G Road"),
       normalizedDomain: null,
+      phoneType: null,
     });
 
     const match = candidates.find((c) => c.business.id === seeded.id);
@@ -90,6 +91,7 @@ describe("pgTrgmFuzzyMatcher.findFuzzyCandidates (real Postgres)", () => {
       normalizedPhone: null,
       normalizedAddress: normalizeAddress("900 Industrial Parkway"),
       normalizedDomain: null,
+      phoneType: null,
     });
 
     // Postgres's own `%` trigram operator (used in the WHERE clause) is
@@ -124,6 +126,7 @@ describe("pgTrgmFuzzyMatcher.findFuzzyCandidates (real Postgres)", () => {
       normalizedPhone: null,
       normalizedAddress: normalizeAddress("1 Test Street"),
       normalizedDomain: null,
+      phoneType: null,
     });
 
     expect(candidates.find((c) => c.business.id === loser.id)).toBeUndefined();

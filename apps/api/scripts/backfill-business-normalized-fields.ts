@@ -1,5 +1,5 @@
 // One-shot script: populates normalizedName/normalizedPhone/normalizedAddress/
-// normalizedDomain on every existing Business row using the Phase 2
+// normalizedDomain/phoneType on every existing Business row using the Phase 2
 // normalization code (lib/business/normalize.ts), meant to run once before
 // the dedup engine (lib/business/dedupe.ts's resolveBusiness) starts serving
 // live traffic — see the Phase 2 plan's "Rollout order" section for why
@@ -11,10 +11,20 @@
 // Idempotent — always recomputes from the existing name/phone/address/
 // website columns, never invents data, safe to re-run.
 //
+// Re-run it after the pitch-credit release that added Business.phoneType:
+// rows ingested before then have a phone and a normalizedPhone but no line
+// type, and until they are classified lib/leads/phone.ts has to assume they
+// are pitchable (it cannot tell "landline" from "never asked"). That
+// assumption is deliberately the safe one for availability — nobody's
+// existing leads vanish — but it means an unclassified landline can still
+// reach the queue, fail with no_valid_phone, and refund. Backfilling ends
+// that; the queue then rejects it up front instead.
+//
 //   npm run job:backfill-business-normalized -w apps/api
 
 import { prisma } from "../src/lib/db/client";
 import { normalizeAddress, normalizeDomain, normalizeName, normalizePhone } from "../src/lib/business/normalize";
+import { classifyPhoneType } from "../src/lib/leads/phone";
 
 const BATCH_SIZE = 500;
 
@@ -39,6 +49,7 @@ async function run(): Promise<number> {
           normalizedPhone: normalizePhone(b.phone),
           normalizedAddress: normalizeAddress(b.address),
           normalizedDomain: normalizeDomain(b.website),
+          phoneType: classifyPhoneType(b.phone),
         },
       });
       updated += 1;

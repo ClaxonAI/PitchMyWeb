@@ -6,11 +6,11 @@ import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
 import { runCampaign } from "../campaigns/run.service";
 import { autoSelectForUser, listCampaignLeads, selectLeads } from "../campaigns/selection.service";
-import { grantCredits } from "../checkout/wallet.service";
+import { getOrCreateWallet, grantCredits } from "../checkout/wallet.service";
 import { ingestBusinessAsLead } from "../leads/lead.service";
 import type { AsyncLeadProvider } from "../providers/async-provider";
 import { handleDiscoveryResults } from "../../app/api/internal/pipeline/discovery-results/route";
-import { NotFoundError, UnauthenticatedError, ValidationError } from "../errors";
+import { ConflictError, NotFoundError, UnauthenticatedError, ValidationError } from "../errors";
 import { getPublicSite } from "../sites/public-site.service";
 import { handleRecordingReady } from "../../app/api/internal/pipeline/recording-ready/route";
 import { directMessage, fillSiteLink, MAX_DELIVERY_MESSAGE_CHARS } from "./links";
@@ -18,6 +18,7 @@ import {
   markDirectSent,
   onRecordingFinished,
   pauseCampaignSending,
+  prepareDelivery,
   retryPipeline,
   syncDeliveries,
   type PipelineDeps,
@@ -459,6 +460,134 @@ describe("recording hand-off and delivery", () => {
   });
 });
 
+describe("credit resolution", () => {
+  it("consumes exactly one credit when a pipeline reaches SENT via a delivery receipt", async () => {
+    const { user, pipeline } = await recordingStage("credit-consume", "AUTO");
+    const before = await getOrCreateWallet(prisma, user.id);
+    await connectWhatsApp(user.id);
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+
+    await prisma.whatsAppMessage.update({ where: { id: queued.whatsappMessageId! }, data: { status: "DELIVERED", deliveredAt: new Date() } });
+    expect(await syncDeliveries(prisma, { campaignId: pipeline.campaignId })).toBe(1);
+
+    const after = await getOrCreateWallet(prisma, user.id);
+    expect(after).toMatchObject({ reservedCredits: before.reservedCredits - 1, usedCredits: before.usedCredits + 1 });
+    const resolved = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(resolved.creditOutcome).toBe("CONSUMED");
+
+    // A second syncDeliveries pass over the same (now-SENT) pipeline must
+    // not consume a second credit — the DELIVERY_QUEUED-stage guard alone
+    // already prevents this from re-matching, proving the pipeline never
+    // stays double-claimable once resolved.
+    expect(await syncDeliveries(prisma, { campaignId: pipeline.campaignId })).toBe(0);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject(after);
+  });
+
+  it("consumes exactly one credit when a Direct pipeline is marked sent", async () => {
+    const { user, pipeline } = await recordingStage("credit-consume-direct", "DIRECT");
+    const before = await getOrCreateWallet(prisma, user.id);
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+
+    const sent = await markDirectSent(prisma, user.id, pipeline.id);
+    expect(sent.stage).toBe("SENT");
+
+    const after = await getOrCreateWallet(prisma, user.id);
+    expect(after).toMatchObject({ reservedCredits: before.reservedCredits - 1, usedCredits: before.usedCredits + 1 });
+
+    // A repeated confirm on an already-SENT pipeline must not consume twice.
+    await expect(markDirectSent(prisma, user.id, pipeline.id)).rejects.toThrow(ConflictError);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject(after);
+  });
+
+  it("refunds immediately on a non-retryable final failure (not_delivered), not a delayed retry", async () => {
+    const { user, pipeline } = await recordingStage("credit-refund-not-delivered", "AUTO");
+    const before = await getOrCreateWallet(prisma, user.id);
+    await connectWhatsApp(user.id);
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    await prisma.whatsAppMessage.update({ where: { id: queued.whatsappMessageId! }, data: { status: "SENT", sentAt: new Date() } });
+
+    const tomorrow = new Date(Date.now() + 25 * 60 * 60 * 1000);
+    expect(await syncDeliveries(prisma, { campaignId: pipeline.campaignId, now: tomorrow })).toBe(1);
+
+    const after = await getOrCreateWallet(prisma, user.id);
+    expect(after).toMatchObject({ reservedCredits: before.reservedCredits - 1, availableCredits: before.availableCredits + 1 });
+    const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(failed.creditOutcome).toBe("REFUNDED");
+
+    const refundLedger = await prisma.pitchCreditLedger.findFirst({ where: { pipelineId: pipeline.id, type: "REFUND" } });
+    expect(refundLedger?.amount).toBe(1);
+
+    // A repeated maintenance pass over the same FAILED pipeline (e.g. two
+    // overlapping job runs) must not refund a second time.
+    expect(await syncDeliveries(prisma, { campaignId: pipeline.campaignId, now: tomorrow })).toBe(0);
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject(after);
+  });
+
+  it("refunds immediately when opted-out (a non-retryable reason), and updates the batch's counters", async () => {
+    const { user, pipeline, lead } = await recordingStage("credit-refund-opted-out", "AUTO");
+    const before = await getOrCreateWallet(prisma, user.id);
+    await connectWhatsApp(user.id);
+    const business = await prisma.business.findUniqueOrThrow({ where: { id: lead.businessId } });
+    await prisma.optOut.create({ data: { phoneNumber: business.phone!.replace(/\D/g, ""), source: "MANUAL", reason: "pipeline-test" } });
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+
+    const after = await getOrCreateWallet(prisma, user.id);
+    expect(after).toMatchObject({ reservedCredits: before.reservedCredits - 1, availableCredits: before.availableCredits + 1 });
+
+    const batch = await prisma.pitchBatch.findFirstOrThrow({ where: { id: (await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } })).batchId! } });
+    expect(batch).toMatchObject({ failedCount: 1, refundedCount: 1, status: "COMPLETED" });
+  });
+
+  it("never queues a second WhatsApp message for a pipeline that already has one in flight", async () => {
+    const { user, pipeline } = await recordingStage("credit-no-double-send", "AUTO");
+    await connectWhatsApp(user.id);
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(queued.stage).toBe("DELIVERY_QUEUED");
+    const firstMessageId = queued.whatsappMessageId!;
+
+    // A second delivery attempt — what a duplicated recorder callback or an
+    // overlapping retry does — must reuse the in-flight message, not create
+    // a second one. enqueueMessage's own BullMQ dedup is keyed on the
+    // message row's id, so a second row would mean a second real send.
+    await prepareDelivery(prisma, pipeline.id);
+    await prepareDelivery(prisma, pipeline.id);
+
+    const messages = await prisma.whatsAppMessage.findMany({ where: { leadId: pipeline.leadId } });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.id).toBe(firstMessageId);
+    const after = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(after.stage).toBe("DELIVERY_QUEUED");
+    expect(after.whatsappMessageId).toBe(firstMessageId);
+  });
+
+  it("leaves the credit reserved while a failure is still retryable — no refund until the final attempt", async () => {
+    const { user, pipeline } = await recordingStage("credit-retryable", "AUTO");
+    const before = await getOrCreateWallet(prisma, user.id);
+    // No connected WhatsApp: a retryable failure (not in NON_RETRYABLE_REASONS).
+    const request = new NextRequest("http://localhost/api/internal/pipeline/recording-ready", {
+      method: "POST",
+      headers: { authorization: `Bearer ${JOB_SECRET}` },
+      body: JSON.stringify({ recordingId: pipeline.recordingId }),
+    });
+    await readyRecording(pipeline.recordingId!);
+    await handleRecordingReady(prisma, request, JOB_SECRET);
+
+    const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(failed.stage).toBe("FAILED");
+    expect(failed.creditOutcome).toBeNull();
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject(before); // unchanged — still reserved
+  });
+});
+
 describe("public preview", () => {
   it("serves published dental previews only, and hides contact details once expired", async () => {
     const { pipeline } = await recordingStage("public", "AUTO");
@@ -504,6 +633,40 @@ describe("pipeline maintenance job", () => {
     const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: stuck.pipeline.id } });
     expect(failed.stage).toBe("FAILED");
     expect(failed.failureReason).toBe("recording_timeout");
+  });
+
+  it("abandons a pipeline stranded in SELECTED past its attempt cap, refunding its reserved credit", async () => {
+    const { runPipelineMaintenanceJob, STALE_SELECTED_MS } = await import("../jobs/pipeline-maintenance.job");
+    const { AUTO_RETRY_MAX_ATTEMPTS } = await import("./pipeline.service");
+
+    const { user, campaign } = await discoveredCampaign("stale-selected", [clinic("Stale Dental")], { targetCount: 5 });
+    const lead = await prisma.lead.findFirstOrThrow({ where: { campaignId: campaign.id } });
+    const { deps } = fakeDeps();
+    const [pipeline] = (await selectLeads(prisma, user.id, campaign.id, [lead.id], deps)).started;
+
+    // Exactly what a crash right after reservation leaves behind: the
+    // pipeline never advanced past SELECTED, its credit still reserved.
+    // attempts is already at the cap, so recovery abandons rather than
+    // resumes it.
+    await prisma.leadPipeline.update({
+      where: { id: pipeline!.id },
+      data: { stage: "SELECTED", websiteProjectId: null, recordingId: null, attempts: AUTO_RETRY_MAX_ATTEMPTS - 1 },
+    });
+    const before = await getOrCreateWallet(prisma, user.id);
+    expect(before.reservedCredits).toBe(1);
+
+    const later = new Date(Date.now() + STALE_SELECTED_MS + 60_000);
+    const result = await runPipelineMaintenanceJob(prisma, later);
+    expect(result.pipelinesAbandoned).toBeGreaterThanOrEqual(1);
+
+    const abandoned = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    expect(abandoned.stage).toBe("FAILED");
+    expect(abandoned.failureReason).toBe("stuck_selected");
+    expect(abandoned.creditOutcome).toBe("REFUNDED");
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({
+      reservedCredits: before.reservedCredits - 1,
+      availableCredits: before.availableCredits + 1,
+    });
   });
 });
 

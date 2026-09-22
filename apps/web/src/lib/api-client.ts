@@ -175,11 +175,16 @@ export type Me = {
   name: string | null;
   role: "USER" | "ADMIN" | "SUPER_ADMIN";
   planId: string | null;
+  /** Has at least one paid order. Decides markets and wording, never how much can be spent. */
   hasPaidAccess: boolean;
   allowedMarkets: Array<"india" | "foreign">;
   canDiscover: boolean;
-  freePitchesRemaining: number | null;
-  freePitchesAllowance: number;
+  /** Pitch credits free to spend on a new send. */
+  availableCredits: number;
+  /** Credits held by batches still working — not spent, not available either. */
+  reservedCredits: number;
+  /** Credits spent on pitches that actually sent. */
+  usedCredits: number;
 };
 
 export const meApi = {
@@ -309,6 +314,54 @@ export const campaignsApi = {
   overview: (id: string) => api.get<CampaignOverview>(`/api/campaigns/${id}/overview`),
   leads: (id: string, query: { sort?: "score" | "recent"; search?: string } = {}) =>
     api.get<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }>(`/api/campaigns/${id}/leads${toQueryString(query)}`),
+  /**
+   * Pitch `count` of this campaign's remaining eligible leads. The API
+   * reserves at most `count` credits and never more than there are eligible
+   * leads, so the number that comes back can legitimately be smaller than
+   * what was asked for.
+   */
+  pitch: (id: string, count: number) => api.post<{ started: number }>(`/api/campaigns/${id}/selection`, { auto: true, count }),
+  batches: (id: string) => api.get<{ items: PitchBatch[] }>(`/api/campaigns/${id}/batches`),
+};
+
+export type PitchBatch = {
+  id: string;
+  mode: "MANUAL" | "AUTO";
+  status: "PROCESSING" | "COMPLETED";
+  /** What the user asked for. */
+  requestedCount: number;
+  /** What there turned out to be eligible leads and credits for — the only number that cost anything. */
+  reservedCount: number;
+  sentCount: number;
+  failedCount: number;
+  refundedCount: number;
+  /** Reserved slots whose credit is not resolved yet: pitches still in flight. */
+  processingCount: number;
+  createdAt: string;
+  completedAt: string | null;
+  stages: Record<PipelineStage, number>;
+};
+
+export type CreditLedgerEntry = {
+  id: string;
+  type: "PURCHASE" | "FREE_GRANT" | "RESERVE" | "RELEASE" | "CONSUME" | "REFUND";
+  amount: number;
+  batchId: string | null;
+  pipelineId: string | null;
+  orderId: string | null;
+  createdAt: string;
+};
+
+export const pitchCreditsApi = {
+  ledger: (query: { page?: number; pageSize?: number } = {}) =>
+    api.get<{
+      wallet: { availableCredits: number; reservedCredits: number; usedCredits: number };
+      items: CreditLedgerEntry[];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    }>(`/api/pitch-credits/ledger${toQueryString(query)}`),
 };
 
 export type LeadStatus = "NEW" | "ANALYZED" | "SITE_READY" | "PITCHED" | "REPLIED" | "INTERESTED" | "NEGOTIATING" | "WON" | "LOST";

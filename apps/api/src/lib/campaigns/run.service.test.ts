@@ -4,6 +4,7 @@ import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { ConflictError, InvalidCampaignTransitionError } from "../errors";
 import { createCampaign, markCampaignReady, prepareCampaignRun } from "./campaign.service";
 import { runCampaign } from "./run.service";
+import { isPitchableBusiness } from "../leads/phone";
 import type { CampaignCreateInput } from "../validation/campaign";
 import { DemoProvider, type LeadProvider, type CampaignSearchInput } from "../providers/demo-provider";
 import type { BusinessProviderInput } from "../validation/business";
@@ -461,17 +462,28 @@ function createFakeRunDb(campaignId: string) {
     lead: {
       findUnique: async ({ where }: { where: { campaignId_businessId: { campaignId: string; businessId: string } } }) =>
         leads.find((l) => l.campaignId === where.campaignId_businessId.campaignId && l.businessId === where.campaignId_businessId.businessId) ?? null,
-      // Two callers, distinguished by what they select: repeat-lead
-      // protection asks for this user's leads in *other* campaigns (none
-      // here — the fake models a single campaign), and the pitchable count
-      // asks for this campaign's leads with their business phone.
-      findMany: async ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      // Repeat-lead protection asks for this user's leads in *other*
+      // campaigns — none here, the fake models a single campaign.
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
         if (where.campaignId && typeof where.campaignId === "string") {
-          return leads
-            .filter((l) => l.campaignId === where.campaignId)
-            .map((l) => (select?.business ? { business: { phone: (businesses.get(l.businessId as string)?.phone as string | null) ?? null } } : l));
+          return leads.filter((l) => l.campaignId === where.campaignId);
         }
         return [];
+      },
+      // countPitchableLeads: how many of this campaign's leads WhatsApp can
+      // actually reach. Answers with the real predicate rather than a
+      // hand-rolled imitation of the Prisma filter, so the fake cannot
+      // quietly disagree with production about what "pitchable" means.
+      // These fixtures all have phone: null, so the honest answer is 0 and
+      // the targetCount cap never trips — which is the point: this file
+      // tests per-business failure isolation, not the cap.
+      count: async ({ where }: { where: Record<string, unknown> }) => {
+        const rows = leads.filter((l) => l.campaignId === where.campaignId);
+        if (!where.business) return rows.length;
+        return rows.filter((l) => {
+          const business = [...businesses.values()].find((b) => b.id === l.businessId);
+          return business !== undefined && isPitchableBusiness(business as { normalizedPhone: string | null; phoneType: string | null });
+        }).length;
       },
       delete: async ({ where }: { where: { id: string } }) => {
         const index = leads.findIndex((l) => l.id === where.id);

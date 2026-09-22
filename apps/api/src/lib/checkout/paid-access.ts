@@ -15,14 +15,22 @@ import { ensureFreeGrant } from "./wallet.service";
 // pitch-selection flow (selection.service.ts, pipeline.service.ts) rather
 // than recomputed here.
 //
-// `userHasPaidAccess`'s "paid = unlimited, skip the budget check entirely"
-// bypass below is transitional: a paid purchase is now a *quantity* of
-// credits (Order.credits), not unlimited access, so a paid user's own
-// wallet balance is what should gate them too. This file still treats a
-// paid user as ungated for one more phase — the real, uniform,
-// reservation-based enforcement (every user checked against their actual
-// balance, no bypass) lands in selection.service.ts alongside the atomic
-// reservation primitive it depends on.
+// There is no longer a "paid = unlimited" bypass. A purchase grants a
+// quantity of credits (Order.credits), so a paid user with an empty wallet
+// is in exactly the same position as a free user with an empty wallet, and
+// this file gates them identically. `userHasPaidAccess` survives only for
+// what it still genuinely decides — which markets an account may search,
+// and which wording the dashboard shows — never as a spending cap.
+//
+// Nor is there a per-request quantity check any more. The old
+// assertFreePitchBudget compared a campaign's targetCount against the
+// remaining allowance at *creation* time, which charged the user for leads
+// that did not exist yet: a search that found fewer businesses than asked
+// for, or leads with no reachable phone, still consumed the budget. Credits
+// are now reserved at selection time against real eligible leads
+// (selection.service.ts::reservePitchBatch), so all that is needed here is
+// the cheap "does this account have any spending power at all" check that
+// keeps a zero-credit user from starting a Serper-billed scrape.
 
 type Env = Record<string, string | undefined>;
 export type DiscoveryMarket = "india" | "foreign";
@@ -65,12 +73,11 @@ export async function getAllowedMarkets(db: PrismaClient, userId: string, env: E
 }
 
 export type AccessSnapshot = {
+  /** Has at least one paid order. Decides markets and dashboard wording — never how much can be spent. */
   hasPaidAccess: boolean;
   allowedMarkets: DiscoveryMarket[];
-  /** @deprecated derived from `wallet.availableCredits` for unpaid users; use `wallet` directly. Removed once apps/web reads `wallet` instead (Phase 7). */
-  freePitchesRemaining: number | null;
   canDiscover: boolean;
-  /** The real, stored pitch-credit balance (see wallet.service.ts) — the source of truth going forward. */
+  /** The real, stored pitch-credit balance (see wallet.service.ts) — the only source of truth for spending. */
   wallet: { availableCredits: number; reservedCredits: number; usedCredits: number };
 };
 
@@ -87,7 +94,7 @@ export async function getAccessSnapshot(db: PrismaClient, userId: string, env: E
   const wallet = await ensureFreeGrant(db, userId);
 
   if (!isPaidDiscoveryRequired(env)) {
-    return { hasPaidAccess: true, allowedMarkets: ALL_MARKETS, freePitchesRemaining: null, canDiscover: true, wallet };
+    return { hasPaidAccess: true, allowedMarkets: ALL_MARKETS, canDiscover: true, wallet };
   }
   const [user, paidOrders] = await Promise.all([
     db.user.findUnique({ where: { id: userId }, select: { planId: true } }),
@@ -96,13 +103,8 @@ export async function getAccessSnapshot(db: PrismaClient, userId: string, env: E
   const paid = Boolean(user?.planId) || paidOrders.length > 0;
   const markets = paidOrders.map((order) => order.market).filter((market): market is DiscoveryMarket => ALL_MARKETS.includes(market as DiscoveryMarket));
   const allowedMarkets: DiscoveryMarket[] = markets.length > 0 ? [...new Set(markets)] : user?.planId ? ALL_MARKETS : ["india"];
-  // Transitional (see header comment): a paid user still bypasses the
-  // budget check entirely for one more phase, so freePitchesRemaining stays
-  // the old "no cap" sentinel for them even though their wallet now holds a
-  // real, finite number.
-  if (paid) return { hasPaidAccess: true, allowedMarkets, freePitchesRemaining: null, canDiscover: true, wallet };
-
-  return { hasPaidAccess: false, allowedMarkets, freePitchesRemaining: wallet.availableCredits, canDiscover: wallet.availableCredits > 0, wallet };
+  // One rule for everybody: can this wallet still pay for a pitch?
+  return { hasPaidAccess: paid, allowedMarkets, canDiscover: wallet.availableCredits + wallet.reservedCredits > 0, wallet };
 }
 
 export async function assertMarketAllowed(db: PrismaClient, userId: string, market: string, env: Env = process.env): Promise<void> {
@@ -113,54 +115,38 @@ export async function assertMarketAllowed(db: PrismaClient, userId: string, mark
 }
 
 /**
- * Free pitches still available for an unpaid user, read directly from
- * PitchWallet rather than recomputed from campaign/pipeline state (the old
- * `countUsedFreePitches` approach — every reservation/consume/refund is now
- * a real, stored credit movement, so there is nothing left to derive).
- * Paid users (and environments where paid discovery is not required) return
- * null — the free budget does not apply.
+ * Credits this account could still spend on a pitch: available plus already
+ * reserved, because a reservation that is mid-flight is capacity the user
+ * has paid for and has not lost — it will either send (consumed) or fail
+ * (refunded). Null when paid discovery is not required at all, meaning "no
+ * limit applies here", which is not the same as zero.
  */
-export async function getFreePitchesRemaining(db: PrismaClient, userId: string, env: Env = process.env): Promise<number | null> {
+export async function getSpendableCredits(db: PrismaClient, userId: string, env: Env = process.env): Promise<number | null> {
   if (!isPaidDiscoveryRequired(env)) return null;
-  if (await userHasPaidAccess(db, userId)) return null;
   const wallet = await ensureFreeGrant(db, userId);
-  return wallet.availableCredits;
+  return wallet.availableCredits + wallet.reservedCredits;
 }
 
 export async function userCanDiscover(db: PrismaClient, userId: string, env: Env = process.env): Promise<boolean> {
-  if (!isPaidDiscoveryRequired(env)) return true;
-  if (await userHasPaidAccess(db, userId)) return true;
-  const remaining = await getFreePitchesRemaining(db, userId, env);
-  return (remaining ?? 0) > 0;
+  const spendable = await getSpendableCredits(db, userId, env);
+  return spendable === null || spendable > 0;
 }
 
 /**
- * Ensures an unpaid user is not requesting more pitches than their free
- * allowance still has. Paid / ungated users are a no-op.
+ * The gate in front of every Serper-billed action (creating a campaign,
+ * running one): an account with no credits at all cannot start work whose
+ * results it could never pitch. Deliberately does *not* look at how many
+ * leads were asked for — that is decided against real eligible leads at
+ * selection time, not guessed here before any lead exists.
  */
-export async function assertFreePitchBudget(db: PrismaClient, userId: string, requestedPitches: number, env: Env = process.env): Promise<void> {
-  if (!isPaidDiscoveryRequired(env)) return;
-  if (await userHasPaidAccess(db, userId)) return;
-
-  const remaining = (await getFreePitchesRemaining(db, userId, env)) ?? 0;
-  if (remaining <= 0) {
-    throw new PaymentRequiredError(`You've used your ${FREE_PITCH_ALLOWANCE} free pitches. Pay for a plan to continue.`);
-  }
-  if (requestedPitches > remaining) {
-    throw new ValidationError(
-      remaining === 1
-        ? `Only 1 free pitch left. Set how many leads to 1, or pay for a plan.`
-        : `Only ${remaining} free pitches left. Set how many leads to ${remaining} or fewer, or pay for a plan.`,
-    );
-  }
-}
-
-export async function assertPaidDiscoveryAllowed(db: PrismaClient, userId: string, env: Env = process.env): Promise<void> {
-  if (!isPaidDiscoveryRequired(env)) return;
-  if (await userHasPaidAccess(db, userId)) return;
-
-  const remaining = (await getFreePitchesRemaining(db, userId, env)) ?? 0;
-  if (remaining <= 0) {
-    throw new PaymentRequiredError(`You've used your ${FREE_PITCH_ALLOWANCE} free pitches. Pay for a plan to continue.`);
-  }
+export async function assertCanStartDiscovery(db: PrismaClient, userId: string, env: Env = process.env): Promise<void> {
+  const spendable = await getSpendableCredits(db, userId, env);
+  if (spendable === null || spendable > 0) return;
+  // Two genuinely different situations with two different next steps: one
+  // account has never bought anything, the other has and has spent it.
+  throw new PaymentRequiredError(
+    (await userHasPaidAccess(db, userId))
+      ? "You have no pitch credits left. Buy another credit pack to continue."
+      : `You've used your ${FREE_PITCH_ALLOWANCE} free pitches. Buy a credit pack to continue.`,
+  );
 }

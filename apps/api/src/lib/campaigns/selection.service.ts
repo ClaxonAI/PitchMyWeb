@@ -1,6 +1,6 @@
 import type { Business, Campaign, Lead, LeadPipeline, PrismaClient } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
+import { isPitchableBusiness } from "../leads/phone";
 import { emitEvent } from "../observability/events";
 import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service";
 import { calculateOpportunityScore } from "../scoring/scoring";
@@ -96,7 +96,7 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
   return leads.map((lead) => {
     const { score, estimated } = effectiveScore(lead);
     const pipeline = lead.pipelines[0] ?? null;
-    const hasValidPhone = normalizePhoneForWhatsApp(lead.business.phone) !== null;
+    const hasValidPhone = isPitchableBusiness(lead.business);
     return {
       id: lead.id,
       status: lead.status,
@@ -188,7 +188,7 @@ async function reservePitchBatch(
       data: { campaignId: input.campaignId, userId: input.userId, requestedCount: input.requestedCount, reservedCount: 0, mode: input.mode },
     });
     try {
-      await reservePitchCredits(tx, input.userId, input.requestedCount, `reserve:${created.id}`);
+      await reservePitchCredits(tx, { userId: input.userId, batchId: created.id, amount: input.requestedCount, referenceId: `reserve:${created.id}` });
     } catch (error) {
       // Nothing else has committed for this batch yet — remove the empty
       // shell rather than leaving a PROCESSING row with 0 reservedCount
@@ -205,7 +205,7 @@ async function reservePitchBatch(
   const shortfall = input.requestedCount - actualCount;
 
   await db.$transaction(async (tx) => {
-    if (shortfall > 0) await releasePitchCredits(tx, input.userId, shortfall, `release:${batch.id}`);
+    if (shortfall > 0) await releasePitchCredits(tx, { userId: input.userId, batchId: batch.id, amount: shortfall, referenceId: `release:${batch.id}` });
     await tx.pitchBatch.update({
       where: { id: batch.id },
       data: { reservedCount: actualCount, ...(actualCount === 0 ? { status: "COMPLETED", completedAt: new Date() } : {}) },
@@ -288,6 +288,54 @@ export async function autoSelectForUser(db: PrismaClient, userId: string, campai
     throw new ConflictError("Leads can be selected once discovery has started returning results");
   }
   return autoSelectLeads(db, campaign.id, options, deps);
+}
+
+/**
+ * How long a batch may sit mid-reservation before the maintenance job
+ * treats it as abandoned. reservePitchBatch commits its reservation, then
+ * creates pipelines, then records the true count — a crash between the
+ * first and last leaves a PROCESSING batch with reservedCount still 0 and
+ * credits reserved against nothing. A legitimate in-flight request takes
+ * seconds (bounded-concurrency site publish + recording enqueue), never
+ * this long.
+ */
+export const STALE_BATCH_MS = 10 * 60 * 1000;
+
+/**
+ * Releases credits stranded by a crash between reserving them and
+ * recording what they were actually spent on. Returns how many batches
+ * were recovered. Never throws for one bad batch — a single unrecoverable
+ * row must not stop the rest of the sweep.
+ */
+export async function recoverStaleBatches(db: PrismaClient, now = new Date()): Promise<number> {
+  const stale = await db.pitchBatch.findMany({
+    where: { status: "PROCESSING", reservedCount: 0, createdAt: { lte: new Date(now.getTime() - STALE_BATCH_MS) } },
+    take: 50,
+  });
+
+  let recovered = 0;
+  for (const batch of stale) {
+    try {
+      // A pipeline existing at all means startPipelines got far enough to
+      // create one, so this batch is the *pipeline* recovery path's problem
+      // (abandonStalePipeline), not a stranded reservation.
+      const pipelines = await db.leadPipeline.count({ where: { batchId: batch.id } });
+      if (pipelines > 0) continue;
+
+      await db.$transaction(async (tx) => {
+        const claimed = await tx.pitchBatch.updateMany({
+          where: { id: batch.id, status: "PROCESSING", reservedCount: 0 },
+          data: { status: "COMPLETED", completedAt: now },
+        });
+        if (claimed.count !== 1) return;
+        await releasePitchCredits(tx, { userId: batch.userId, batchId: batch.id, amount: batch.requestedCount, referenceId: `release-stale:${batch.id}` });
+      });
+      recovered += 1;
+    } catch (error) {
+      console.error(`Could not recover stale pitch batch ${batch.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return recovered;
 }
 
 /**

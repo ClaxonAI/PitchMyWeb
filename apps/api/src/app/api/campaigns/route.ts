@@ -5,7 +5,7 @@ import { prisma } from "../../../lib/db/client";
 import { requireCurrentUser } from "../../../lib/auth/current-user";
 import { parseJsonBody, parseQuery } from "../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../lib/api/response";
-import { assertFreePitchBudget, assertMarketAllowed, assertPaidDiscoveryAllowed } from "../../../lib/checkout/paid-access";
+import { assertCanStartDiscovery, assertMarketAllowed } from "../../../lib/checkout/paid-access";
 import { createCampaign, listCampaignsForUser } from "../../../lib/campaigns/campaign.service";
 import { campaignCreateSchema, campaignListQuerySchema } from "../../../lib/validation/campaign";
 
@@ -27,9 +27,8 @@ export async function handleListCampaigns(db: PrismaClient, request: NextRequest
 export async function handleCreateCampaign(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
   const user = await requireCurrentUser(db, request);
   const body = await parseJsonBody(request, campaignCreateSchema);
-  await assertPaidDiscoveryAllowed(db, user.id);
+  await assertCanStartDiscovery(db, user.id);
   await assertMarketAllowed(db, user.id, body.market);
-  await assertFreePitchBudget(db, user.id, body.targetCount ?? 20);
   const campaign = await createCampaign(db, user.id, body);
   return jsonOk(campaign, 201);
 }

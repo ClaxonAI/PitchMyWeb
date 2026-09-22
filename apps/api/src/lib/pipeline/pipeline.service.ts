@@ -1,11 +1,13 @@
-import type { LeadPipeline, PipelineStage, PrismaClient } from "@pitchmyweb/db";
+import type { LeadPipeline, PipelineStage, Prisma, PrismaClient } from "@pitchmyweb/db";
 import { buildPreviewContent } from "@pitchmyweb/templates";
 import { ConflictError, DomainError, NotFoundError, ValidationError } from "../errors";
 import { isLeadTransitionAllowed, transitionLeadStatus } from "../leads/lifecycle";
-import { generateWhatsAppAction, normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
+import { isPitchableBusiness } from "../leads/phone";
+import { generateWhatsAppAction } from "../leads/whatsapp.service";
 import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
+import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
 import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
 import { enqueueRecording } from "./recording-queue";
 
@@ -20,6 +22,36 @@ import { enqueueRecording } from "./recording-queue";
 // and a fixed reason code, and retryPipeline() resumes from that stage.
 
 export const PIPELINE_BUILD_CONCURRENCY = 5;
+
+// Failed pitches are not dropped: transient failures go back in the queue
+// and are retried automatically (pipeline-maintenance.job.ts), with a
+// growing wait and a hard cap, so a pitch is delivered late rather than
+// silently lost. Failures the user or the recipient caused are never
+// retried. Both live here, not in the maintenance job, because failPipeline
+// below needs them to decide — at the moment a pipeline fails, not later —
+// whether its reserved credit is refunded now or stays reserved for a retry.
+export const AUTO_RETRY_MAX_ATTEMPTS = 3;
+export const AUTO_RETRY_BASE_DELAY_MS = 10 * 60 * 1000;
+export const NON_RETRYABLE_REASONS = [
+  "paused",
+  "opted_out",
+  "invalid_number",
+  "recent_duplicate",
+  // A business whose number WhatsApp cannot reach (no valid number at all,
+  // or a landline) will not have gained one by the time a retry runs — the
+  // classification comes from the stored Business row, not from anything
+  // this attempt did. Retrying only delays the refund.
+  "no_valid_phone",
+  // A SENT message that never got a delivery receipt within
+  // DELIVERY_RECEIPT_TIMEOUT_MS (see syncDeliveries below) is not safe to
+  // blindly retry: WhatsApp may have genuinely delivered it, and a retry
+  // would risk a real second send to a number that already got the first
+  // one. There is no provider-side reconciliation API in this codebase to
+  // check before retrying, so the safe default is to stop here and refund
+  // instead — the customer gets their credit back rather than a delayed,
+  // possibly-duplicate send.
+  "not_delivered",
+];
 
 export type PipelineDeps = {
   enqueueRecording: (job: { recordingId: string }) => Promise<void>;
@@ -76,6 +108,60 @@ function reasonFor(error: unknown): string {
   return "internal_error";
 }
 
+/**
+ * The one place a reservation is ever resolved — called with the pipeline's
+ * *own* credit-relevant fields (never a caller's possibly-stale in-memory
+ * copy) once its stage transition has already won the right to resolve it
+ * (see failPipeline and the two SENT-transition call sites below, both of
+ * which condition their stage-changing UPDATE on `creditOutcome IS NULL` in
+ * the same transaction this runs in). `creditOutcome` here is a second,
+ * independent guard on top of that: only the caller that actually flips it
+ * from null goes on to touch the wallet/ledger/batch at all.
+ *
+ * batchId null is a historical-row case (pipelines created before this
+ * column existed) — nothing to resolve, so this is a no-op.
+ */
+async function resolvePipelineCredit(
+  tx: Prisma.TransactionClient,
+  pipeline: { id: string; batchId: string | null },
+  userId: string,
+  outcome: "CONSUMED" | "REFUNDED",
+): Promise<void> {
+  if (!pipeline.batchId) return;
+  const claimed = await tx.leadPipeline.updateMany({
+    where: { id: pipeline.id, creditOutcome: null },
+    data: { creditOutcome: outcome, creditResolvedAt: new Date() },
+  });
+  if (claimed.count !== 1) return;
+
+  if (outcome === "CONSUMED") {
+    await consumeReservedCredit(tx, { userId, batchId: pipeline.batchId, pipelineId: pipeline.id });
+    await tx.pitchBatch.updateMany({ where: { id: pipeline.batchId, status: "PROCESSING" }, data: { sentCount: { increment: 1 } } });
+  } else {
+    await refundReservedCredit(tx, { userId, batchId: pipeline.batchId, pipelineId: pipeline.id });
+    await tx.pitchBatch.updateMany({ where: { id: pipeline.batchId, status: "PROCESSING" }, data: { failedCount: { increment: 1 }, refundedCount: { increment: 1 } } });
+  }
+
+  // Batch completion: every reserved slot has now either sent or (finally)
+  // failed. Checked here rather than as a separate follow-up step, so it
+  // commits in the same transaction as the resolution that triggered it.
+  const batch = await tx.pitchBatch.findUnique({
+    where: { id: pipeline.batchId },
+    select: { reservedCount: true, sentCount: true, failedCount: true, status: true },
+  });
+  if (batch && batch.status === "PROCESSING" && batch.sentCount + batch.failedCount >= batch.reservedCount) {
+    await tx.pitchBatch.updateMany({ where: { id: pipeline.batchId, status: "PROCESSING" }, data: { status: "COMPLETED", completedAt: new Date() } });
+  }
+}
+
+/**
+ * Sets a pipeline FAILED and, if this was its last allowed attempt (or the
+ * failure reason is one that is never retried), refunds its reserved credit
+ * in the same transaction — the pipeline row and the wallet can never
+ * disagree about whether this pitch is still "in flight." A failure that is
+ * still retryable leaves the credit reserved, awaiting
+ * pipeline-maintenance.job.ts's requeueFailedPipelines.
+ */
 async function failPipeline(
   db: PrismaClient,
   pipeline: Pick<LeadPipeline, "id" | "campaignId" | "leadId">,
@@ -86,10 +172,25 @@ async function failPipeline(
   if (!(error instanceof PipelineStepError) && !(error instanceof DomainError)) {
     console.error(`Pipeline ${pipeline.id} failed at ${failureStage}:`, error);
   }
-  await db.leadPipeline.update({
-    where: { id: pipeline.id },
-    data: { stage: "FAILED", failureStage, failureReason: reason },
+
+  await db.$transaction(async (tx) => {
+    // Read the *fresh* attempts count from this very write, not from the
+    // `pipeline` parameter a caller may have loaded earlier: buildAndPublish
+    // increments attempts via its own setStage call before it can fail, so
+    // an in-memory copy taken at the top of that function would be one
+    // behind the true value here — using this update's own return avoids
+    // refunding one attempt too early.
+    const updated = await tx.leadPipeline.update({
+      where: { id: pipeline.id },
+      data: { stage: "FAILED", failureStage, failureReason: reason },
+      select: { attempts: true, batchId: true, campaign: { select: { userId: true } } },
+    });
+    const isFinal = updated.attempts >= AUTO_RETRY_MAX_ATTEMPTS || NON_RETRYABLE_REASONS.includes(reason);
+    if (isFinal) {
+      await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, updated.campaign.userId, "REFUNDED");
+    }
   });
+
   const alert = failureStage === "DELIVERY_QUEUED" || failureStage === "VIDEO_UPLOADED";
   emitEvent(
     alert ? "delivery.failed" : "pipeline.failed",
@@ -206,7 +307,12 @@ export async function buildAndPublish(db: PrismaClient, pipelineId: string): Pro
   try {
     await setStage(db, pipeline, "BUILDING_SITE", { incrementAttempts: true });
 
-    if (!normalizePhoneForWhatsApp(pipeline.lead.business.phone)) {
+    // The pitch queue's entry condition (and the last place it can still be
+    // enforced cheaply): a lead whose number WhatsApp cannot reach fails
+    // here, before a site is built for it, and Phase 3 refunds its reserved
+    // credit — "no_valid_phone" is in NON_RETRYABLE_REASONS, so that refund
+    // is immediate rather than after three pointless retries.
+    if (!isPitchableBusiness(pipeline.lead.business)) {
       throw new PipelineStepError("no_valid_phone", "The business has no phone number WhatsApp can reach");
     }
 
@@ -311,6 +417,26 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
       return;
     }
 
+    // Never queue a second message for a pipeline that already has one in
+    // flight. enqueueMessage's BullMQ dedup is keyed on the *message row's*
+    // id (`send-<messageId>`), so it cannot help here: two retries of the
+    // same pipeline would each create their own row and each enqueue a job
+    // for it — two real WhatsApp sends to the same business. Only a message
+    // that reached a dead state (the send definitively did not happen) may
+    // be replaced.
+    const existing = pipeline.whatsappMessageId
+      ? await db.whatsAppMessage.findUnique({ where: { id: pipeline.whatsappMessageId }, select: { id: true, status: true } })
+      : null;
+    if (existing && !DEAD_STATUSES.has(existing.status)) {
+      // Still queued, sending, or already sent/delivered — syncDeliveries
+      // owns it from here. Re-assert the stage in case a retry arrived
+      // while it sat in DELIVERY_QUEUED, but create nothing new.
+      if (pipeline.stage !== "DELIVERY_QUEUED") {
+        await setStage(db, pipeline, "DELIVERY_QUEUED", { whatsappMessageId: existing.id });
+      }
+      return;
+    }
+
     const account = await db.whatsAppAccount.findFirst({
       where: { userId: pipeline.campaign.userId, status: "CONNECTED" },
       orderBy: { lastConnectedAt: "desc" },
@@ -323,7 +449,9 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
       pipeline.campaign.userId,
       {
         accountId: account.id,
-        phoneNumber: pipeline.lead.business.phone ?? "",
+        // The validated E.164 number, not the provider's raw string: both
+        // end up as digits, but only one of them was parsed.
+        phoneNumber: pipeline.lead.business.normalizedPhone ?? pipeline.lead.business.phone ?? "",
         leadId: pipeline.leadId,
         body: fillSiteLink(pitch.content, project.publishedUrl),
       },
@@ -333,6 +461,20 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
   } catch (error) {
     await failPipeline(db, pipeline, "DELIVERY_QUEUED", error);
   }
+}
+
+/**
+ * Force-fails a pipeline that has sat in an active stage with no progress
+ * for far longer than that stage can legitimately take — the recovery path
+ * for a process that died mid-flight (see pipeline-maintenance.job.ts).
+ * Goes through the same failPipeline path as any other failure, so a
+ * pipeline abandoned this way refunds its reserved credit exactly like one
+ * that failed normally: a crash must not cost the customer a pitch.
+ */
+export async function abandonStalePipeline(db: PrismaClient, pipelineId: string, stage: PipelineStage, reason: string): Promise<void> {
+  const pipeline = await db.leadPipeline.findUnique({ where: { id: pipelineId }, select: { id: true, campaignId: true, leadId: true } });
+  if (!pipeline) return;
+  await failPipeline(db, pipeline, stage, new PipelineStepError(reason));
 }
 
 async function markLeadPitched(db: PrismaClient, leadId: string, metadata: Record<string, unknown>): Promise<void> {
@@ -362,6 +504,7 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
   const now = filter.now ?? new Date();
   const pending = await db.leadPipeline.findMany({
     where: { stage: "DELIVERY_QUEUED", whatsappMessageId: { not: null }, ...(filter.campaignId ? { campaignId: filter.campaignId } : {}) },
+    include: { campaign: { select: { userId: true } } },
     take: 500,
   });
   if (pending.length === 0) return 0;
@@ -377,9 +520,13 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
     const message = byId.get(pipeline.whatsappMessageId!);
     if (!message) continue;
     if (DELIVERED_STATUSES.has(message.status)) {
-      const claimed = await db.leadPipeline.updateMany({
-        where: { id: pipeline.id, stage: "DELIVERY_QUEUED" },
-        data: { stage: "SENT" },
+      const claimed = await db.$transaction(async (tx) => {
+        const result = await tx.leadPipeline.updateMany({
+          where: { id: pipeline.id, stage: "DELIVERY_QUEUED", creditOutcome: null },
+          data: { stage: "SENT" },
+        });
+        if (result.count === 1) await resolvePipelineCredit(tx, pipeline, pipeline.campaign.userId, "CONSUMED");
+        return result;
       });
       if (claimed.count === 1) {
         changed += 1;
@@ -404,7 +551,19 @@ export async function markDirectSent(db: PrismaClient, userId: string, pipelineI
     throw new ConflictError(`Only a pipeline with a ready link can be marked as sent (current stage: ${pipeline.stage})`);
   }
   const sentAt = new Date();
-  await db.leadPipeline.update({ where: { id: pipeline.id }, data: { stage: "SENT" } });
+  // Conditional on stage+creditOutcome, not a plain update: this is the
+  // fix for a real existing gap — nothing previously stopped a second
+  // concurrent markDirectSent call (or a stray retryPipeline racing it)
+  // from processing the same pipeline twice. Whichever call wins this
+  // claim is the only one that consumes the credit or touches Outreach.
+  const claimed = await db.$transaction(async (tx) => {
+    const result = await tx.leadPipeline.updateMany({ where: { id: pipeline.id, stage: "LINK_READY", creditOutcome: null }, data: { stage: "SENT" } });
+    if (result.count === 1) await resolvePipelineCredit(tx, pipeline, pipeline.campaign.userId, "CONSUMED");
+    return result;
+  });
+  if (claimed.count !== 1) {
+    throw new ConflictError(`Only a pipeline with a ready link can be marked as sent (current stage: ${pipeline.stage})`);
+  }
   await db.outreach.updateMany({
     where: { leadId: pipeline.leadId, status: "LINK_GENERATED", whatsappUrl: pipeline.whatsappUrl ?? undefined },
     data: { status: "SENT", sentAt },

@@ -25,6 +25,7 @@ function business(overrides: Partial<Business> = {}): Business {
     normalizedPhone: "+919800000001",
     normalizedAddress: "12 mg road",
     normalizedDomain: null,
+    phoneType: null,
     mergedIntoId: null,
     websiteVerificationStatus: "UNVERIFIED",
     websiteVerifiedAt: null,
@@ -55,6 +56,7 @@ function normalized(overrides: Partial<NormalizedBusiness> = {}): NormalizedBusi
     normalizedPhone: "+919800000001",
     normalizedAddress: "12 mg road",
     normalizedDomain: null,
+    phoneType: null,
     ...overrides,
   };
 }

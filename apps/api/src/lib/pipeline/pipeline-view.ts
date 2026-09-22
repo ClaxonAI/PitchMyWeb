@@ -20,6 +20,13 @@ const STAGES: PipelineStage[] = [
 
 export type StageCounts = Record<PipelineStage, number>;
 
+/**
+ * Bound on the batch history one campaign's progress view loads. A campaign
+ * pitched in dozens of small batches shows its recent ones rather than
+ * growing an unbounded response.
+ */
+const MAX_BATCHES = 50;
+
 function emptyCounts(): StageCounts {
   return Object.fromEntries(STAGES.map((stage) => [stage, 0])) as StageCounts;
 }
@@ -68,6 +75,66 @@ export async function getCampaignOverview(db: PrismaClient, userId: string, camp
       delivered: stages.SENT,
     },
     whatsapp: whatsappAccount,
+  };
+}
+
+/**
+ * One row per "send N pitches" action on this campaign, newest first — the
+ * read model behind the batch progress UI ("9 of 12 resolved: 7 sent, 2
+ * failed, 3 still working").
+ *
+ * requestedCount and reservedCount are deliberately both exposed and are
+ * deliberately different numbers: the first is what the user asked for, the
+ * second is what there turned out to be eligible leads and credits for. A
+ * user who asks for 15 and gets 11 is owed that explanation, and only
+ * reservedCount ever cost them anything.
+ *
+ * `processing` is derived rather than stored: it is the reserved slots whose
+ * credit is not yet resolved either way, which is exactly how many pitches
+ * are still in flight. Stage counts come from one grouped query over all of
+ * this campaign's batches, not one query per batch.
+ */
+export async function listCampaignBatches(db: PrismaClient, userId: string, campaignId: string) {
+  const campaign = await loadOwnedCampaign(db, campaignId, userId);
+  // Same reason every other read model here does it: a delivery receipt that
+  // arrived while nobody was looking should be reflected in these counts.
+  await syncDeliveries(db, { campaignId: campaign.id });
+
+  const batches = await db.pitchBatch.findMany({
+    where: { campaignId: campaign.id },
+    orderBy: { createdAt: "desc" },
+    take: MAX_BATCHES,
+  });
+  if (batches.length === 0) return { items: [] };
+
+  const stageGroups = await db.leadPipeline.groupBy({
+    by: ["batchId", "stage"],
+    where: { batchId: { in: batches.map((batch) => batch.id) } },
+    _count: { _all: true },
+  });
+  const stagesByBatch = new Map<string, StageCounts>();
+  for (const group of stageGroups) {
+    if (group.batchId === null) continue;
+    const counts = stagesByBatch.get(group.batchId) ?? emptyCounts();
+    counts[group.stage] = group._count._all;
+    stagesByBatch.set(group.batchId, counts);
+  }
+
+  return {
+    items: batches.map((batch) => ({
+      id: batch.id,
+      mode: batch.mode,
+      status: batch.status,
+      requestedCount: batch.requestedCount,
+      reservedCount: batch.reservedCount,
+      sentCount: batch.sentCount,
+      failedCount: batch.failedCount,
+      refundedCount: batch.refundedCount,
+      processingCount: Math.max(0, batch.reservedCount - batch.sentCount - batch.failedCount),
+      createdAt: batch.createdAt,
+      completedAt: batch.completedAt,
+      stages: stagesByBatch.get(batch.id) ?? emptyCounts(),
+    })),
   };
 }
 

@@ -16,13 +16,14 @@ export type Currency = "USD" | "INR";
 
 // Both markets are priced in INR; the market still controls which plan access is unlocked.
 //
-// TODO(product): `credits` below are placeholders, not a confirmed pack
-// size — a purchase now grants a fixed quantity of pitch credits instead
-// of unlimited access (see wallet.service.ts), and the real number per
-// plan/market is a pricing decision this file cannot make on its own.
-// Confirm before relying on these in production; nothing else in the
-// credit system depends on the specific values, only on `credits` being
-// present and correct.
+// `credits` is the pack size a purchase grants (a purchase no longer buys
+// unlimited access — see wallet.service.ts). It is not a new product
+// decision: it is the number the pricing page has always promised, where
+// each plan's `batchSize` in apps/web/src/data/plans.ts is the same
+// quantity — "Pitch 20 businesses", "Fifty ready-made pitches". Keeping
+// them equal is what makes the wallet honour what was sold, so change both
+// together or the customer gets a different number of pitches than the page
+// they bought from said they would.
 const PLAN_PRICES: Record<PlanId, Record<Market, { amount: number; currency: Currency; credits: number }>> = {
   auto: { india: { amount: 149, currency: "INR", credits: 20 }, foreign: { amount: 329, currency: "INR", credits: 20 } },
   direct: { india: { amount: 289, currency: "INR", credits: 50 }, foreign: { amount: 489, currency: "INR", credits: 50 } },

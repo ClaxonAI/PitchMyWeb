@@ -126,6 +126,7 @@ function makeBusiness(overrides: Partial<Business> = {}): Business {
     normalizedPhone: "+919800000001",
     normalizedAddress: "12 mg road",
     normalizedDomain: null,
+    phoneType: null,
     mergedIntoId: null,
     websiteVerificationStatus: "UNVERIFIED",
     websiteVerifiedAt: null,

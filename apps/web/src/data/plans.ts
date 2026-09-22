@@ -5,6 +5,11 @@ import type { Market, Plan, PlanId, PlanPrice } from "@/types";
 // apps/api's lib/checkout/plan-pricing.ts in sync (that's the server-side
 // copy that actually decides what Razorpay charges; see its own header
 // comment for why it's a deliberate duplicate, not a shared import).
+//
+// `batchSize` is now load-bearing in the same way the prices are: it is the
+// number of pitch credits the purchase puts in the buyer's wallet, mirrored
+// as `credits` in that same server-side table. A mismatch means the page
+// promises one number of pitches and the wallet grants another.
 export const plans: Plan[] = [
   {
     id: "auto",
