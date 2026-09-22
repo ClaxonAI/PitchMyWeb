@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createRedisConnection } from "@pitchmyweb/contracts";
-import { RateLimitedError } from "../errors";
+import { RateLimitUnavailableError, RateLimitedError } from "../errors";
 import { rateLimit, rateLimitStore } from "./rate-limit";
 
 // Real Redis from infrastructure/docker (the WhatsApp tests need it too).
@@ -24,6 +24,15 @@ describe("rateLimit (memory store)", () => {
     const key = unique("mem");
     for (let i = 0; i < 3; i += 1) await rateLimit(key, 3, 60_000, { store: "memory" });
     await expect(rateLimit(key, 3, 60_000, { store: "memory" })).rejects.toThrow(RateLimitedError);
+  });
+
+  it("refuses the memory store in production", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    try {
+      await expect(rateLimit(unique("production-memory"), 1, 60_000, { store: "memory" })).rejects.toThrow(RateLimitUnavailableError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -58,12 +67,11 @@ describe("rateLimit (redis store)", () => {
     await expect(rateLimit(key, 1, 50, { store: "redis", redis })).resolves.toBeUndefined();
   });
 
-  it("falls back to the memory store when Redis fails, instead of erroring or allowing everything", async () => {
+  it("fails closed when Redis fails instead of weakening protection", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const broken = { eval: vi.fn(async () => { throw new Error("ECONNREFUSED"); }) } as never;
     const key = unique("fallback");
-    await rateLimit(key, 1, 60_000, { store: "redis", redis: broken });
-    await expect(rateLimit(key, 1, 60_000, { store: "redis", redis: broken })).rejects.toThrow(RateLimitedError);
+    await expect(rateLimit(key, 1, 60_000, { store: "redis", redis: broken })).rejects.toThrow(RateLimitUnavailableError);
     warn.mockRestore();
   });
 });

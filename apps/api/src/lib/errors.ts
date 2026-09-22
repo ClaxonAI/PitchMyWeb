@@ -68,6 +68,12 @@ export class RateLimitedError extends DomainError {
   }
 }
 
+export class RateLimitUnavailableError extends DomainError {
+  constructor() {
+    super("Temporary protection unavailable. Please try again later.", "RATE_LIMIT_UNAVAILABLE", 503);
+  }
+}
+
 export class InvalidLeadTransitionError extends ConflictError {
   constructor(
     public readonly currentStatus: string,
