@@ -209,6 +209,16 @@ deleted upstream lives on forever, and for a route file that means a deleted
 endpoint keeps being served: `/api/webhooks/razorpay` answered for a release
 after the payment-link code was removed from the repository.
 
+Run it through `ssm send-command` and the shell it lands in has no `HOME` at
+all. That matters because pm2 keeps its daemon state under `$HOME/.pm2` and
+`bootstrap.sh` reaches pm2 through `sudo --preserve-env`, which carries the
+caller's `HOME` rather than the app user's: with none to carry, pm2 resolved
+`/root/.pm2`, failed with `EACCES` as the app user, and killed the deploy at
+the last step — after the new build was swapped in but before anything
+restarted, so the box kept serving the old build and looked healthy. The
+script now sets `PM2_HOME` explicitly on every pm2 call, which outranks
+`HOME`; do not replace those calls with bare `pm2`.
+
 Shell scripts must keep LF endings (`.gitattributes` pins them). On Windows
 `core.autocrlf` rewrites them and `git archive` carries that through, which
 ships a tarball whose scripts die on `$'\r': command not found`.
