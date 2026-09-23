@@ -94,7 +94,18 @@ export function CountrySelect({ value, onChange }: { value: string; onChange: (c
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Target country: ${country.name}`}
+        // No aria-label on purpose. The button's visible text is "Target
+        // country", the country name, and the exchange-rate chip; an
+        // aria-label replaces all of that with its own string, and the one
+        // that used to be here ("Target country: <name>") left out the rate
+        // and added a colon. WCAG 2.5.3 (Label in Name) requires the visible
+        // label to appear in the accessible name, so that failed F96 — voice
+        // control users saying what they can see would not match the control.
+        //
+        // Letting the name compute from the button's own contents makes the
+        // two identical by construction, so they cannot drift again. CodeChip
+        // is aria-hidden, and the rate chip is display:none under 380px, so
+        // each viewport's name matches exactly what that viewport shows.
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={(e) => {
           if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
