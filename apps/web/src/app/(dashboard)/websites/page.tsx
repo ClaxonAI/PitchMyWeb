@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Download } from "lucide-react";
 import type { Paginated, WebsiteProject } from "@/lib/api-client";
+import { Button } from "@/components/dashboard-ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 
@@ -43,6 +45,7 @@ export default async function WebsitesPage() {
               <TableHead>Template</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Live URL</TableHead>
+              <TableHead>Source</TableHead>
               <TableHead>Updated</TableHead>
             </TableRow>
           </TableHeader>
@@ -65,6 +68,14 @@ export default async function WebsitesPage() {
                   ) : (
                     <span className="text-dash-muted-foreground">Not published</span>
                   )}
+                </TableCell>
+                <TableCell>
+                  <Button asChild variant="ghost" size="sm" title="Download website source as ZIP">
+                    <a href={`/api/websites/${project.id}/download`}>
+                      <Download className="size-4" />
+                      <span className="sr-only">Download ZIP</span>
+                    </a>
+                  </Button>
                 </TableCell>
                 <TableCell className="text-dash-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</TableCell>
               </TableRow>
