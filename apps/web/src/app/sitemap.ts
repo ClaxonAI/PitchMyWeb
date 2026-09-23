@@ -1,5 +1,3 @@
-import { statSync } from "node:fs";
-import path from "node:path";
 import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/seo/site-url";
 
@@ -8,43 +6,53 @@ import { absoluteUrl } from "@/lib/seo/site-url";
 // Only publicly indexable marketing pages belong here. Everything behind the
 // session cookie — /dashboard, /leads, /campaigns, /websites, /whatsapp,
 // /billing, /settings, /profile, /activity, /discover, /pitches and the whole
-// /admin tree — is excluded, and so are /login, /register and /sso-callback:
-// a sign-in form has nothing to rank for, and listing a URL in the sitemap
-// while robots.txt blocks it is a Search Console error rather than a hint.
-// Keep this list in step with robots.ts, which disallows the same set.
+// /admin tree — is excluded, and so is /sso-callback: listing a URL in the
+// sitemap while robots.txt blocks it is a Search Console error rather than a
+// hint. /login and /register are left out too — a sign-in form has nothing to
+// rank for; they carry noindex instead of a robots.txt block, for the reason
+// robots.ts explains.
 
 type Entry = {
   path: string;
-  /** Source file, so lastModified reflects a real content change. */
-  source: string;
+  /**
+   * The date this page's content last meaningfully changed — not the date of
+   * any edit that touched the file.
+   *
+   * Maintained by hand, and it has to be. The obvious alternatives are both
+   * wrong here:
+   *
+   *   - The build date moves on every deploy, which is how you teach a crawler
+   *     that the field carries no information and can be ignored.
+   *   - The source file's mtime looks accurate in a local build and is not.
+   *     Production ships via `git archive` (docs/production-setup.md), which
+   *     stamps *every* file in the tarball with the commit timestamp. This file
+   *     used to stat the page source, and in production that collapsed all six
+   *     entries to one identical date that moved on each deploy — the exact
+   *     failure the stat was meant to avoid. Verified against the live
+   *     sitemap.xml, where every lastmod read 2026-09-22T14:36:57Z, the commit
+   *     time of the deployed merge.
+   *   - Reading git at build time is not available: the tarball has no .git.
+   *
+   * So: bump the date here when you change what a page *says*. If that upkeep
+   * lapses, delete the field rather than let it drift — Google's guidance is
+   * that an unreliable lastmod is worse than none, because it gets the whole
+   * signal discounted for the site.
+   */
+  lastModified: string;
 };
 
 const ROUTES: Entry[] = [
-  { path: "/", source: "(marketing)/page.tsx" },
-  { path: "/pricing", source: "(marketing)/pricing/page.tsx" },
-  { path: "/contact", source: "(marketing)/contact/page.tsx" },
-  { path: "/terms", source: "(marketing)/terms/page.tsx" },
-  { path: "/privacy", source: "(marketing)/privacy/page.tsx" },
-  { path: "/refunds", source: "(marketing)/refunds/page.tsx" },
+  { path: "/", lastModified: "2026-09-23" },
+  { path: "/pricing", lastModified: "2026-09-23" },
+  { path: "/contact", lastModified: "2026-09-22" },
+  { path: "/terms", lastModified: "2026-09-22" },
+  { path: "/privacy", lastModified: "2026-09-22" },
+  { path: "/refunds", lastModified: "2026-09-22" },
 ];
-
-// A lastModified that moves on every deploy teaches crawlers to ignore the
-// field, so it is taken from the page's own source file. The build runs with
-// the sources present (this module is evaluated during `next build`), but the
-// fallback keeps a sitemap being emitted rather than a build failing if a
-// future packaging step moves them.
-const buildTime = new Date();
-function lastModified(source: string): Date {
-  try {
-    return statSync(path.join(process.cwd(), "src", "app", source)).mtime;
-  } catch {
-    return buildTime;
-  }
-}
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return ROUTES.map((route) => ({
     url: absoluteUrl(route.path),
-    lastModified: lastModified(route.source),
+    lastModified: route.lastModified,
   }));
 }
