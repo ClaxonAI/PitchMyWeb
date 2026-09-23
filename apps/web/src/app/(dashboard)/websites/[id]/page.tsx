@@ -48,7 +48,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
             <StatusBadge status={project.status} />
           </div>
           <p className="mt-1 text-sm text-dash-muted-foreground">
-            {project.template} · {project.slug}
+            {project.template}
           </p>
           {project.demoUrl && (
             <a href={project.demoUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm text-dash-primary underline underline-offset-2">
@@ -60,6 +60,9 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
               View published site
             </a>
           )}
+          <a href={`/api/websites/${project.id}/download`} className="mt-2 inline-block text-sm text-dash-primary underline underline-offset-2">
+            Download source as ZIP
+          </a>
         </div>
         <PublishWebsiteButton id={project.id} status={project.status} />
       </div>

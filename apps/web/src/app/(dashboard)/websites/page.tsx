@@ -42,7 +42,7 @@ export default async function WebsitesPage() {
             <TableRow>
               <TableHead>Template</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Slug</TableHead>
+              <TableHead>Live URL</TableHead>
               <TableHead>Updated</TableHead>
             </TableRow>
           </TableHeader>
@@ -57,7 +57,15 @@ export default async function WebsitesPage() {
                 <TableCell>
                   <StatusBadge status={project.status} />
                 </TableCell>
-                <TableCell className="font-mono text-xs">{project.slug}</TableCell>
+                <TableCell>
+                  {project.publishedUrl || project.demoUrl ? (
+                    <a href={project.publishedUrl || project.demoUrl || undefined} target="_blank" rel="noreferrer" className="text-dash-primary underline underline-offset-2">
+                      {project.publishedUrl || project.demoUrl}
+                    </a>
+                  ) : (
+                    <span className="text-dash-muted-foreground">Not published</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-dash-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</TableCell>
               </TableRow>
             ))}

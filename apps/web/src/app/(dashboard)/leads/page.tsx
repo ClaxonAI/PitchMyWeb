@@ -57,7 +57,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
               description="Leads appear here once a search finds businesses. Nothing is scraped until you start one."
               action={
                 <Button asChild>
-                  <Link href="/discover">Find businesses</Link>
+                  <Link href="/campaigns/new">New campaign</Link>
                 </Button>
               }
             />

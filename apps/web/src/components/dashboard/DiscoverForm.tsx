@@ -170,8 +170,6 @@ export function DiscoverForm() {
               <Label htmlFor="websiteRequirement">Website</Label>
               <Select id="websiteRequirement" {...register("websiteRequirement")}>
                 <option value="WITHOUT_WEBSITE">No website</option>
-                <option value="WITH_WEBSITE">Has a website</option>
-                <option value="ANY">Any</option>
               </Select>
             </div>
 
@@ -180,7 +178,7 @@ export function DiscoverForm() {
               <Input id="targetCount" type="number" min={1} max={MAX_TARGET_COUNT} {...register("targetCount")} />
               {errors.targetCount && <p className="text-xs text-dash-destructive">{errors.targetCount.message}</p>}
               <p className="text-xs text-dash-muted-foreground">
-                We search for exactly this many businesses. Any without a number WhatsApp can reach are listed but not pitched.
+                We search for businesses without a website and with a usable WhatsApp number, up to this many leads.
               </p>
             </div>
 

@@ -133,10 +133,10 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               <EmptyState
                 icon={Search}
                 title="No leads yet"
-                description="This campaign hasn't returned any businesses. Start a search from Discover to fill it."
+                description="This campaign hasn't returned any businesses yet. Start a search to fill it."
                 action={
                   <Button asChild>
-                    <Link href="/discover">Find businesses</Link>
+                    <Link href="/campaigns/new">New campaign</Link>
                   </Button>
                 }
               />

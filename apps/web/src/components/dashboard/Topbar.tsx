@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { LogOut, Menu, Moon, Settings, Shield, Sun, UserCircle } from "lucide-react";
+import { LogOut, Menu, Moon, Settings, Shield, Sun } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/dashboard-ui/avatar";
 import { Button } from "@/components/dashboard-ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/dashboard-ui/dropdown-menu";
@@ -94,9 +94,6 @@ export function Topbar() {
               <Shield className="h-4 w-4" /> Admin
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => router.push("/profile")}>
-            <UserCircle className="h-4 w-4" /> Profile
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => router.push("/settings")}>
             <Settings className="h-4 w-4" /> Settings
           </DropdownMenuItem>

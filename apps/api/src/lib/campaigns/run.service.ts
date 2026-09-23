@@ -55,7 +55,7 @@ function toCampaignSearchInput(campaign: Campaign): CampaignSearchInput {
     radius: campaign.radius,
     minRating: campaign.minRating,
     minReviews: campaign.minReviews,
-    websiteRequirement: campaign.websiteRequirement,
+    websiteRequirement: "WITHOUT_WEBSITE",
     leadLimit: campaign.leadLimit,
   };
 }

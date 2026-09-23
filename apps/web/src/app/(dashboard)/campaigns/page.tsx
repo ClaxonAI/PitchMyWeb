@@ -35,7 +35,7 @@ export default async function CampaignsPage() {
           <p className="mt-1 text-sm text-dash-muted-foreground">Every discovery run you&apos;ve started.</p>
         </div>
         <Button asChild>
-          <Link href="/discover">
+          <Link href="/campaigns/new">
             <Plus className="h-4 w-4" /> New campaign
           </Link>
         </Button>
@@ -43,7 +43,7 @@ export default async function CampaignsPage() {
 
       {campaigns.length === 0 ? (
         <p className="rounded-dash-lg border border-dash-border bg-dash-card p-6 text-sm text-dash-muted-foreground">
-          No campaigns yet. <Link href="/discover" className="text-dash-primary underline underline-offset-2">Create your first one</Link>.
+          No campaigns yet. <Link href="/campaigns/new" className="text-dash-primary underline underline-offset-2">Create your first one</Link>.
         </p>
       ) : (
         <Table>

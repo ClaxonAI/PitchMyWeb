@@ -184,7 +184,11 @@ export function PitchBatchPanel({
               </p>
             </>
           )}
-          {error && <p className="text-sm text-dash-destructive">{error}</p>}
+          {error && (
+            <p className="text-sm text-dash-destructive">
+              {error} {error.toLowerCase().includes("connect whatsapp") && <Link href="/whatsapp" className="underline underline-offset-2">Connect WhatsApp</Link>}
+            </p>
+          )}
         </div>
 
         {batches.length > 0 && (

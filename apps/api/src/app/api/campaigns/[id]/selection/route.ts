@@ -7,6 +7,7 @@ import { parseJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { rateLimit } from "../../../../../lib/api/rate-limit";
 import { autoSelectForUser, selectLeads } from "../../../../../lib/campaigns/selection.service";
+import { ConflictError } from "../../../../../lib/errors";
 import type { PipelineDeps } from "../../../../../lib/pipeline/pipeline.service";
 import { cuidSchema } from "../../../../../lib/validation/common";
 import { campaignSelectionSchema } from "../../../../../lib/validation/pipeline";
@@ -30,6 +31,14 @@ export async function handleSelectLeads(
   const id = cuidSchema.parse(params.id);
   const body = await parseJsonBody(request, campaignSelectionSchema);
   await rateLimit(`selection:user:${user.id}`, 30, 10 * 60 * 1000);
+
+  const connectedAccount = await db.whatsAppAccount.findFirst({
+    where: { userId: user.id, status: "CONNECTED" },
+    select: { id: true },
+  });
+  if (!connectedAccount) {
+    throw new ConflictError("Connect WhatsApp before pitching campaign leads.");
+  }
 
   const result =
     "auto" in body ? await autoSelectForUser(db, user.id, id, { count: body.count }, deps) : await selectLeads(db, user.id, id, body.leadIds, deps);

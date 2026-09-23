@@ -126,7 +126,7 @@ export function AnalyticsOverview({ analytics }: { analytics: AnalyticsSummary }
           description="Run a search and your funnel, conversion numbers and top categories will build up here as leads move through it."
           action={
             <Button asChild>
-              <Link href="/discover">Find businesses</Link>
+              <Link href="/campaigns/new">New campaign</Link>
             </Button>
           }
         />
