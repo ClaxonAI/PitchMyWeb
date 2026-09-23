@@ -5,6 +5,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { AfterPayment } from "@/components/pricing/AfterPayment";
 import { PlanGrid } from "@/components/pricing/PlanGrid";
 import { Container } from "@/components/ui/Container";
+import { pricingFaqs } from "@/data/faq";
 import { pageMetadata } from "@/lib/seo/metadata";
 import { pricingSchemaGraph } from "@/lib/seo/structured-data";
 
@@ -47,7 +48,9 @@ export default function PricingPage() {
 
       <AfterPayment />
       <div className="border-t border-ink/8">
-        <FAQSection />
+        {/* Billing questions, not the home page’s product ones — the two
+            pages rendered the same six answers before. */}
+        <FAQSection items={pricingFaqs} eyebrow="Billing" title="Questions about paying." />
       </div>
     </>
   );

@@ -1,4 +1,5 @@
-import { faqs } from "@/data/faq";
+import type { Faq } from "@/types";
+import { faqs, pricingFaqs } from "@/data/faq";
 import { plans } from "@/data/plans";
 import { siteConfig } from "@/data/site";
 import { absoluteUrl, siteUrl } from "@/lib/seo/site-url";
@@ -66,11 +67,15 @@ export function breadcrumbSchema(trail: { name: string; path: string }[]) {
   };
 }
 
-function faqSchema() {
+// Each page marks up its own questions. This is only safe because the two
+// sets are disjoint (see data/faq.ts): marking up the same answers under two
+// @ids would be telling Google the pages are interchangeable, which is the
+// duplication the split exists to remove.
+function faqSchema(id: string, entries: Faq[]) {
   return {
     "@type": "FAQPage",
-    "@id": `${siteUrl}/#faq`,
-    mainEntity: faqs.map((faq) => ({
+    "@id": id,
+    mainEntity: entries.map((faq) => ({
       "@type": "Question",
       name: faq.question,
       acceptedAnswer: { "@type": "Answer", text: faq.answer },
@@ -130,7 +135,7 @@ export function homeSchema() {
       about: { "@id": ORGANIZATION_ID },
       inLanguage: "en",
     },
-    faqSchema(),
+    faqSchema(`${siteUrl}/#faq`, faqs),
   ]);
 }
 
@@ -138,6 +143,7 @@ export function pricingSchemaGraph() {
   return graph([
     breadcrumbSchema([{ name: "Pricing", path: "/pricing" }]),
     pricingSchema(),
+    faqSchema(`${siteUrl}/pricing#faq`, pricingFaqs),
   ]);
 }
 
