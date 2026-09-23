@@ -212,6 +212,7 @@ export type Campaign = {
   selectionMode: SelectionMode;
   targetCount: number;
   deliveryMode: DeliveryMode;
+  messageTemplate: string | null;
   createdAt: string;
   updatedAt: string;
   market: "india" | "foreign";
@@ -230,6 +231,7 @@ export type CampaignCreateInput = {
   targetCount?: number;
   deliveryMode?: DeliveryMode;
   market?: "india" | "foreign";
+  messageTemplate?: string;
 };
 
 export type PipelineStage = "SELECTED" | "BUILDING_SITE" | "SITE_PUBLISHED" | "RECORDING" | "VIDEO_UPLOADED" | "DELIVERY_QUEUED" | "LINK_READY" | "SENT" | "FAILED";

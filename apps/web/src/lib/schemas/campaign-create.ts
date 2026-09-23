@@ -17,6 +17,7 @@ export const campaignFormSchema = z.object({
   minReviews: z.coerce.number().int().min(0).optional(),
   websiteRequirement: z.enum(["ANY", "WITH_WEBSITE", "WITHOUT_WEBSITE"]),
   targetCount: z.coerce.number().int().min(1).max(200),
+  messageTemplate: z.string().trim().min(1, "Message is required").max(1000, "Message is too long"),
 });
 
 export type CampaignFormValues = z.infer<typeof campaignFormSchema>;

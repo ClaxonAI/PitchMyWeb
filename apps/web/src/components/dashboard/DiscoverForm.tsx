@@ -16,6 +16,12 @@ import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
 import { useSession } from "./SessionProvider";
 
+const DEFAULT_MESSAGE_TEMPLATE = `Hi {{business_name}} team,
+
+I noticed {{business_name}} doesn't have a website yet, so I put together a free sample site to show what it could look like: {{site_link}}
+
+If you like it, I can make it live with your photos, timings and booking details. Happy to share more?`;
+
 export function DiscoverForm() {
   const router = useRouter();
   const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits } = useSession();
@@ -35,7 +41,12 @@ export function DiscoverForm() {
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof campaignFormSchema>, unknown, z.output<typeof campaignFormSchema>>({
     resolver: zodResolver(campaignFormSchema),
-    defaultValues: { market: allowedMarkets[0] ?? "india", websiteRequirement: "WITHOUT_WEBSITE", targetCount: defaultTargetCount },
+    defaultValues: {
+      market: allowedMarkets[0] ?? "india",
+      websiteRequirement: "WITHOUT_WEBSITE",
+      targetCount: defaultTargetCount,
+      messageTemplate: DEFAULT_MESSAGE_TEMPLATE,
+    },
   });
 
   async function onSubmit(values: z.output<typeof campaignFormSchema>) {
@@ -143,6 +154,20 @@ export function DiscoverForm() {
               <Label htmlFor="name">Campaign name</Label>
               <Input id="name" placeholder="Dental clinics — Chennai" {...register("name")} />
               {errors.name && <p className="text-xs text-dash-destructive">{errors.name.message}</p>}
+            </div>
+
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Label htmlFor="messageTemplate">WhatsApp message</Label>
+              <textarea
+                id="messageTemplate"
+                rows={7}
+                className="flex w-full rounded-dash-md border border-dash-input bg-dash-background px-3 py-2 text-sm text-dash-foreground shadow-sm outline-none placeholder:text-dash-muted-foreground focus-visible:ring-2 focus-visible:ring-dash-ring"
+                {...register("messageTemplate")}
+              />
+              <p className="text-xs text-dash-muted-foreground">
+                We&apos;ll suggest a message for you. Edit it before starting. Use <code>{"{{business_name}}"}</code> for the lead name and <code>{"{{site_link}}"}</code> for the preview link.
+              </p>
+              {errors.messageTemplate && <p className="text-xs text-dash-destructive">{errors.messageTemplate.message}</p>}
             </div>
 
             <div className="flex flex-col gap-1.5">

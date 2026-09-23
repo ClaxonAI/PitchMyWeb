@@ -26,6 +26,7 @@ const campaignFieldsSchema = z.object({
   selectionMode: z.enum(["MANUAL", "AUTO"]),
   targetCount: z.number().int().min(1, "targetCount must be at least 1").max(200, "targetCount must be at most 200"),
   deliveryMode: z.enum(["AUTO", "DIRECT"]),
+  messageTemplate: z.string().trim().min(1).max(1000).optional(),
 });
 
 /**

@@ -6,6 +6,7 @@ import { sitesPublicUrl } from "../websites/website.service";
 
 export const DEFAULT_PREVIEW_TTL_DAYS = 30;
 export const MAX_DELIVERY_MESSAGE_CHARS = 1000;
+export const BUSINESS_NAME_PLACEHOLDER = "{{business_name}}";
 
 export function previewTtlDays(env: Record<string, string | undefined> = process.env): number {
   const parsed = Number(env.PREVIEW_TTL_DAYS);
@@ -46,6 +47,11 @@ export function fillSiteLink(template: string, siteUrl: string, max = MAX_DELIVE
   return capWithLink(text, `\n\n${siteUrl}`, max);
 }
 
+export function fillMessageTemplate(template: string, businessName: string, siteUrl: string, max = MAX_DELIVERY_MESSAGE_CHARS): string {
+  const personalized = template.split(BUSINESS_NAME_PLACEHOLDER).join(businessName);
+  return fillSiteLink(personalized, siteUrl, max);
+}
+
 /** Direct plan: the pitch with the preview link, plus the video page. */
 export function directMessage(template: string, siteUrl: string, videoUrl: string | null): string {
   const suffix = videoUrl ? `\n\nVideo walkthrough: ${videoUrl}` : "";
@@ -63,5 +69,11 @@ export function fallbackPitch(businessName: string): string {
     "If you like it, I can make it live with your photos, timings and booking details. Happy to share more?",
   ].join("\n\n");
 }
+
+export const DEFAULT_CAMPAIGN_MESSAGE = [
+  `Hi ${BUSINESS_NAME_PLACEHOLDER} team,`,
+  `I noticed ${BUSINESS_NAME_PLACEHOLDER} doesn't have a website yet, so I put together a free sample site to show what it could look like: ${SITE_LINK_PLACEHOLDER}`,
+  "If you like it, I can make it live with your photos, timings and booking details. Happy to share more?",
+].join("\n\n");
 
 export const FALLBACK_PITCH_PROMPT_VERSION = "template-fallback-v1";

@@ -103,6 +103,7 @@ export async function createCampaign(db: PrismaClient, userId: string, rawInput:
       selectionMode: input.selectionMode,
       targetCount: input.targetCount,
       deliveryMode: input.deliveryMode,
+      messageTemplate: input.messageTemplate,
       status: "DRAFT",
     },
   });

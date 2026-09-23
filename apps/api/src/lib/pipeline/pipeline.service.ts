@@ -8,7 +8,7 @@ import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
-import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
+import { BUSINESS_NAME_PLACEHOLDER, directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillMessageTemplate, previewExpiry, videoPageUrl } from "./links";
 import { enqueueRecording } from "./recording-queue";
 
 // The delivery pipeline (docs/pipeline.md). One LeadPipeline row per selected
@@ -203,7 +203,7 @@ async function loadPipeline(db: PrismaClient, pipelineId: string) {
   const pipeline = await db.leadPipeline.findUnique({
     where: { id: pipelineId },
     include: {
-      campaign: { select: { id: true, userId: true, deliveryMode: true } },
+      campaign: { select: { id: true, userId: true, deliveryMode: true, messageTemplate: true } },
       lead: {
         include: {
           business: true,
@@ -411,7 +411,8 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
     if (!pitch) throw new PipelineStepError("no_pitch", "The lead has no pitch");
 
     if (pipeline.campaign.deliveryMode === "DIRECT") {
-      const body = directMessage(pitch.content, project.publishedUrl, videoPageUrl(project.slug));
+      const template = (pipeline.campaign.messageTemplate ?? pitch.content).split(BUSINESS_NAME_PLACEHOLDER).join(pipeline.lead.business.name);
+      const body = directMessage(template, project.publishedUrl, videoPageUrl(project.slug));
       const { whatsappUrl } = await generateWhatsAppAction(db, { leadId: pipeline.leadId, userId: pipeline.campaign.userId, body });
       await setStage(db, pipeline, "LINK_READY", { whatsappUrl });
       return;
@@ -453,7 +454,7 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
         // end up as digits, but only one of them was parsed.
         phoneNumber: pipeline.lead.business.normalizedPhone ?? pipeline.lead.business.phone ?? "",
         leadId: pipeline.leadId,
-        body: fillSiteLink(pitch.content, project.publishedUrl),
+        body: fillMessageTemplate(pipeline.campaign.messageTemplate ?? pitch.content, pipeline.lead.business.name, project.publishedUrl),
       },
       { media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" } },
     );
