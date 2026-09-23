@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { CountrySelect } from "@/components/pricing/CountrySelect";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -14,6 +14,8 @@ export function GlobalReach() {
   const country = findCountry(code);
   const [fee, setFee] = useState(country.typicalSitePrice);
   const foreignPrice = formatPrice(getPrice(getPlan("auto"), "foreign"));
+  // Stable across server and client render; the label needs it to point at the input.
+  const feeFieldId = useId();
 
   const changeCountry = (next: string) => {
     setCode(next);
@@ -56,11 +58,20 @@ export function GlobalReach() {
             <div className="mt-6 space-y-5">
               <CountrySelect value={code} onChange={changeCountry} />
 
-              <label className="block">
-                <span className="text-[13px] font-medium text-ink/70">What you&apos;ll charge per site</span>
+              {/* Explicitly associated rather than wrapping the input: <label>
+                  takes phrasing content only, and the currency prefix and the
+                  field share a bordered row that needs to be a block. A <div>
+                  inside <label> parses as a validation error, and the HTML
+                  validator flagged exactly this element. htmlFor/id keeps the
+                  association without constraining the layout. */}
+              <div>
+                <label htmlFor={feeFieldId} className="block text-[13px] font-medium text-ink/70">
+                  What you&apos;ll charge per site
+                </label>
                 <div className="mt-2 flex items-center rounded-2xl border border-ink/10 bg-white px-4 transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10">
                   <span className="font-mono text-sm text-ink/60">{country.currency}</span>
                   <input
+                    id={feeFieldId}
                     type="number"
                     inputMode="numeric"
                     min={0}
@@ -69,7 +80,7 @@ export function GlobalReach() {
                     className="h-13 w-full bg-transparent px-3 text-lg font-medium outline-none"
                   />
                 </div>
-              </label>
+              </div>
             </div>
 
             <div className="mt-6 rounded-2xl bg-mist p-5">
