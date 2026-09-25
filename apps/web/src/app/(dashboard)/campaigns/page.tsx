@@ -4,8 +4,7 @@ import { cookies } from "next/headers";
 import { Plus } from "lucide-react";
 import type { Campaign, Paginated } from "@/lib/api-client";
 import { Button } from "@/components/dashboard-ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
-import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { CampaignTable } from "@/components/dashboard/CampaignTable";
 import { SectionTabs } from "@/components/dashboard/SectionTabs";
 
 export const metadata: Metadata = { title: "Campaigns" };
@@ -37,7 +36,7 @@ export default async function CampaignsPage() {
           <p className="mt-1 text-sm text-dash-muted-foreground">Every discovery run you&apos;ve started.</p>
         </div>
         <Button asChild>
-          <Link href="/discover">
+          <Link href="/campaigns/new">
             <Plus className="h-4 w-4" /> New campaign
           </Link>
         </Button>
@@ -45,51 +44,10 @@ export default async function CampaignsPage() {
 
       {campaigns.length === 0 ? (
         <p className="rounded-dash-lg border border-dash-border bg-dash-card p-6 text-sm text-dash-muted-foreground">
-          No campaigns yet. <Link href="/discover" className="text-dash-primary underline underline-offset-2">Create your first one</Link>.
+          No campaigns yet. <Link href="/campaigns/new" className="text-dash-primary underline underline-offset-2">Create your first one</Link>.
         </p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {campaigns.map((campaign) => (
-              <TableRow key={campaign.id} className="cursor-pointer">
-                <TableCell className="font-medium">
-                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -ml-4 block px-4 py-3 hover:underline">
-                    {campaign.name}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
-                    {campaign.category}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
-                    {campaign.location}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
-                    <StatusBadge status={campaign.status} />
-                  </Link>
-                </TableCell>
-                <TableCell className="text-dash-muted-foreground">
-                  <Link href={`/campaigns/${campaign.id}`} className="-my-3 -mx-4 block px-4 py-3">
-                    {new Date(campaign.createdAt).toLocaleDateString()}
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <CampaignTable campaigns={campaigns} />
       )}
     </div>
   );

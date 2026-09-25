@@ -23,7 +23,7 @@ export type CheckoutOrder = {
 // so the order id rides along in the URL and register/login claim it onto
 // whichever account is created or signed into next.
 function successUrl(orderId: string, claimed: boolean | undefined): string {
-  return claimed ? "/discover" : `/register?orderId=${encodeURIComponent(orderId)}`;
+  return claimed ? "/campaigns/new" : `/register?orderId=${encodeURIComponent(orderId)}`;
 }
 
 /**

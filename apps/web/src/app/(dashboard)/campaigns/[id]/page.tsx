@@ -155,7 +155,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
             it again when you start your next campaign.
           </p>
           <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
-            <Link href="/discover">Start a new campaign</Link>
+            <Link href="/campaigns/new">Start a new campaign</Link>
           </Button>
         </div>
       )}
@@ -193,7 +193,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                 description="This campaign hasn't returned any businesses. Start a search from Discover to fill it."
                 action={
                   <Button asChild>
-                    <Link href="/discover">Find businesses</Link>
+                    <Link href="/campaigns/new">Find businesses</Link>
                   </Button>
                 }
               />

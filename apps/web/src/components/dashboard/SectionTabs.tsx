@@ -9,15 +9,15 @@ import { cn } from "@/lib/utils";
 const SECTIONS = {
   campaigns: [
     { href: "/campaigns", label: "Campaigns" },
-    { href: "/discover", label: "New campaign" },
+    { href: "/campaigns/new", label: "New campaign" },
     { href: "/leads", label: "Leads" },
     { href: "/pitches", label: "Pitches" },
     { href: "/activity", label: "Activity" },
   ],
   settings: [
     { href: "/settings", label: "General" },
-    { href: "/profile", label: "Profile" },
     { href: "/whatsapp", label: "WhatsApp" },
+    { href: "/billing", label: "Billing" },
   ],
 } as const;
 
@@ -26,7 +26,10 @@ export function SectionTabs({ section }: { section: keyof typeof SECTIONS }) {
   return (
     <nav aria-label={`${section === "campaigns" ? "Campaign" : "Settings"} sections`} className="-mx-1 flex gap-1 overflow-x-auto border-b border-dash-border px-1">
       {SECTIONS[section].map((tab) => {
-        const active = pathname === tab.href || pathname?.startsWith(`${tab.href}/`);
+        // The most specific tab wins: /campaigns/new lights "New campaign",
+        // not "Campaigns"; /leads/[id] still lights "Leads".
+        const matches = (href: string) => pathname === href || pathname?.startsWith(`${href}/`) === true;
+        const active = matches(tab.href) && !SECTIONS[section].some((other) => other.href.length > tab.href.length && matches(other.href));
         return (
           <Link
             key={tab.href}

@@ -1,21 +1,7 @@
-import type { Metadata } from "next";
-import { DiscoverForm } from "@/components/dashboard/DiscoverForm";
-import { SectionTabs } from "@/components/dashboard/SectionTabs";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Discover" };
-
+// New campaign moved to /campaigns/new, inside Campaigns. Kept so old links
+// and bookmarks still land there.
 export default function DiscoverPage() {
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <SectionTabs section="campaigns" />
-      <div>
-        <h1 className="display text-2xl text-dash-foreground">Find businesses</h1>
-        <p className="mt-1 text-sm text-dash-muted-foreground">
-          New accounts get 10 free pitches. Link your WhatsApp, then search businesses without a website — nothing scrapes until you press Find. After
-          a run, pitches send from your number automatically, and the number is signed out once they have all gone out.
-        </p>
-      </div>
-      <DiscoverForm />
-    </div>
-  );
+  redirect("/campaigns/new");
 }

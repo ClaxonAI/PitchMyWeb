@@ -157,7 +157,7 @@ export class OverpassSource implements BusinessDiscoverySource {
     const businesses: DiscoveredBusiness[] = [];
     for (const element of body.elements) {
       const business = toDiscoveredBusiness(element, query.category, query.location);
-      if (business) businesses.push(business);
+      if (business && business.website === null && business.phone !== null) businesses.push(business);
     }
     return businesses;
   }

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { ApiError, authApi } from "@/lib/api-client";
@@ -41,7 +40,6 @@ const googleErrors: Record<string, string> = {
 };
 
 export function AuthForm({ mode }: { mode: Mode }) {
-  const router = useRouter();
   // orderId is set when this page was reached via a post-payment redirect
   // from /pricing (CheckoutDialog.tsx) — carried through to register/login so
   // apps/api can attach the paid order to the account being created/used
@@ -88,10 +86,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
       } else {
         await authApi.register(email, password, orderId, fingerprintId);
       }
-      router.push("/dashboard");
-      // The dashboard is a server component that reads the session, so the
-      // cached RSC payload from before sign-in has to be discarded.
-      router.refresh();
+      // A full navigation: the dashboard reads the session on the server, and
+      // this guarantees it sees the cookie the API just set (no cached RSC
+      // payload from before sign-in).
+      window.location.assign("/dashboard");
     } catch (caught) {
       setError(
         caught instanceof ApiError

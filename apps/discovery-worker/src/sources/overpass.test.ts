@@ -29,7 +29,7 @@ describe("OverpassSource.search", () => {
           id: 111,
           lat: 13.05,
           lon: 80.25,
-          tags: { name: "Lakshmi Dental Care", phone: "+919800000001", website: "https://lakshmidental.example.com", "addr:housenumber": "12", "addr:street": "MG Road", "addr:city": "Chennai" },
+          tags: { name: "Lakshmi Dental Care", phone: "+919800000001", "addr:housenumber": "12", "addr:street": "MG Road", "addr:city": "Chennai" },
         },
         // No `name` tag — must be silently skipped, not returned as a nameless "business".
         { type: "node", id: 222, lat: 13.06, lon: 80.26, tags: { amenity: "dentist" } },
@@ -37,7 +37,7 @@ describe("OverpassSource.search", () => {
           type: "way",
           id: 333,
           center: { lat: 13.07, lon: 80.27 },
-          tags: { name: "Sree Dental" },
+          tags: { name: "Sree Dental", phone: "+919800000002" },
         },
       ],
     };
@@ -60,7 +60,7 @@ describe("OverpassSource.search", () => {
       address: "12 MG Road",
       city: "Chennai",
       phone: "+919800000001",
-      website: "https://lakshmidental.example.com",
+      website: null,
       latitude: 13.05,
       longitude: 80.25,
       source: "osm",
