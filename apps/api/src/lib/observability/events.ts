@@ -31,7 +31,9 @@ export type OperationalEvent =
   | "delivery.failed"
   | "preview.cleanup"
   | "website_verification.batch_enqueued"
-  | "whatsapp.signed_out";
+  | "whatsapp.signed_out"
+  | "credits.ledger_mismatch"
+  | "credits.reconciled";
 
 export type EventLevel = "info" | "warn" | "error";
 
