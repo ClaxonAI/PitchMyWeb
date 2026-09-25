@@ -51,6 +51,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.63.0",
     "dotenv": "^17.2.3",
+    "fflate": "^0.8.3",
     "ioredis": "^5.9.1",
     "libphonenumber-js": "^1.13.13",
     "next": "^16.3.5",

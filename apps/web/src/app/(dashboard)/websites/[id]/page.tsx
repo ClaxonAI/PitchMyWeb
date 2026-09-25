@@ -5,6 +5,8 @@ import type { WebsiteProject } from "@/lib/api-client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { PublishWebsiteButton } from "@/components/dashboard/PublishWebsiteButton";
+import { Download } from "lucide-react";
+import { Button } from "@/components/dashboard-ui/button";
 
 export const metadata: Metadata = { title: "Website" };
 export const dynamic = "force-dynamic";
@@ -61,7 +63,16 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
             </a>
           )}
         </div>
-        <PublishWebsiteButton id={project.id} status={project.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {project.status === "PUBLISHED" && (
+            <Button asChild variant="outline">
+              <a href={`/api/websites/${project.id}/download`} download>
+                <Download /> Download ZIP
+              </a>
+            </Button>
+          )}
+          <PublishWebsiteButton id={project.id} status={project.status} />
+        </div>
       </div>
 
       <Card>
