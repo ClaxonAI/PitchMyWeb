@@ -428,7 +428,11 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 # EC2 Instance
 resource "aws_instance" "app" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.large"
+  # t3.medium (4 GB): the app idles at ~1.7 GB with every process up; the
+  # 4 GB swap file bootstrap.sh creates covers deploy builds and recording
+  # peaks. Was t3.large (8 GB), half of it unused, at twice the price.
+  # Changing this is an in-place stop/modify/start, not a replacement.
+  instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ec2.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name

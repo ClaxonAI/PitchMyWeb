@@ -22,6 +22,17 @@ LOG=/var/log/pitchmyweb-bootstrap.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== bootstrap $(date -Is) ==="
 
+# One deploy at a time. Two runs at once (a send-command issued twice) share
+# this tree: two `npm ci`s delete each other's node_modules and two builds
+# swap half-written .next directories into place, leaving the box serving a
+# broken app. A second run waits up to an hour for the first, then runs
+# against its result; it never overlaps.
+exec 9>/var/lock/pitchmyweb-bootstrap.lock
+if ! flock -n 9; then
+  echo "Another deploy is running; waiting for it to finish before starting."
+  flock -w 3600 9 || { echo "Gave up waiting for the other deploy after an hour." >&2; exit 1; }
+fi
+
 step() { echo; echo "--- $* ---"; }
 
 # Every command this script runs as the app user goes through one of these
@@ -51,6 +62,24 @@ as_app_path() { sudo -u "$APP_USER" --preserve-env=PATH HOME="/home/$APP_USER" "
 app_pm2() { as_app env PM2_HOME="/home/$APP_USER/.pm2" pm2 "$@"; }
 
 # --- system packages ------------------------------------------------------
+step "swap"
+# The box is a t3.medium (4 GB). Steady state is ~1.7 GB, but a deploy runs
+# npm ci and three `next build`s here, and the recorder's Chromium adds up to
+# ~1 GB while filming: without swap either can hit the OOM killer and fail the
+# deploy halfway. 4 GB of swap absorbs those peaks; swappiness stays low so the
+# running app keeps to RAM. Idempotent: created once, re-enabled if off.
+SWAPFILE=/swapfile
+if [ ! -f "$SWAPFILE" ]; then
+  fallocate -l 4G "$SWAPFILE" || dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096
+  chmod 600 "$SWAPFILE"
+  mkswap "$SWAPFILE"
+fi
+swapon --show=NAME --noheadings | grep -qx "$SWAPFILE" || swapon "$SWAPFILE"
+grep -q "^$SWAPFILE " /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+sysctl -q -w vm.swappiness=10
+grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
+free -m
+
 step "apt packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
