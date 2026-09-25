@@ -7,7 +7,7 @@ import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { getLeadForUser } from "../../../../../lib/leads/lead.service";
 import { cuidSchema } from "../../../../../lib/validation/common";
 import { analyzeLead } from "../../../../../lib/ai/lead-analysis.service";
-import { createOllamaClientFromEnv, type OllamaClient } from "../../../../../lib/ai/ollama-client";
+import { createAiClientFromEnv, type OllamaClient } from "../../../../../lib/ai/ollama-client";
 import { rateLimit } from "../../../../../lib/api/rate-limit";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -39,7 +39,7 @@ export async function handleAnalyzeLead(db: PrismaClient, request: NextRequest, 
   // rate limit (lib/api/rate-limit.ts).
   await rateLimit(`analyze:user:${user.id}`, 20, WINDOW_MS);
 
-  await analyzeLead(db, ollama ?? createOllamaClientFromEnv(), { leadId: id, userId: user.id });
+  await analyzeLead(db, ollama ?? createAiClientFromEnv(), { leadId: id, userId: user.id });
 
   // Re-fetch the full detail payload (same convention as PATCH
   // /api/leads/:id, Phase 4 finding #11): the response includes the fresh

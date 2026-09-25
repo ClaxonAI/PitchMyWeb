@@ -27,6 +27,7 @@
     "db:migrate": "npm run migrate -w packages/db",
     "db:deploy": "npm run deploy -w packages/db",
     "db:seed": "npm run seed -w packages/db",
+    "db:seed-services": "npm run seed:services -w packages/db",
     "db:studio": "npm run studio -w packages/db",
     "dev:sites": "npm run dev -w apps/sites",
     "dev:recorder": "npm run dev -w apps/recorder-worker",

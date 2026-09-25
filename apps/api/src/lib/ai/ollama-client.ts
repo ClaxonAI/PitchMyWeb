@@ -1,3 +1,4 @@
+import { ChatOpenAI } from "@langchain/openai";
 import { AiConfigurationError } from "../errors";
 
 // Dedicated Ollama client/service (backend_tasks.md section 27, Phase 5
@@ -17,6 +18,8 @@ export type OllamaGenerateResult = {
 };
 
 export interface OllamaClient {
+  /** Recorded on each analysis/pitch. Test fakes may omit it. */
+  readonly model?: string;
   generate(input: OllamaGenerateInput): Promise<OllamaGenerateResult>;
 }
 
@@ -39,7 +42,7 @@ export class OllamaRequestError extends Error {}
 export class HttpOllamaClient implements OllamaClient {
   constructor(
     private readonly baseUrl: string,
-    private readonly model: string,
+    readonly model: string,
     private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS,
   ) {}
 
@@ -95,4 +98,53 @@ export function createOllamaClientFromEnv(): OllamaClient {
     throw new AiConfigurationError("AI analysis is not configured: OLLAMA_BASE_URL and OLLAMA_MODEL must both be set.");
   }
   return new HttpOllamaClient(baseUrl, model);
+}
+
+type ChatInvoke = (prompt: string) => Promise<string>;
+
+/**
+ * The same contract served by OpenAI, for deployments with no Ollama server
+ * — production runs none, so without this every analyze/pitch request
+ * answered 503. JSON mode stands in for Ollama's `format: "json"`; the
+ * caller still parses and Zod-validates the text exactly as before.
+ */
+export class OpenAiJsonClient implements OllamaClient {
+  constructor(
+    readonly model: string,
+    private readonly invoke: ChatInvoke,
+  ) {}
+
+  static fromApiKey(apiKey: string, model: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): OpenAiJsonClient {
+    const llm = new ChatOpenAI({ apiKey, model, temperature: 0.2, timeout: timeoutMs, maxRetries: 1 });
+    return new OpenAiJsonClient(model, async (prompt) => {
+      const message = await llm.invoke(prompt, { response_format: { type: "json_object" } });
+      return typeof message.content === "string" ? message.content : "";
+    });
+  }
+
+  async generate(input: OllamaGenerateInput): Promise<OllamaGenerateResult> {
+    const startedAt = Date.now();
+    try {
+      const text = await this.invoke(input.prompt);
+      return { text, latencyMs: Date.now() - startedAt };
+    } catch (error) {
+      // Same upstream-failure type as Ollama, so callers handle both alike;
+      // the provider's message never reaches the client (section 19).
+      throw new OllamaRequestError(error instanceof Error ? error.message : "Unknown OpenAI request error");
+    }
+  }
+}
+
+/**
+ * The client the analyze and pitch routes use: Ollama when it is configured,
+ * otherwise OpenAI on the OPENAI_API_KEY discovery and campaign-query
+ * parsing already use, otherwise AiConfigurationError (503).
+ */
+export function createAiClientFromEnv(env: Record<string, string | undefined> = process.env): OllamaClient {
+  const ollamaUrl = env.OLLAMA_BASE_URL?.trim();
+  const ollamaModel = env.OLLAMA_MODEL?.trim();
+  if (ollamaUrl && ollamaModel) return new HttpOllamaClient(ollamaUrl, ollamaModel);
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  if (apiKey) return OpenAiJsonClient.fromApiKey(apiKey, env.OPENAI_MODEL?.trim() || "gpt-4o-mini");
+  throw new AiConfigurationError("AI analysis is not configured: set OPENAI_API_KEY, or OLLAMA_BASE_URL and OLLAMA_MODEL.");
 }

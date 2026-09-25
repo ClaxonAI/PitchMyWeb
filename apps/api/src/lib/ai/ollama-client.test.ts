@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HttpOllamaClient, OllamaRequestError, createOllamaClientFromEnv } from "./ollama-client";
+import { HttpOllamaClient, OllamaRequestError, OpenAiJsonClient, createAiClientFromEnv, createOllamaClientFromEnv } from "./ollama-client";
 import { AiConfigurationError } from "../errors";
 
 const originalEnv = { ...process.env };
@@ -87,5 +87,39 @@ describe("HttpOllamaClient", () => {
     );
     const client = new HttpOllamaClient("http://slow-host:11434", "llama3", 20); // 20ms timeout
     await expect(client.generate({ prompt: "hi" })).rejects.toThrow(OllamaRequestError);
+  });
+});
+
+describe("createAiClientFromEnv", () => {
+  it("prefers Ollama when it is configured", () => {
+    const client = createAiClientFromEnv({ OLLAMA_BASE_URL: "http://ollama:11434", OLLAMA_MODEL: "llama3", OPENAI_API_KEY: "sk-test" });
+    expect(client).toBeInstanceOf(HttpOllamaClient);
+    expect(client.model).toBe("llama3");
+  });
+
+  it("falls back to OpenAI on OPENAI_API_KEY, as production is configured", () => {
+    const client = createAiClientFromEnv({ OPENAI_API_KEY: "sk-test", OPENAI_MODEL: "gpt-4o-mini" });
+    expect(client).toBeInstanceOf(OpenAiJsonClient);
+    expect(client.model).toBe("gpt-4o-mini");
+  });
+
+  it("throws AiConfigurationError when neither is configured", () => {
+    expect(() => createAiClientFromEnv({ OLLAMA_BASE_URL: "http://ollama:11434" })).toThrow(AiConfigurationError);
+  });
+});
+
+describe("OpenAiJsonClient", () => {
+  it("returns the model's text for the caller to validate", async () => {
+    const client = new OpenAiJsonClient("gpt-test", async (prompt) => `{"echo":${JSON.stringify(prompt)}}`);
+    const result = await client.generate({ prompt: "hello" });
+    expect(JSON.parse(result.text)).toEqual({ echo: "hello" });
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("reports provider failures as OllamaRequestError, like the Ollama client", async () => {
+    const client = new OpenAiJsonClient("gpt-test", async () => {
+      throw new Error("429 rate limited");
+    });
+    await expect(client.generate({ prompt: "hello" })).rejects.toThrow(OllamaRequestError);
   });
 });

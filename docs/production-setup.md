@@ -128,7 +128,7 @@ looks like it should already be granted.
 LEAD_PROVIDER=serper                # apps/api — the default, so it may be omitted
 DISCOVERY_SOURCE=serper             # apps/discovery-worker — must match the above
 SERPER_API_KEY=...                  # secret; https://serper.dev/api-key
-OPENAI_API_KEY=sk-...               # optional — AI insights on each lead
+OPENAI_API_KEY=sk-...               # AI insights, lead analysis, pitches
 ```
 
 Both processes read the same `/etc/pitchmyweb/env`, so one `SERPER_API_KEY`
@@ -148,6 +148,24 @@ worker decides *how*, so a half-flip silently searches the wrong source.
 pm2 will restart-loop it, which shows up as searches sitting queued forever
 rather than as a failure on the dashboard. `OPENAI_API_KEY` is not — without it
 leads still arrive, just with no summary/services/outreach message attached.
+
+### AI analysis and pitches (apps/api)
+
+The per-lead "analyze" and "pitch" actions and natural-language campaign
+search use the same `OPENAI_API_KEY` (model `OPENAI_MODEL`, default
+`gpt-4o-mini`). Without it they answer 503 `AI_NOT_CONFIGURED`; the campaign
+pipeline itself (discovery → site → recording → send) does not need it.
+`OLLAMA_BASE_URL` + `OLLAMA_MODEL` take precedence when both are set, for a
+self-hosted model — nothing in this architecture runs Ollama, so production
+leaves them unset.
+
+Analysis only accepts a recommended service that exists, at a price that
+overlaps its configured range, so the `Service` table must not be empty.
+`bootstrap.sh` runs `npm run db:seed-services` after migrating: it inserts any
+missing service with the default prices from `packages/db/prisma/seed.ts` and
+never overwrites one that exists, so prices tuned in the database survive
+deploys. Plain `db:seed` is for local development only — it also inserts demo
+businesses.
 
 ### Two values that must be exactly right
 
@@ -306,16 +324,6 @@ Unknown hostnames, including the bare IP, get no response at all (`return
 - [ ] Single EC2 box is a single point of failure. The code is container-ready
       (Redis session locking, no local disk state), so moving to Fargate later
       is configuration, not a rewrite.
-- [ ] No LLM is configured in production. The per-lead "analyze" and "pitch"
-      actions answer 503 `AI_NOT_CONFIGURED` and natural-language campaign
-      search falls back to the form: they need `OLLAMA_BASE_URL` and
-      `OLLAMA_MODEL`, and nothing in this architecture runs Ollama. The
-      campaign pipeline itself (discovery → site → recording → send) does
-      not depend on it.
-- [ ] `bootstrap.sh` never seeds, so the `Service` price table is empty unless
-      someone ran `db:seed` by hand — and that seed also inserts eight demo
-      businesses, which do not belong in production. The AI steps above read
-      their price ranges from it.
 - [ ] `setup-nginx.sh` re-copies `pitchmyweb.conf` on every deploy, replacing
       the TLS blocks certbot added. The certbot step later in the same run puts
       them back, but it is skipped when `CERTBOT_EMAIL` is unset or a DNS check

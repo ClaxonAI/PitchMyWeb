@@ -7,7 +7,7 @@ import { parseOptionalJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { getLeadForUser } from "../../../../../lib/leads/lead.service";
 import { generatePitch } from "../../../../../lib/ai/pitch.service";
-import { createOllamaClientFromEnv, type OllamaClient } from "../../../../../lib/ai/ollama-client";
+import { createAiClientFromEnv, type OllamaClient } from "../../../../../lib/ai/ollama-client";
 import { emptyBodySchema, cuidSchema } from "../../../../../lib/validation/common";
 import { rateLimit } from "../../../../../lib/api/rate-limit";
 
@@ -45,7 +45,7 @@ export async function handleGeneratePitch(db: PrismaClient, request: NextRequest
   // POST /api/leads/:id/analyze and login's rate limit.
   await rateLimit(`pitch:user:${user.id}`, 20, WINDOW_MS);
 
-  await generatePitch(db, ollama ?? createOllamaClientFromEnv(), { leadId: id, userId: user.id });
+  await generatePitch(db, ollama ?? createAiClientFromEnv(), { leadId: id, userId: user.id });
 
   const lead = await getLeadForUser(db, user.id, id);
   return jsonOk(lead);

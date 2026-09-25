@@ -229,7 +229,20 @@ const businesses: Array<
   },
 ];
 
+// --services-only is the production path (bootstrap.sh runs it on every
+// deploy). The AI analysis and pitch steps validate against these prices, so
+// an empty table fails every one of them. It only inserts services that are
+// missing — prices already in the table may have been tuned and are left
+// alone — and it never touches the demo businesses below.
+const servicesOnly = process.argv.includes("--services-only");
+
 async function main() {
+  if (servicesOnly) {
+    const { count } = await prisma.service.createMany({ data: services, skipDuplicates: true });
+    console.log(`Added ${count} missing services (${services.length - count} already present).`);
+    return;
+  }
+
   for (const service of services) {
     await prisma.service.upsert({
       where: { code: service.code },

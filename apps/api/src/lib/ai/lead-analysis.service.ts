@@ -121,7 +121,7 @@ export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input:
     await recordFailedLeadAnalysis(db, {
       leadId: lead.id,
       promptVersion: AI_ANALYSIS_PROMPT_VERSION,
-      modelName: process.env.OLLAMA_MODEL ?? "unknown",
+      modelName: ollama.model ?? process.env.OLLAMA_MODEL ?? "unknown",
       latencyMs: totalLatencyMs,
       repairUsed,
       // Section 19: never persist/return the raw exception — this is
@@ -146,7 +146,7 @@ export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input:
       whatsappNeed: outcome.data.whatsappNeed,
       reviewAutomationNeed: outcome.data.reviewAutomationNeed,
       voiceAgentNeed: outcome.data.voiceAgentNeed,
-      modelName: process.env.OLLAMA_MODEL ?? "unknown",
+      modelName: ollama.model ?? process.env.OLLAMA_MODEL ?? "unknown",
       promptVersion: AI_ANALYSIS_PROMPT_VERSION,
       latencyMs: totalLatencyMs,
       repairUsed,

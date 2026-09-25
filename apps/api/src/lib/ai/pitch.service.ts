@@ -160,7 +160,7 @@ export async function generatePitch(db: PrismaClient, ollama: OllamaClient, inpu
     leadId: lead.id,
     content: outcome.data.message,
     promptVersion: PITCH_PROMPT_VERSION,
-    modelName: process.env.OLLAMA_MODEL ?? "unknown",
+    modelName: ollama.model ?? process.env.OLLAMA_MODEL ?? "unknown",
   });
 
   return { pitch, repairUsed, latencyMs: totalLatencyMs };
