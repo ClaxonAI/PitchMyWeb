@@ -155,9 +155,8 @@ The per-lead "analyze" and "pitch" actions and natural-language campaign
 search use the same `OPENAI_API_KEY` (model `OPENAI_MODEL`, default
 `gpt-4o-mini`). Without it they answer 503 `AI_NOT_CONFIGURED`; the campaign
 pipeline itself (discovery → site → recording → send) does not need it.
-`OLLAMA_BASE_URL` + `OLLAMA_MODEL` take precedence when both are set, for a
-self-hosted model — nothing in this architecture runs Ollama, so production
-leaves them unset.
+OpenAI is the only AI provider; `OLLAMA_*` variables from older setups are
+ignored.
 
 Analysis only accepts a recommended service that exists, at a price that
 overlaps its configured range, so the `Service` table must not be empty.

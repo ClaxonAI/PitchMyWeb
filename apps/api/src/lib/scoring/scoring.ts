@@ -1,6 +1,6 @@
 import { contactChannelCount, hasWebsite, socialPresenceCount, type BusinessSignalFields } from "../business/signals";
 
-// Deterministic opportunity scoring (backend_tasks.md section 9). Ollama
+// Deterministic opportunity scoring (backend_tasks.md section 9). The AI
 // never computes or influences this — every signal is a fixed function of
 // data already present on the Business/Lead record.
 //

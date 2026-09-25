@@ -1,5 +1,12 @@
 # Sarrvai Goldmine --- Backend & Database Task README
 
+> **Note (2026-09):** this brief specified Ollama as the AI layer. The
+> implementation now uses OpenAI instead (`lib/ai/ai-client.ts`,
+> `OPENAI_API_KEY` / `OPENAI_MODEL`): production runs no Ollama server, and
+> discovery and campaign search already used OpenAI. The contracts below —
+> structured JSON, Zod validation, one repair attempt, deterministic scoring
+> as the authority — still apply; read "Ollama" as "the AI model".
+
 > **Purpose:** This README is the implementation guide for Claude Code
 > while building the **Backend + PostgreSQL/Prisma layer only** for
 > Sarrvai Goldmine.

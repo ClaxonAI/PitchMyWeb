@@ -9,7 +9,7 @@ import { generateWhatsAppAction } from "./leads/whatsapp.service";
 import { createWebsiteProject } from "./websites/website.service";
 import { transitionLeadStatus } from "./leads/lifecycle";
 import { getAnalyticsForUser } from "./analytics/analytics.service";
-import type { OllamaClient, OllamaGenerateResult } from "./ai/ollama-client";
+import type { AiClient, AiGenerateResult } from "./ai/ai-client";
 
 // backend_tasks.md section 44 ("Critical Backend Test") / section 2 of the
 // final hardening pass: "The backend is not complete until this path can
@@ -19,7 +19,7 @@ import type { OllamaClient, OllamaGenerateResult } from "./ai/ollama-client";
 // through the real domain services (the same functions the route handlers
 // call), against the real Postgres database, in one continuous run.
 //
-// Ollama is faked (section 17: tests never depend on a real Ollama
+// The model is faked (section 17: tests never depend on a real model
 // server) — this is the documented, spec-compliant way to exercise the AI
 // steps deterministically; everything else (DemoProvider, normalization,
 // dedup, scoring, persistence, lifecycle, activities, analytics) runs for
@@ -31,9 +31,9 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function fakeOllama(text: string): OllamaClient {
+function fakeAi(text: string): AiClient {
   return {
-    async generate(): Promise<OllamaGenerateResult> {
+    async generate(): Promise<AiGenerateResult> {
       return { text, latencyMs: 5 };
     },
   };
@@ -93,7 +93,7 @@ describe("Critical backend flow (backend_tasks.md section 44)", () => {
 
     // 7-9. Deterministic score is calculated as part of analysis, and
     // totals exactly 100 (backend_tasks.md section 9/46).
-    await analyzeLead(prisma, fakeOllama(analysisResponse), { leadId, userId: user.id });
+    await analyzeLead(prisma, fakeAi(analysisResponse), { leadId, userId: user.id });
     const scoreRow = await prisma.leadScore.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } });
     expect(scoreRow).toBeTruthy();
     expect(scoreRow!.rating + scoreRow!.reviewVolume + scoreRow!.websiteGap + scoreRow!.socialPresence + scoreRow!.contactAvailability + scoreRow!.businessValue + scoreRow!.localDemand + scoreRow!.dataQuality).toBe(
@@ -131,7 +131,7 @@ describe("Critical backend flow (backend_tasks.md section 44)", () => {
     expect(lead!.status).toBe("SITE_READY");
 
     // 16. Pitch is generated (and persisted) using only verified lead data.
-    await generatePitch(prisma, fakeOllama(pitchResponse), { leadId, userId: user.id });
+    await generatePitch(prisma, fakeAi(pitchResponse), { leadId, userId: user.id });
     const pitch = await prisma.pitch.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } });
     expect(pitch).toBeTruthy();
     expect(pitch!.status).toBe("GENERATED");

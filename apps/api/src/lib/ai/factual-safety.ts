@@ -3,7 +3,7 @@
 // addresses, review counts, ..."). Originally built for lead-analysis's
 // `summary` field (lib/ai/business-validation.ts); Phase 7 reuses it
 // as-is for pitch `message` text rather than writing a second copy of the
-// same regex/logic ("do not duplicate existing AI/Ollama infrastructure").
+// same regex/logic ("do not duplicate existing AI infrastructure").
 //
 // A full free-text fact-checker (addresses, review counts, awards,
 // customer claims, etc.) is not feasible to build deterministically —

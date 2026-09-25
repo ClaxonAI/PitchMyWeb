@@ -1,6 +1,6 @@
 // OSM's own geocoder — resolves a campaign's free-text `location` (e.g.
 // "Chennai") into a bounding box for overpass.ts's query. Same fetch-wrapper
-// shape as apps/api's HttpOllamaClient/HttpRazorpayClient: AbortController
+// shape as apps/api's HttpRazorpayClient: AbortController
 // timeout, sanitized errors, injectable fetch for tests.
 //
 // Usage policy (nominatim.org): max ~1 request/sec, a real identifying

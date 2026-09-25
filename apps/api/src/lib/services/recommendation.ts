@@ -2,10 +2,10 @@ import { hasWebsite, socialPresenceCount, type BusinessSignalFields } from "../b
 import type { ServiceCode } from "@pitchmyweb/db";
 
 // Rule-based service recommendation (backend_tasks.md section 10). Purely
-// deterministic — Ollama is never required for this to produce a result
-// (Rule 6/architecture requirement: "Ollama must not be required for the
+// deterministic — the model is never required for this to produce a result
+// (Rule 6/architecture requirement: "The model must not be required for the
 // recommendation engine to function"). A later phase may add an optional
-// Ollama explanation/refinement step on top of whatever this returns, but
+// AI explanation/refinement step on top of whatever this returns, but
 // never in place of it.
 
 export type RecommendationInput = BusinessSignalFields & {
@@ -92,7 +92,7 @@ const FALLBACK_RULE: Rule = {
  * values (and valid Service records) that this deterministic engine does
  * not auto-select — no reliable Business-level signal exists yet to
  * distinguish when they apply. They remain selectable by a future
- * Ollama-refinement step or manual operator override; this function
+ * AI-refinement step or manual operator override; this function
  * always returns one of the other 7 codes.
  */
 export function recommendService(input: RecommendationInput): ServiceRecommendation {

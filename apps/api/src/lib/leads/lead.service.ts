@@ -220,12 +220,12 @@ export type ApplyLeadAnalysisInput = {
  * when `aiMetadata` is supplied (Phase 5 section 11/14), and the
  * NEW -> ANALYZED transition (with its LEAD_ANALYZED activity), all in one
  * transaction (section 26/38). Deliberately takes an already-computed
- * OpportunityScore/ServiceCode rather than calling Ollama itself — score
+ * OpportunityScore/ServiceCode rather than calling the model itself — score
  * and recommendation stay deterministic and callable without any AI
  * integration (Rule 6/7); lib/ai/lead-analysis.service.ts (Phase 5) is the
- * only caller that passes `aiMetadata`, after Ollama's response has
+ * only caller that passes `aiMetadata`, after the model's response has
  * already passed Zod + business validation. This function never talks to
- * Ollama and never persists anything that hasn't already been validated —
+ * the model and never persists anything that hasn't already been validated —
  * it only writes what it's given.
  */
 export async function applyLeadAnalysis(db: PrismaClient, input: ApplyLeadAnalysisInput): Promise<Lead> {
