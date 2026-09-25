@@ -33,7 +33,7 @@ const PRIVATE_PATHS = [
 // fetch the page also cannot see a noindex on it. They carry `noindex` in
 // their own metadata instead (lib/seo/metadata.ts), which is the directive
 // that actually keeps them out.
-const AUTH_PATHS = ["/sso-callback"];
+const AUTH_PATHS = ["/sso-callback", "/logout"];
 
 // A staging or preview deployment must not compete with the live domain for
 // its own content. Only an explicitly non-production APP_ENV (or a localhost
@@ -47,6 +47,40 @@ function isNonPublicDeploy(): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+// AI crawlers and assistants, named so the policy toward each is explicit
+// rather than inherited from "*". All are welcome on the public pages — being
+// read and cited by AI search and assistants is how a lot of people now find
+// a product — and all get the same private-path block as everyone else.
+// Grouped by what they do, as their operators document them:
+const AI_AGENTS = [
+  // OpenAI: training, ChatGPT search, and fetches a ChatGPT user asked for.
+  "GPTBot",
+  "OAI-SearchBot",
+  "ChatGPT-User",
+  // Anthropic: training, Claude search, and fetches a Claude user asked for.
+  "ClaudeBot",
+  "Claude-SearchBot",
+  "Claude-User",
+  "anthropic-ai",
+  // Google Gemini / AI Overviews training control, and Apple Intelligence.
+  "Google-Extended",
+  "Applebot-Extended",
+  // Perplexity: index and user-initiated fetches.
+  "PerplexityBot",
+  "Perplexity-User",
+  // Microsoft Copilot runs on Bing's crawler; Meta, Amazon, Mistral, Cohere,
+  // DuckDuckGo's assistant, You.com and Common Crawl (a source for many models).
+  "bingbot",
+  "Meta-ExternalAgent",
+  "Meta-ExternalFetcher",
+  "Amazonbot",
+  "MistralAI-User",
+  "cohere-ai",
+  "DuckAssistBot",
+  "YouBot",
+  "CCBot",
+];
+
 export default function robots(): MetadataRoute.Robots {
   if (isNonPublicDeploy()) {
     return { rules: [{ userAgent: "*", disallow: "/" }] };
@@ -57,6 +91,11 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
+        disallow: [...PRIVATE_PATHS, ...AUTH_PATHS],
+      },
+      {
+        userAgent: AI_AGENTS,
+        allow: ["/", "/llms.txt"],
         disallow: [...PRIVATE_PATHS, ...AUTH_PATHS],
       },
     ],
