@@ -58,7 +58,7 @@ export function HeroChat() {
                   </span>
                   <div>
                     <p className="text-[12px] font-medium">morrow-demo.mp4</p>
-                    <p className="text-[10px] text-black/45">0:30 · walkthrough</p>
+                    <p className="text-[10px] text-black/60">0:30 · walkthrough</p>
                   </div>
                 </div>
               </Bubble>
@@ -71,7 +71,7 @@ export function HeroChat() {
             )}
           </div>
           <div className="flex items-center gap-2 bg-[#f0f2f5] px-3 py-2.5">
-            <span className="flex-1 rounded-full bg-white px-3.5 py-2 text-[11px] text-black/35">Message</span>
+            <span className="flex-1 rounded-full bg-white px-3.5 py-2 text-[11px] text-black/55">Message</span>
             <span className="grid size-8 place-items-center rounded-full bg-whatsapp-deep" />
           </div>
         </div>

@@ -41,7 +41,7 @@ export function ProblemSection() {
                   <step.Icon size={15} strokeWidth={1.55} />
                 </span>
                 <p className="mt-5 text-[15px] font-semibold tracking-tight text-ink">{step.title}</p>
-                <p className="mt-auto pt-6 font-mono text-[12px] tracking-wide text-violet">{step.time}</p>
+                <p className="mt-auto pt-6 font-mono text-[12px] tracking-wide text-primary">{step.time}</p>
               </li>
             ))}
           </ul>
@@ -70,13 +70,13 @@ export function ProblemSection() {
           </div>
 
           <div className="rounded-[1.6rem] bg-primary px-8 py-12 text-white sm:px-12 sm:py-14 lg:px-16 lg:py-16">
-            <p className="font-mono text-[11px] font-medium tracking-[0.22em] text-lilac uppercase">
+            <p className="font-mono text-[11px] font-medium tracking-[0.22em] text-white/85 uppercase">
               With PitchMyWeb
             </p>
             <h3 className="display mt-4 text-[40px] leading-[1.05] tracking-[-0.02em] sm:text-[48px] lg:text-[56px]">
               All of it. One tap.
             </h3>
-            <p className="mt-5 max-w-[36rem] text-[16px] leading-[1.65] text-white/75 sm:text-[17px]">
+            <p className="mt-5 max-w-[36rem] text-[16px] leading-[1.65] text-white/85 sm:text-[17px]">
               Agents find them, build the sites, record the demos and send from your WhatsApp. You just answer the
               replies.
             </p>

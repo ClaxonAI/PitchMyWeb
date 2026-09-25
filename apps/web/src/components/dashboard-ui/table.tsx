@@ -3,7 +3,11 @@ import { cn } from "@/lib/utils";
 
 export function Table({ className, ...props }: React.HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto rounded-dash-lg border border-dash-border">
+    // relative: absolutely positioned children (sr-only labels on icon buttons)
+    // take their position from this scroller instead of the page. Without it a
+    // label in a scrolled-off column escaped the scroll box and widened the
+    // whole page on phones, which then zoomed out to fit it.
+    <div className="relative w-full overflow-x-auto rounded-dash-lg border border-dash-border">
       <table className={cn("w-full caption-bottom text-sm", className)} {...props} />
     </div>
   );

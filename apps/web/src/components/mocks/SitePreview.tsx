@@ -28,7 +28,7 @@ export function SitePreview({
           <span className="size-2 rounded-full bg-[#febc2e]" />
           <span className="size-2 rounded-full bg-[#28c840]" />
         </div>
-        <div className="mx-auto truncate rounded-md bg-white px-3 py-0.5 font-mono text-[9px] text-black/45 ring-1 ring-black/5">
+        <div className="mx-auto truncate rounded-md bg-white px-3 py-0.5 font-mono text-[9px] text-black/60 ring-1 ring-black/5">
           {site.domain}
         </div>
       </div>

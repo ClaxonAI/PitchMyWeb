@@ -54,7 +54,7 @@ function SampleCard({ site, index }: { site: SampleSite; index: number }) {
       <div className="mt-4 flex items-center justify-between gap-3 px-1.5">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold tracking-tight">{site.name}</h3>
-          <p className="mt-0.5 truncate text-[13px] text-white/65">
+          <p className="mt-0.5 truncate text-[13px] text-white/80">
             {site.category}
             <span aria-hidden className="mx-2 opacity-60">·</span>
             {site.city}

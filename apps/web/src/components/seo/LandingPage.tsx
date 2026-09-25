@@ -124,7 +124,7 @@ export function LandingCta({ title }: { title: string }) {
       <Container>
         <div className="rounded-panel bg-primary px-6 py-14 text-center text-white sm:px-12">
           <h2 className="display mx-auto max-w-2xl text-4xl leading-tight sm:text-5xl">{title}</h2>
-          <p className="mx-auto mt-4 max-w-xl text-[16px] text-white/75">
+          <p className="mx-auto mt-4 max-w-xl text-[16px] text-white/85">
             We find the businesses, build each one a sample site and a demo video, and pitch it from your WhatsApp. You answer the replies.
           </p>
           <div className="mt-8 flex justify-center">

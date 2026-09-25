@@ -51,7 +51,7 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
       </div>
       {/* Tables are the one thing allowed to scroll sideways on a phone;
           everything else in this page stacks instead. */}
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left">
           <thead>
             <tr className="border-b border-ink/6 text-[11px] tracking-wide text-ink/60 uppercase">

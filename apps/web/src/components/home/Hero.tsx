@@ -19,7 +19,7 @@ export function Hero() {
     <section className="relative -mt-16 overflow-hidden pt-16">
       <div aria-hidden className="grid-paper pointer-events-none absolute inset-0" />
       <Container className="relative grid items-center gap-16 pt-14 pb-24 lg:grid-cols-[1.1fr_.9fr] lg:gap-10 lg:pt-24 lg:pb-32">
-        <div className="animate-rise">
+        <div className="animate-slide-up">
           {/* Eyebrow with social proof */}
           <div className="inline-flex items-center gap-2.5 border-l-2 border-primary bg-white/70 px-3 py-2">
             <span className="size-2 bg-primary" />
