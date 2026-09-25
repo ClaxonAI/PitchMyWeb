@@ -199,8 +199,16 @@ resource "aws_db_instance" "postgres" {
   password              = var.db_password
   db_subnet_group_name  = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  skip_final_snapshot   = true
   backup_retention_period = 7
+
+  # This is the production database, and the 7 days of automated backups above
+  # are deleted along with the instance. Refuse a destroy outright, and should
+  # one be forced (turn deletion_protection off first) take a final snapshot
+  # rather than losing every account, lead and linked WhatsApp session. Both
+  # are in-place changes; neither replaces the instance.
+  deletion_protection       = true
+  skip_final_snapshot       = false
+  final_snapshot_identifier = "pitchmyweb-db-final"
 
   tags = {
     Name = "pitchmyweb-db"

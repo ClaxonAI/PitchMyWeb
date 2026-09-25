@@ -38,16 +38,27 @@ if (clerkPublishableKey.startsWith("pk_test_")) {
 const clerkHosts = ["https://*.clerk.accounts.dev", "https://*.clerk.com", process.env.CLERK_FRONTEND_API_URL?.trim()].filter(Boolean).join(" ");
 const scriptSources = `${process.env.NODE_ENV === "development" ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'"} ${clerkHosts} https://challenges.cloudflare.com`;
 
-// The marketing page iframes demo sites from apps/sites, which is a separate
-// origin in production. It has to be named in frame-src or the browser blocks
-// every preview — 'self' does not cover a different subdomain. Kept in step
-// with NEXT_PUBLIC_SITES_URL, which is what builds the iframe src.
-const sitesOrigin = process.env.NEXT_PUBLIC_SITES_URL?.trim().replace(/\/$/, "") || "http://localhost:3200";
+// The marketing page links and iframes demo sites from apps/sites, which is a
+// separate origin in production. It has to be named in frame-src or the
+// browser blocks every preview — 'self' does not cover a different subdomain.
+//
+// Inlined at build time, so it must be right when `next build` runs. It falls
+// back to SITES_PUBLIC_URL, the same origin apps/api and apps/sites already
+// require, so production needs no separate NEXT_PUBLIC_ copy. A production
+// build with neither set is refused: it would otherwise ship every sample-site
+// link on the home page pointing at localhost.
+const configuredSitesOrigin = (process.env.NEXT_PUBLIC_SITES_URL || process.env.SITES_PUBLIC_URL)?.trim().replace(/\/$/, "");
+if (!configuredSitesOrigin && isProductionDeploy) {
+  throw new Error("SITES_PUBLIC_URL (or NEXT_PUBLIC_SITES_URL) is not set. The home page's sample sites link to it; without it they point at localhost.");
+}
+const sitesOrigin = configuredSitesOrigin || "http://localhost:3200";
 
 // Overridable so a deploy can build into a staging directory and swap it in
 // rather than over the live one; infrastructure/aws/bootstrap.sh explains why.
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  poweredByHeader: false,
+  env: { NEXT_PUBLIC_SITES_URL: sitesOrigin },
   images: { unoptimized: true },
   experimental: {
     staleTimes: {

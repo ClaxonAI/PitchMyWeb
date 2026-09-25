@@ -62,18 +62,20 @@ output "next_steps" {
 
     2. Run: terraform init && terraform plan
     3. Run: terraform apply
-    4. Copy the outputs above into SSM Parameter Store:
-       - DATABASE_URL=postgresql://postgres:PASSWORD@HOST:5432/pitchmyweb
+    4. Put every variable in docs/production-setup.md into SSM Parameter
+       Store under /pitchmyweb/prod/<NAME>, including:
+       - DATABASE_URL=postgresql://postgres:PASSWORD@HOST:5432/pitchmyweb?sslmode=require
+       - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-ca.pem
        - REDIS_URL=redis://HOST:6379
-       - STORAGE_ENDPOINT=s3.ap-south-1.amazonaws.com
+       - RATE_LIMIT_STORE=redis
+       - STORAGE_ENDPOINT=https://s3.ap-south-1.amazonaws.com   (scheme required)
        - STORAGE_BUCKET=your-bucket-name
        - STORAGE_REGION=ap-south-1
-       - STORAGE_ACCESS_KEY (from S3 IAM user)
-       - STORAGE_SECRET_KEY (from S3 IAM user)
+       No STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY: the instance role grants S3.
 
-    5. SSH into EC2 and run:
-       sudo infrastructure/aws/load-secrets.sh
-       cd apps/web && npm ci && npm run build
-       pm2 start ecosystem.config.cjs && pm2 save && pm2 startup
+    5. Ship the source and deploy (see "Deploying" in docs/production-setup.md):
+       git archive --format=tar.gz -o /tmp/pmw.tar.gz HEAD
+       aws s3 cp /tmp/pmw.tar.gz s3://BUCKET/deploy/current.tar.gz
+       then on the box: sudo SOURCE_S3=s3://BUCKET/deploy/current.tar.gz bash infrastructure/aws/bootstrap.sh
   EOT
 }

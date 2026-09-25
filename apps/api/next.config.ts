@@ -21,6 +21,23 @@ const nextConfig: NextConfig = {
   // instead of a bundled copy, which is what both libraries expect.
   serverExternalPackages: ["bullmq", "ioredis"],
 
+  poweredByHeader: false,
+
+  // Every response here is JSON, an event stream or a redirect — never a page
+  // to be sniffed as HTML or framed.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+
   turbopack: {
     // Without this Turbopack infers the workspace root from the nearest
     // lockfile and, in a monorepo with sibling apps, can pick the wrong one.
