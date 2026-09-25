@@ -13,11 +13,19 @@ import { cn } from "@/lib/utils";
 // Set by middleware.ts whenever the app session cookie (HttpOnly) exists.
 // Read after mount: the marketing pages are static, so the server-rendered
 // navbar is always the signed-out one.
-function useSignedIn(): boolean {
+//
+// Re-read on every route change and when the page comes back from the
+// back/forward cache: the navbar stays mounted across client navigations, so
+// a value read once on mount went stale the moment the user signed in or out
+// without a full page load.
+function useSignedIn(pathname: string | null): boolean {
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
-    setSignedIn(/(?:^|;\s*)pmw_signed_in=1(?:;|$)/.test(document.cookie));
-  }, []);
+    const read = () => setSignedIn(/(?:^|;\s*)pmw_signed_in=1(?:;|$)/.test(document.cookie));
+    read();
+    window.addEventListener("pageshow", read);
+    return () => window.removeEventListener("pageshow", read);
+  }, [pathname]);
   return signedIn;
 }
 
@@ -25,7 +33,7 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
-  const signedIn = useSignedIn();
+  const signedIn = useSignedIn(pathname);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);

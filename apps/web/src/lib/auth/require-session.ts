@@ -6,8 +6,8 @@ export type SessionUser = { id: string; email: string; name: string | null; role
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 
 // Mirrors apps/api's SESSION_COOKIE_NAME. Duplicated rather than imported
-// because the two apps do not share a module graph, and it is only used to
-// name the cookie in a diagnostic — nothing here depends on its value.
+// because the two apps do not share a module graph. Only its presence is
+// read here (to tell a stale cookie from none) — never its value.
 const SESSION_COOKIE_NAME = "pmw_session";
 
 /**
@@ -57,6 +57,10 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession();
+  // A cookie the API refused is stale: ?expired=1 has middleware.ts clear it
+  // (a server component cannot), so the home page stops offering "Go to
+  // dashboard" and the redirect back from /login cannot loop.
+  if (!session && (await cookies()).has(SESSION_COOKIE_NAME)) redirect("/login?expired=1");
   // /login recovers a visitor who is signed in with Clerk but holds no app
   // session — the state an SSO round trip leaves them in when Clerk returns
   // them straight here. It performs the exchange on arrival and sends them

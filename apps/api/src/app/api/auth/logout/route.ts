@@ -13,6 +13,10 @@ export async function handleLogout(db: PrismaClient, request: NextRequest): Prom
 
   const response = jsonOk({ success: true });
   response.cookies.delete(SESSION_COOKIE_NAME);
+  // The web app's readable "signed in" hint (apps/web middleware.ts). The API
+  // is served on the same origin through the web app's /api rewrite, so it
+  // can clear it here too; otherwise it lingers until the next page load.
+  response.cookies.delete("pmw_signed_in");
   return response;
 }
 
