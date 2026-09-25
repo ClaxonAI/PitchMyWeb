@@ -1,10 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, Megaphone, MessageCircle, Search } from "lucide-react";
+import { Globe, LayoutDashboard, Megaphone, Settings } from "lucide-react";
 
 /**
  * `also`: other URL prefixes that live inside this module, so its sidebar
- * entry stays highlighted there (Leads, Websites, Pitches and Activity are
- * tabs inside Campaigns — see WorkTabs).
+ * entry stays highlighted there (see SectionTabs for the tabs each module
+ * shows).
  */
 export type NavItem = { href: string; label: string; icon: LucideIcon; stub?: boolean; also?: string[] };
 
@@ -12,14 +12,16 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; stub?: bo
 // under /dashboard, matching the one pre-existing page's own precedent
 // (/dashboard/whatsapp -> /whatsapp) rather than mixing conventions.
 //
-// Four modules, deliberately. Everything else lives inside one of them:
-// leads, websites, pitches and activity are tabs in Campaigns; Profile and
-// Settings are in the avatar menu (Topbar). Those pages keep their URLs.
+// Four modules. Everything else is a tab inside one of them:
+//   Campaigns — the campaign list, New campaign (/discover), leads,
+//               pitches and activity.
+//   Settings  — general settings, profile and the linked WhatsApp.
+// Every page keeps its URL.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/discover", label: "New campaign", icon: Search },
-  { href: "/campaigns", label: "Campaigns", icon: Megaphone, also: ["/leads", "/websites", "/pitches", "/activity"] },
-  { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { href: "/campaigns", label: "Campaigns", icon: Megaphone, also: ["/discover", "/leads", "/pitches", "/activity"] },
+  { href: "/websites", label: "Websites", icon: Globe },
+  { href: "/settings", label: "Settings", icon: Settings, also: ["/profile", "/whatsapp", "/billing"] },
 ];
 
 /** Whether `pathname` belongs to this item (its own URL, a sub-page, or one of `also`). */
