@@ -56,7 +56,7 @@ export function LinkedDevicesMock() {
             <button
               type="button"
               onClick={() => setStage("qr")}
-              className="mt-5 rounded-full bg-whatsapp px-6 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgb(37_211_102/0.35)] transition hover:brightness-95"
+              className="mt-5 rounded-full bg-whatsapp px-6 py-2.5 text-[13px] font-semibold text-[#04261d] shadow-[0_8px_20px_rgb(37_211_102/0.35)] transition hover:brightness-95"
             >
               Link a device
             </button>

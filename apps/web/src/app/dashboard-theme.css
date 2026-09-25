@@ -70,7 +70,9 @@
   --dash-accent-foreground: #18181b;
   --dash-destructive: #dc2626;
   --dash-destructive-foreground: #ffffff;
-  --dash-success: #5c8f1f;
+  /* #3f6b0f: small status text on its own 10% tint reads at 5.6:1 (the old
+   * #5c8f1f was 3.9:1, under the 4.5:1 minimum for body text). */
+  --dash-success: #3f6b0f;
   --dash-success-foreground: #ffffff;
   --dash-border: #e5e7eb;
   --dash-input: #e5e7eb;
@@ -106,6 +108,48 @@
   background: var(--dash-background);
   color: var(--dash-foreground);
   min-height: 100dvh;
+}
+
+/* Some dashboard screens are built from the marketing palette rather than the
+ * dash-* tokens: the WhatsApp panel (link, QR, messages), and the pricing
+ * cards on Billing, which are the same components as /pricing. In dark mode
+ * those kept their white cards but inherited the dashboard's light text, so
+ * headings, prices and labels rendered white-on-white (1.1:1), while text-ink
+ * copy on the page itself went black-on-black.
+ *
+ * Remapping the marketing palette here, inside the dashboard shell and only in
+ * dark mode, fixes every such component at once and leaves the marketing site
+ * and light mode exactly as they were. Utilities read these through var(), so
+ * text-ink/60, border-ink/8 and friends follow along. */
+.dark .dashboard-shell {
+  --color-ink: #f4f6ff;
+  --color-ink-2: #e4e6f5;
+  --color-paper: #131320;
+  --color-mist: #1b1b29;
+  --color-mist-2: #161624;
+  --color-mist-3: #23233a;
+  --color-mist-4: #2c2c44;
+  color-scheme: dark;
+}
+
+/* bg-white is a literal colour, not a palette token, so it is remapped by
+ * class. text-white is deliberately left alone: it sits on primary and
+ * WhatsApp-green buttons, which stay the same in both themes. */
+.dark .dashboard-shell .bg-white {
+  background-color: var(--dash-card);
+}
+
+/* The brand blue is fine as a button fill in dark mode but too dim as text on
+ * a dark surface (3.2:1); its lighter tint reads at 8:1. */
+.dark .dashboard-shell .text-primary {
+  color: var(--color-lilac);
+}
+
+/* The one place ink is a fill (the "dark" Button variant, e.g. Pay on the
+ * pricing cards): remapped ink is light in dark mode, so its label flips to
+ * dark to stay readable. */
+.dark .dashboard-shell .bg-ink {
+  color: var(--dash-background);
 }
 
 /* Live campaign progress (components/dashboard/CampaignLiveProgress.tsx).
