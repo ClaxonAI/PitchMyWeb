@@ -7,6 +7,7 @@ import { parseOptionalJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { assertCanStartDiscovery, assertMarketAllowed } from "../../../../../lib/checkout/paid-access";
 import { assertCampaignRunAllowed } from "../../../../../lib/campaigns/run-guards";
+import { assertWhatsAppConnected } from "../../../../../lib/whatsapp/account.service";
 import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { runCampaign } from "../../../../../lib/campaigns/run.service";
 import { campaignRunRequestSchema } from "../../../../../lib/validation/campaign";
@@ -27,6 +28,7 @@ export async function handleRunCampaign(db: PrismaClient, request: NextRequest, 
   const id = cuidSchema.parse(params.id);
   const body = await parseOptionalJsonBody(request, campaignRunRequestSchema);
   await assertCampaignRunAllowed(db, { userId: user.id, campaignId: id, idempotencyKey: body.idempotencyKey });
+  await assertWhatsAppConnected(db, user.id);
   await assertCanStartDiscovery(db, user.id);
   const campaign = await loadOwnedCampaign(db, id, user.id);
   await assertMarketAllowed(db, user.id, campaign.market);

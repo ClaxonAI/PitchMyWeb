@@ -1,5 +1,5 @@
 import type { PrismaClient, WhatsAppAccount } from "@pitchmyweb/db";
-import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import { ConflictError, NotFoundError, ValidationError, WhatsAppNotConnectedError } from "../errors";
 import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { enqueueSessionCommand } from "./queue";
 
@@ -121,4 +121,20 @@ export async function deleteAccount(db: PrismaClient, userId: string, accountId:
   await getAccount(db, userId, accountId);
   await enqueueSessionCommand({ type: "disconnect", accountId });
   await db.whatsAppAccount.delete({ where: { id: accountId } });
+}
+
+/** True when the user has a WhatsApp account that is linked and connected right now. */
+export async function hasConnectedWhatsApp(db: PrismaClient, userId: string): Promise<boolean> {
+  const count = await db.whatsAppAccount.count({ where: { userId, status: "CONNECTED" } });
+  return count > 0;
+}
+
+/**
+ * Campaigns pitch from the user's own number, so a campaign cannot be
+ * created, run or asked to pitch more leads without one connected. Checked
+ * up front rather than discovered at send time, when the user has already
+ * waited through discovery, site building and recording for nothing.
+ */
+export async function assertWhatsAppConnected(db: PrismaClient, userId: string): Promise<void> {
+  if (!(await hasConnectedWhatsApp(db, userId))) throw new WhatsAppNotConnectedError();
 }

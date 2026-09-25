@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "../../../lib/db/client";
-import { createTestUser, deleteTestUsers } from "../../../lib/testing/db-test-helpers";
+import { connectTestWhatsApp, createTestUser, deleteTestUsers } from "../../../lib/testing/db-test-helpers";
 import { SESSION_COOKIE_NAME, createSession } from "../../../lib/auth/session";
-import { UnauthenticatedError, NotFoundError, InvalidCampaignTransitionError } from "../../../lib/errors";
+import { UnauthenticatedError, NotFoundError, InvalidCampaignTransitionError, WhatsAppNotConnectedError } from "../../../lib/errors";
 import { ZodError } from "zod";
 import { handleCreateCampaign, handleListCampaigns } from "./route";
 import { handleGetCampaign, handlePatchCampaign } from "./[id]/route";
@@ -15,9 +15,10 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function authedUser(prefix: string) {
+async function authedUser(prefix: string, options: { whatsapp?: boolean } = {}) {
   const user = await createTestUser(prefix);
   createdUserIds.push(user.id);
+  if (options.whatsapp !== false) await connectTestWhatsApp(user.id);
   const session = await createSession(prisma, user.id);
   return { user, cookieHeader: `${SESSION_COOKIE_NAME}=${session.token}` };
 }
@@ -47,6 +48,21 @@ describe("POST /api/campaigns", () => {
     const body = await response.json();
     expect(body.userId).toBe(user.id);
     expect(body.status).toBe("DRAFT");
+  });
+
+  it("refuses to create a campaign until WhatsApp is connected", async () => {
+    const { cookieHeader } = await authedUser("create-no-whatsapp", { whatsapp: false });
+    await expect(handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
+  });
+
+  it("refuses when the only linked WhatsApp is not connected right now", async () => {
+    const { user, cookieHeader } = await authedUser("create-whatsapp-disconnected", { whatsapp: false });
+    await prisma.whatsAppAccount.create({ data: { userId: user.id, status: "DISCONNECTED" } });
+    await expect(handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
   });
 
   it("rejects invalid input (missing name) with a ZodError", async () => {
@@ -168,6 +184,19 @@ describe("POST /api/campaigns/:id/run", () => {
     const body = await response.json();
     expect(body.campaign.status).toBe("COMPLETED");
     expect(body.execution.leadsCreated).toBeGreaterThan(0);
+  });
+
+  it("refuses to run once WhatsApp has disconnected, without starting a run", async () => {
+    const { user, cookieHeader } = await authedUser("run-whatsapp-gone");
+    const created = await (await handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).json();
+    await handlePatchCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}`, { method: "PATCH", body: { status: "READY" }, cookieHeader }), { id: created.id });
+    await prisma.whatsAppAccount.updateMany({ where: { userId: user.id }, data: { status: "DISCONNECTED" } });
+
+    await expect(handleRunCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}/run`, { method: "POST", cookieHeader }), { id: created.id })).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: created.id } })).status).toBe("READY");
+    expect(await prisma.campaignExecution.count({ where: { campaignId: created.id } })).toBe(0);
   });
 
   it("rejects running a DRAFT campaign (never marked READY)", async () => {

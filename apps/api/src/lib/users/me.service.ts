@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword } from "../auth/password";
 import { getAccessSnapshot } from "../checkout/paid-access";
 import { ValidationError } from "../errors";
 import type { ChangePasswordInput, MeUpdateInput } from "../validation/me";
+import { hasConnectedWhatsApp } from "../whatsapp/account.service";
 
 export type MeProfile = {
   id: string;
@@ -21,10 +22,12 @@ export type MeProfile = {
   reservedCredits: number;
   /** Credits consumed by pitches that actually sent. */
   usedCredits: number;
+  /** A linked WhatsApp is connected right now — required to create or run a campaign. */
+  whatsappConnected: boolean;
 };
 
 async function toProfile(db: PrismaClient, user: Pick<User, "id" | "email" | "name" | "role" | "planId">): Promise<MeProfile> {
-  const { hasPaidAccess, canDiscover, allowedMarkets, wallet } = await getAccessSnapshot(db, user.id);
+  const [{ hasPaidAccess, canDiscover, allowedMarkets, wallet }, whatsappConnected] = await Promise.all([getAccessSnapshot(db, user.id), hasConnectedWhatsApp(db, user.id)]);
   return {
     id: user.id,
     email: user.email,
@@ -37,6 +40,7 @@ async function toProfile(db: PrismaClient, user: Pick<User, "id" | "email" | "na
     availableCredits: wallet.availableCredits,
     reservedCredits: wallet.reservedCredits,
     usedCredits: wallet.usedCredits,
+    whatsappConnected,
   };
 }
 

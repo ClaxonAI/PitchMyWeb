@@ -106,6 +106,16 @@ export class InvalidWebsiteTransitionError extends ConflictError {
   }
 }
 
+// Campaigns pitch from the user's own WhatsApp, so one has to be linked and
+// connected before a campaign is created, run, or asked to pitch more leads.
+// 409: the request is fine, the account is not in a state to act on it yet.
+export class WhatsAppNotConnectedError extends DomainError {
+  constructor() {
+    super("Connect your WhatsApp before starting a campaign. Pitches are sent from your own number.", "WHATSAPP_NOT_CONNECTED", 409);
+    this.name = "WhatsAppNotConnectedError";
+  }
+}
+
 // Phase 5 AI analysis (section 6): OPENAI_API_KEY missing —
 // a server misconfiguration, not a transient upstream failure, but still
 // must not crash the process; the route catches this the same way as any

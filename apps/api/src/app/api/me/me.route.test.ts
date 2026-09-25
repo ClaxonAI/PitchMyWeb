@@ -56,7 +56,13 @@ describe("GET /api/me", () => {
       availableCredits: 10,
       reservedCredits: 0,
       usedCredits: 0,
+      // No WhatsApp linked yet, so the dashboard asks for one before a campaign.
+      whatsappConnected: false,
     });
+
+    await prisma.whatsAppAccount.create({ data: { userId: user.id, status: "CONNECTED" } });
+    const after = await (await handleGetMe(prisma, req("http://localhost/api/me", { cookieHeader }))).json();
+    expect(after.whatsappConnected).toBe(true);
   });
 });
 
