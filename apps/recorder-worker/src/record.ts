@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser } from "playwright";
+import { probe } from "./transcode.js";
 
 // Records a scripted walkthrough of a preview page, as a portrait phone video
 // and as a laptop-screen video: every pitch sends both, so the owner sees the
@@ -179,7 +180,8 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
     throw new RecordingError("render_failed", error instanceof Error ? error.message : "Recording failed");
   }
 
-  const tourSeconds = (Date.now() - tourStartedAt) / 1000;
+  const closedAt = Date.now();
+  const tourSeconds = (closedAt - tourStartedAt) / 1000;
   const video = page.video();
   await context.close();
   const webmPath = video ? await video.path() : null;
@@ -188,10 +190,39 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
     throw new RecordingError("render_failed", "Playwright produced no video");
   }
 
+  const webmSeconds = await probe(webmPath)
+    .then((info) => info.durationMs / 1000)
+    .catch(() => 0);
   return {
     webmPath,
-    leadInSeconds: Math.max(0, (tourStartedAt - contextStartedAt) / 1000 - 0.35),
+    leadInSeconds: leadInSeconds({ contextStartedAt, tourStartedAt, closedAt, webmSeconds }),
     tourSeconds,
     workDir,
   };
+}
+
+/** Footage kept before the tour's first frame. */
+const LEAD_IN_KEEP_SECONDS = 0.35;
+/** How far past the context closing Playwright may run the video (see below). */
+const VIDEO_END_SLACK_SECONDS = 1;
+
+/**
+ * Where the tour starts in the raw video: the blank/loading footage to trim.
+ *
+ * The video's clock starts at its first captured frame, which this code
+ * cannot observe: it follows context and page creation and, on a busy
+ * machine, can lag them by seconds (3.3 s on a CI runner, which cut that much
+ * of the hero shot). The end is observable: Playwright ends the video when
+ * the context closes, or up to a second later if frames were still arriving
+ * (sample sites loop animations). So the start is found from the end,
+ * allowing that second, which errs towards keeping a moment of the settled
+ * hero rather than cutting into the tour. The context's creation is always
+ * before the first frame, so measuring from it bounds the trim from above,
+ * and is the estimate when the video's duration cannot be read.
+ */
+export function leadInSeconds(t: { contextStartedAt: number; tourStartedAt: number; closedAt: number; webmSeconds: number }): number {
+  const atMost = Math.max(0, (t.tourStartedAt - t.contextStartedAt) / 1000 - LEAD_IN_KEEP_SECONDS);
+  if (!(t.webmSeconds > 0)) return atMost;
+  const fromEnd = t.webmSeconds - (t.closedAt - t.tourStartedAt) / 1000 - VIDEO_END_SLACK_SECONDS - LEAD_IN_KEEP_SECONDS;
+  return Math.min(atMost, Math.max(0, fromEnd));
 }

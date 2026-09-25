@@ -5,7 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@pitchmyweb/db";
 import { getConfig } from "./config.js";
 import { processRecording, type ProcessDeps } from "./process-recording.js";
-import { closeBrowser, recordTour } from "./record.js";
+import { closeBrowser, getBrowser, recordTour } from "./record.js";
 import { LAPTOP_OUTPUT_WIDTH, MAX_MP4_BYTES, transcodeToMp4 } from "./transcode.js";
 
 // Real Chromium, real ffmpeg, real Postgres. A tiny local server plays the
@@ -86,6 +86,28 @@ describe("recordTour + transcodeToMp4", () => {
       expect(video.mp4.subarray(4, 8).toString("latin1")).toBe("ftyp");
       expect(video.mp4.indexOf("moov")).toBeLessThan(video.mp4.indexOf("mdat"));
       expect(video.poster.subarray(0, 2).toString("hex")).toBe("ffd8");
+    } finally {
+      const { rm } = await import("node:fs/promises");
+      await rm(raw.workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the whole tour when the video starts late, as on a busy machine", async () => {
+    // The video's clock starts at its first frame. Hold context creation back
+    // 3s so that frame comes 3s after recordTour started timing; trimming by
+    // that timing alone cut 3s of the hero (a 7.0s video on a CI runner).
+    const browser = await getBrowser();
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = (async (...args: Parameters<typeof newContext>) => {
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      return newContext(...args);
+    }) as typeof browser.newContext;
+    const raw = await recordTour(`${origin}/s/fixture-clinic`, { tourSeconds: 10, navigationTimeoutMs: 20_000 }).finally(() => {
+      browser.newContext = newContext;
+    });
+    try {
+      const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds);
+      expect(video.durationMs).toBeGreaterThanOrEqual(Math.floor(raw.tourSeconds * 1000));
     } finally {
       const { rm } = await import("node:fs/promises");
       await rm(raw.workDir, { recursive: true, force: true });
