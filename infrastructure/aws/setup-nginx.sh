@@ -22,6 +22,38 @@ step() { echo; echo "--- $* ---"; }
 step "nginx site"
 apt-get install -y -qq nginx python3-certbot-nginx
 
+# The instance's own public address, read from IMDSv2. Needed twice: for the
+# DNS check further down, and first for the trusted-proxy list below.
+TOKEN="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60" || true)"
+MY_IP="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" \
+  http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
+[[ "$MY_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || MY_IP=""
+echo "this instance: ${MY_IP:-unknown}"
+
+# pitchmyweb.conf takes the client address from X-Forwarded-For only when the
+# request comes from an address it trusts (see the comment there). Loopback is
+# trusted in the file itself; this adds the instance's public IP, which is
+# where the web app's /api proxy arrives from when API_URL is
+# https://api.pitchmyweb.in rather than loopback.
+TRUSTED_PROXIES=/etc/nginx/pitchmyweb-trusted-proxies.conf
+if [ -n "$MY_IP" ]; then
+  echo "set_real_ip_from ${MY_IP};" > "$TRUSTED_PROXIES"
+else
+  rm -f "$TRUSTED_PROXIES"
+  case "${API_URL:-}" in
+    ""|http://127.0.0.1*|http://localhost*) ;;
+    *)
+      # The proxied /api requests would then all appear to come from this
+      # instance, and every dashboard user would share one rate-limit bucket.
+      echo "Refusing to install the nginx site: this instance's public IP is unknown" >&2
+      echo "while API_URL=${API_URL} routes the web app's /api calls back through nginx." >&2
+      echo "Point API_URL at http://127.0.0.1:4000, or re-run once IMDS answers." >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # Copied, not symlinked: certbot edits this file in place to add the TLS
 # server blocks, and a symlink would have it writing into the git working tree.
 install -m 644 "$REPO_CONF" "/etc/nginx/sites-available/${SITE_NAME}"
@@ -36,13 +68,6 @@ systemctl enable --now nginx
 systemctl reload nginx
 
 step "dns check"
-# The instance's own public address, read from IMDSv2.
-TOKEN="$(curl -fsS -X PUT http://169.254.169.254/latest/api/token \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 60" || true)"
-MY_IP="$(curl -fsS -H "X-aws-ec2-metadata-token: ${TOKEN}" \
-  http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
-echo "this instance: ${MY_IP:-unknown}"
-
 ready=1
 for d in "${DOMAINS[@]}"; do
   resolved="$(getent ahostsv4 "$d" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ')"

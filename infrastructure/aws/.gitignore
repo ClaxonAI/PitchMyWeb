@@ -4,6 +4,12 @@
 .terraform/
 .terraform.lock.hcl
 
+# Saved plans (`terraform plan -out`). A plan file embeds a full copy of the
+# state and every variable value in plaintext, so it is exactly as sensitive
+# as *.tfstate above — one was committed here once.
+tfplan
+*.tfplan
+
 # Variables (secrets)
 terraform.tfvars
 terraform.tfvars.json

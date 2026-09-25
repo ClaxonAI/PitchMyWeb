@@ -174,6 +174,55 @@ describe("handleLogin", () => {
   });
 });
 
+// One free allowance per device is enforced when an account is *created*.
+// Signing in to an account that already exists must work from any device.
+describe("trial device", () => {
+  const device = () => `device-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+
+  it("refuses a second account from a device that already created one", async () => {
+    const fingerprintId = device();
+    const first = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-first"), password: "correcthorsebattery", fingerprintId }));
+    createdUserIds.push((await first.json()).id);
+
+    await expect(
+      handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-second"), password: "correcthorsebattery", fingerprintId })),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it("lets an account sign in from a second device", async () => {
+    const email = uniqueEmail("device-roaming");
+    const registered = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery", fingerprintId: device() }));
+    createdUserIds.push((await registered.json()).id);
+
+    const login = await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId: device() }));
+    expect(login.status).toBe(200);
+  });
+
+  it("lets an existing account sign in on a device another account registered from", async () => {
+    const shared = device();
+    const owner = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-owner"), password: "correcthorsebattery", fingerprintId: shared }));
+    createdUserIds.push((await owner.json()).id);
+    const email = uniqueEmail("device-guest");
+    const guest = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery" }));
+    createdUserIds.push((await guest.json()).id);
+
+    const login = await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId: shared }));
+    expect(login.status).toBe(200);
+  });
+
+  it("records the device of an account that signs in without one on file", async () => {
+    const email = uniqueEmail("device-late");
+    const registered = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery" }));
+    createdUserIds.push((await registered.json()).id);
+    const fingerprintId = device();
+    await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId }));
+
+    await expect(
+      handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-late-second"), password: "correcthorsebattery", fingerprintId })),
+    ).rejects.toThrow(ConflictError);
+  });
+});
+
 describe("rate limiting", () => {
   it("locks out further login attempts against the same email after the limit, regardless of IP", async () => {
     const email = uniqueEmail("rate-limit-login-email");

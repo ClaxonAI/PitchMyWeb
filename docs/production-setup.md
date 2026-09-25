@@ -9,7 +9,7 @@ Cloudflare DNS (pitchmyweb.in)
   ├── preview →  EC2 elastic IP   →  nginx :443  →  pmw-sites  :3200
   └── clerk   →  Clerk (CNAME, DNS only — never proxied)
 
-EC2 t3.large (2 vCPU / 8 GB, ap-south-1), PM2 running 7 processes
+EC2 t3.large (2 vCPU / 8 GB, ap-south-1), PM2 running 8 processes
   RDS PostgreSQL          (managed)
   ElastiCache Redis       (managed)
   S3                      (recordings + posters)
@@ -26,7 +26,7 @@ on `pk_test_` permanently.
 | App | Port | Reached by | Serves |
 |---|---|---|---|
 | `apps/web` | 3000 | customers | dashboard, marketing, admin |
-| `apps/api` | 4000 | web app + all four workers | every `/api/*` route |
+| `apps/api` | 4000 | web app + all five workers | every `/api/*` route |
 | `apps/sites` | 3200 | **strangers** | `/s/<slug>` demo sites sent over WhatsApp |
 
 They are not merged. On one EC2 box three apps are three PM2 processes and cost
@@ -37,7 +37,7 @@ dashboard's session cookie.
 
 ## Processes
 
-`ecosystem.config.cjs` at the repo root defines all seven. The four workers are
+`ecosystem.config.cjs` at the repo root defines all eight. The five workers are
 as load-bearing as the web apps; without them the dashboard looks healthy while
 campaigns quietly stop:
 
@@ -46,6 +46,7 @@ campaigns quietly stop:
 | `pmw-whatsapp` | nothing sends |
 | `pmw-discovery` | searches sit queued forever |
 | `pmw-recorder` | no demo videos, so pitches link to nothing |
+| `pmw-verification` | every business stays UNVERIFIED forever |
 | `pmw-jobs` | stuck runs never expire, failed pitches never retry |
 
 `pmw-jobs` must stay a single instance — two schedulers double every job run.
@@ -62,11 +63,16 @@ directly.
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...     # public by design
 CLERK_SECRET_KEY=sk_live_...                      # secret
 CLERK_FRONTEND_API_URL=https://clerk.pitchmyweb.in
-API_URL=https://api.pitchmyweb.in
+API_URL=http://127.0.0.1:4000                     # same box; see "Client addresses"
+SITES_PUBLIC_URL=https://preview.pitchmyweb.in    # build time: sample-site links
 APP_ENV=production
 ```
 
-`APP_ENV=production` makes `next build` refuse a `pk_test_` key.
+`APP_ENV=production` makes `next build` refuse a `pk_test_` key, and refuse to
+build without `SITES_PUBLIC_URL` (or `NEXT_PUBLIC_SITES_URL`): the home page's
+sample sites link to it, and are inlined at build time, so a build without it
+ships every one of them pointing at `localhost`. It is the same value apps/api
+and apps/sites already need, so one SSM parameter serves all three.
 
 ### apps/api
 
@@ -78,10 +84,16 @@ API_INTERNAL_URL=https://api.pitchmyweb.in
 APP_ENV=production
 DATABASE_URL=...                    # RDS, private subnet
 REDIS_URL=...                       # ElastiCache, private subnet
+RATE_LIMIT_STORE=redis              # required — see below
 INTERNAL_JOBS_SECRET=...
 WA_AUTH_ENCRYPTION_KEY=...          # decrypts stored WhatsApp credentials
 STORAGE_*=...                       # S3 bucket, not local MinIO
 ```
+
+**`RATE_LIMIT_STORE=redis` is required.** Under `APP_ENV=production` the API
+refuses the per-process memory store, so without it every rate-limited route —
+sign-in, sign-up, checkout, and the preview content apps/sites reads — answers
+503 "Temporary protection unavailable".
 
 ### apps/sites
 
@@ -248,6 +260,26 @@ nginx config is at `infrastructure/nginx/pitchmyweb.conf`. It disables
 linking both stream, and with buffering on they appear stuck at "Queued…" while
 actually running fine.
 
+### Client addresses
+
+apps/api rate-limits sign-in, sign-up and checkout per client address, which it
+reads from `X-Forwarded-For`. nginx is what makes that header trustworthy: it
+sends the address it saw rather than appending to whatever the client supplied
+(which let any caller choose a fresh rate-limit bucket per request).
+
+The web app's `/api` proxy is the one extra hop. With `API_URL` on loopback it
+goes straight to pmw-api and nothing more is needed — that is the recommended
+setting, and it also skips a TLS round trip. With
+`API_URL=https://api.pitchmyweb.in` the request leaves the box and re-enters
+nginx from the instance's own public IP, so nginx has to trust that IP to
+recover the real client. `setup-nginx.sh` writes it to
+`/etc/nginx/pitchmyweb-trusted-proxies.conf` from instance metadata, and
+refuses to install the site if it cannot while `API_URL` is not loopback —
+otherwise every dashboard user would share one address and one rate limit.
+
+Unknown hostnames, including the bare IP, get no response at all (`return
+444`) rather than the dashboard.
+
 ## Order of execution
 
 1. Clerk production instance for `pitchmyweb.in`
@@ -274,3 +306,17 @@ actually running fine.
 - [ ] Single EC2 box is a single point of failure. The code is container-ready
       (Redis session locking, no local disk state), so moving to Fargate later
       is configuration, not a rewrite.
+- [ ] No LLM is configured in production. The per-lead "analyze" and "pitch"
+      actions answer 503 `AI_NOT_CONFIGURED` and natural-language campaign
+      search falls back to the form: they need `OLLAMA_BASE_URL` and
+      `OLLAMA_MODEL`, and nothing in this architecture runs Ollama. The
+      campaign pipeline itself (discovery → site → recording → send) does
+      not depend on it.
+- [ ] `bootstrap.sh` never seeds, so the `Service` price table is empty unless
+      someone ran `db:seed` by hand — and that seed also inserts eight demo
+      businesses, which do not belong in production. The AI steps above read
+      their price ranges from it.
+- [ ] `setup-nginx.sh` re-copies `pitchmyweb.conf` on every deploy, replacing
+      the TLS blocks certbot added. The certbot step later in the same run puts
+      them back, but it is skipped when `CERTBOT_EMAIL` is unset or a DNS check
+      fails — and HTTPS then stays off until it is re-run.

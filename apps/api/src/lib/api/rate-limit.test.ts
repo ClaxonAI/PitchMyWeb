@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createRedisConnection } from "@pitchmyweb/contracts";
 import { RateLimitUnavailableError, RateLimitedError } from "../errors";
-import { rateLimit, rateLimitStore } from "./rate-limit";
+import { createRateLimitRedis, rateLimit, rateLimitStore } from "./rate-limit";
 
 // Real Redis from infrastructure/docker (the WhatsApp tests need it too).
 const redis = createRedisConnection(process.env.REDIS_URL ?? "redis://127.0.0.1:6381", { maxRetriesPerRequest: 1 });
@@ -65,6 +65,30 @@ describe("rateLimit (redis store)", () => {
     await expect(rateLimit(key, 1, 50, { store: "redis", redis })).rejects.toThrow(RateLimitedError);
     await new Promise((r) => setTimeout(r, 80));
     await expect(rateLimit(key, 1, 50, { store: "redis", redis })).resolves.toBeUndefined();
+  });
+
+  // The shared `redis` above is connected long before any test runs, so it
+  // never exercised the production connection's first command.
+  it("serves the first check on a brand-new production connection", async () => {
+    const fresh = createRateLimitRedis(process.env.REDIS_URL ?? "redis://127.0.0.1:6381");
+    try {
+      await expect(rateLimit(unique("fresh"), 5, 60_000, { store: "redis", redis: fresh })).resolves.toBeUndefined();
+    } finally {
+      await fresh.quit();
+    }
+  });
+
+  it("still fails fast when Redis is unreachable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const unreachable = createRateLimitRedis("redis://127.0.0.1:1");
+    const started = Date.now();
+    try {
+      await expect(rateLimit(unique("unreachable"), 5, 60_000, { store: "redis", redis: unreachable })).rejects.toThrow(RateLimitUnavailableError);
+      expect(Date.now() - started).toBeLessThan(2_000);
+    } finally {
+      unreachable.disconnect();
+      warn.mockRestore();
+    }
   });
 
   it("fails closed when Redis fails instead of weakening protection", async () => {

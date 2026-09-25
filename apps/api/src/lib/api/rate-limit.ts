@@ -67,14 +67,22 @@ const REDIS_KEY_PREFIX = "rl:";
 
 const globalForRateLimit = globalThis as unknown as { rateLimitRedis?: Redis; rateLimitLastWarn?: number };
 
-function redisClient(): Redis {
-  globalForRateLimit.rateLimitRedis ??= createRedisConnection(process.env.REDIS_URL ?? "redis://127.0.0.1:6381", {
-    // Fail fast instead of queueing: a rate-limit check must never make a
-    // request hang while Redis is down.
+/** The connection the redis store uses in production, exported so tests exercise the same options. */
+export function createRateLimitRedis(url: string): Redis {
+  return createRedisConnection(url, {
     maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    // Fail fast: a rate-limit check must never make a request hang while
+    // Redis is down. commandTimeout is armed before a command is queued, so
+    // it also bounds commands waiting on the connection. The offline queue
+    // itself must stay on: with enableOfflineQueue: false the first check on
+    // a new connection was rejected before the socket was ready, so the
+    // first login, sign-up or preview view after every deploy got a 503.
     commandTimeout: 500,
   });
+}
+
+function redisClient(): Redis {
+  globalForRateLimit.rateLimitRedis ??= createRateLimitRedis(process.env.REDIS_URL ?? "redis://127.0.0.1:6381");
   return globalForRateLimit.rateLimitRedis;
 }
 
