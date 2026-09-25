@@ -10,7 +10,7 @@ import { ConflictError, isUniqueConstraintViolation } from "../../../../lib/erro
 import { registerSchema } from "../../../../lib/validation/auth";
 import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
 import { claimOrder, claimPaidOrdersForUser } from "../../../../lib/checkout/checkout.service";
-import { claimTrialDevice, hashFingerprint } from "../../../../lib/auth/trial-device";
+import { assertDeviceCanCreateAccount, claimTrialDevice } from "../../../../lib/auth/trial-device";
 
 // Not one of the 8 endpoints listed in this phase's scope, but a direct
 // prerequisite of every other one: section 4 requires every user-owned
@@ -29,10 +29,7 @@ export async function handleRegister(db: PrismaClient, request: NextRequest): Pr
 
   let user;
   try {
-    if (body.fingerprintId) {
-      const existingDevice = await db.trialDevice.findUnique({ where: { visitorIdHash: hashFingerprint(body.fingerprintId) } });
-      if (existingDevice) throw new ConflictError("This device has already used the free pitch allowance");
-    }
+    await assertDeviceCanCreateAccount(db, body.fingerprintId);
     user = await db.user.create({ data: { email: body.email, passwordHash } });
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {

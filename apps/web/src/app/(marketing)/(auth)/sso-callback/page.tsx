@@ -14,7 +14,7 @@ export default function SsoCallbackPage() {
     let active = true;
     void exchangeClerkSession(getToken).then(async (ok) => {
       if (!active) return;
-      if (ok) {
+      if (ok === true) {
         router.replace("/dashboard");
         router.refresh();
         return;
@@ -29,7 +29,7 @@ export default function SsoCallbackPage() {
       } catch {
         // Even if this fails, /login is still a better place to be than here.
       }
-      if (active) router.replace("/login?error=session");
+      if (active) router.replace(ok === false ? "/login?error=session" : "/login?error=device_limit");
     });
     return () => { active = false; };
   }, [getToken, isLoaded, isSignedIn, router, signOut]);

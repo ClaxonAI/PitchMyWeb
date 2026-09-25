@@ -5,6 +5,7 @@ import { deleteTestUsers, uniqueEmail } from "../../../lib/testing/db-test-helpe
 import { SESSION_COOKIE_NAME } from "../../../lib/auth/session";
 import * as passwordModule from "../../../lib/auth/password";
 import { handleRegister } from "./register/route";
+import { DeviceAccountLimitError } from "../../../lib/auth/trial-device";
 import { handleLogin } from "./login/route";
 import { handleLogout } from "./logout/route";
 import { ConflictError, RateLimitedError, UnauthenticatedError, AccountSuspendedError } from "../../../lib/errors";
@@ -174,19 +175,37 @@ describe("handleLogin", () => {
   });
 });
 
-// One free allowance per device is enforced when an account is *created*.
-// Signing in to an account that already exists must work from any device.
+// Up to three accounts may be created per device (lib/auth/trial-device.ts),
+// enforced when an account is *created*. Signing in to an account that
+// already exists must work from any device.
 describe("trial device", () => {
   const device = () => `device-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 
-  it("refuses a second account from a device that already created one", async () => {
-    const fingerprintId = device();
-    const first = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-first"), password: "correcthorsebattery", fingerprintId }));
-    createdUserIds.push((await first.json()).id);
+  const register = (fingerprintId: string | undefined, label: string) =>
+    handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail(label), password: "correcthorsebattery", ...(fingerprintId ? { fingerprintId } : {}) }));
 
-    await expect(
-      handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-second"), password: "correcthorsebattery", fingerprintId })),
-    ).rejects.toThrow(ConflictError);
+  it("allows three accounts from one device and refuses the fourth", async () => {
+    const fingerprintId = device();
+    for (const label of ["device-1", "device-2", "device-3"]) {
+      const response = await register(fingerprintId, label);
+      expect(response.status).toBe(201);
+      createdUserIds.push((await response.json()).id);
+    }
+    await expect(register(fingerprintId, "device-4")).rejects.toThrow(DeviceAccountLimitError);
+    await expect(register(fingerprintId, "device-4b")).rejects.toThrow(/already has 3 accounts/);
+  });
+
+  it("switching between the device's accounts is never blocked: log out of one, sign in to another", async () => {
+    const fingerprintId = device();
+    const emails = [uniqueEmail("switch-a"), uniqueEmail("switch-b"), uniqueEmail("switch-c")];
+    for (const email of emails) {
+      const response = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery", fingerprintId }));
+      createdUserIds.push((await response.json()).id);
+    }
+    for (const email of [...emails, emails[0]!]) {
+      const login = await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId }));
+      expect(login.status).toBe(200);
+    }
   });
 
   it("lets an account sign in from a second device", async () => {
@@ -210,16 +229,24 @@ describe("trial device", () => {
     expect(login.status).toBe(200);
   });
 
-  it("records the device of an account that signs in without one on file", async () => {
-    const email = uniqueEmail("device-late");
-    const registered = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery" }));
-    createdUserIds.push((await registered.json()).id);
+  it("records the device of an account that signs in without one on file, and counts it", async () => {
     const fingerprintId = device();
-    await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId }));
+    for (const label of ["device-late-a", "device-late-b", "device-late-c"]) {
+      const email = uniqueEmail(label);
+      const registered = await handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email, password: "correcthorsebattery" }));
+      createdUserIds.push((await registered.json()).id);
+      await handleLogin(prisma, jsonRequest("http://localhost/api/auth/login", { email, password: "correcthorsebattery", fingerprintId }));
+    }
 
-    await expect(
-      handleRegister(prisma, jsonRequest("http://localhost/api/auth/register", { email: uniqueEmail("device-late-second"), password: "correcthorsebattery", fingerprintId })),
-    ).rejects.toThrow(ConflictError);
+    await expect(register(fingerprintId, "device-late-fourth")).rejects.toThrow(DeviceAccountLimitError);
+  });
+
+  it("does not limit sign-up when the browser sends no fingerprint", async () => {
+    for (const label of ["no-fp-1", "no-fp-2", "no-fp-3", "no-fp-4"]) {
+      const response = await register(undefined, label);
+      expect(response.status).toBe(201);
+      createdUserIds.push((await response.json()).id);
+    }
   });
 });
 

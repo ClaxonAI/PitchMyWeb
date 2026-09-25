@@ -1,3 +1,5 @@
+import { deviceFingerprint } from "./device-fingerprint";
+
 const EXCHANGE_ATTEMPTS = 5;
 const EXCHANGE_DELAY_MS = 300;
 
@@ -13,20 +15,29 @@ function wait(milliseconds: number): Promise<void> {
  *
  * Retries briefly because the Clerk token can lag right after an OAuth
  * callback. Resolves false (never throws) so callers can show an error
- * instead of redirecting into a loop.
+ * instead of redirecting into a loop, or a message to show as-is when the API
+ * refused for a reason the user can act on (the per-device account limit).
+ *
+ * Sends the device fingerprint so a Google/GitHub sign-up counts against the
+ * same three-accounts-per-device limit as email sign-up.
  */
-export async function exchangeClerkSession(getToken: () => Promise<string | null>): Promise<boolean> {
+export async function exchangeClerkSession(getToken: () => Promise<string | null>): Promise<true | false | { message: string }> {
+  const fingerprint = await deviceFingerprint();
   for (let attempt = 0; attempt < EXCHANGE_ATTEMPTS; attempt += 1) {
     try {
       const token = await getToken();
       if (token) {
         const response = await fetch("/api/auth/clerk/session", {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, ...(fingerprint ? { "X-Device-Fingerprint": fingerprint } : {}) },
           credentials: "same-origin",
           cache: "no-store",
         });
         if (response.ok) return true;
+        if (response.status === 409) {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          return { message: body?.error ?? "This device has reached its account limit. Sign in to an existing account instead." };
+        }
         // A suspended account or missing email will not fix itself on retry.
         if (response.status === 403 || response.status === 400) return false;
       }

@@ -265,14 +265,18 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// The device (a hashed FingerprintJS visitor id) each account was first seen
+// on. Up to MAX_ACCOUNTS_PER_DEVICE accounts may be created from one device
+// (lib/auth/trial-device.ts); each account keeps only its first device.
 model TrialDevice {
   id            String   @id @default(cuid())
-  visitorIdHash String   @unique
+  visitorIdHash String
   userId        String   @unique
   createdAt     DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([visitorIdHash])
   @@map("trial_devices")
 }
 

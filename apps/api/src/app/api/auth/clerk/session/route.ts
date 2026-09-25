@@ -5,6 +5,12 @@ import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../../lib/db/client";
 import { SESSION_COOKIE_NAME, createSession } from "../../../../../lib/auth/session";
 import { claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.service";
+import { assertDeviceCanCreateAccount, claimTrialDevice, DeviceAccountLimitError } from "../../../../../lib/auth/trial-device";
+
+// The browser's FingerprintJS visitor id, sent by apps/web's
+// exchangeClerkSession so Google/GitHub sign-up counts against the same
+// per-device account limit as email sign-up.
+const FINGERPRINT_HEADER = "x-device-fingerprint";
 
 export async function handleClerkSession(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
   const secretKey = process.env.CLERK_SECRET_KEY?.trim();
@@ -34,11 +40,23 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
     const existing = await db.user.findUnique({ where: { email } });
     if (existing?.suspendedAt) return NextResponse.json({ error: "Account suspended" }, { status: 403 });
 
+    const rawFingerprint = request.headers.get(FINGERPRINT_HEADER)?.trim();
+    const fingerprintId = rawFingerprint && rawFingerprint.length >= 8 && rawFingerprint.length <= 512 ? rawFingerprint : null;
+    if (!existing) {
+      try {
+        await assertDeviceCanCreateAccount(db, fingerprintId);
+      } catch (error) {
+        if (error instanceof DeviceAccountLimitError) return NextResponse.json({ error: error.message, code: "DEVICE_ACCOUNT_LIMIT" }, { status: 409 });
+        throw error;
+      }
+    }
+
     const user = existing
       ? await db.user.update({ where: { id: existing.id }, data: { lastLoginAt: new Date(), ...(existing.googleId ? {} : { googleId: verified.sub }) } })
       : await db.user.create({ data: { email, googleId: verified.sub, passwordHash: null, name: clerkUser.firstName ? `${clerkUser.firstName}${clerkUser.lastName ? ` ${clerkUser.lastName}` : ""}` : null, imageUrl: clerkUser.imageUrl } });
 
     await claimPaidOrdersForUser(db, user.id, user.email);
+    await claimTrialDevice(db, user.id, fingerprintId);
     const session = await createSession(db, user.id);
     const response = NextResponse.json({ id: user.id, email: user.email });
     response.cookies.set(SESSION_COOKIE_NAME, session.token, {
