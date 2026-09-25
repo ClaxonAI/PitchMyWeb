@@ -348,8 +348,11 @@ export async function recoverStaleBatches(db: PrismaClient, now = new Date()): P
  */
 export async function onDiscoveryCompleted(db: PrismaClient, campaignId: string, deps?: PipelineDeps): Promise<void> {
   try {
-    const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true } });
+    const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true, userId: true } });
     if (campaign?.selectionMode !== "AUTO") return;
+    const connected = await db.whatsAppAccount.findFirst({ where: { userId: campaign.userId, status: "CONNECTED" }, select: { id: true } });
+    if (!connected) return;
+
     await autoSelectLeads(db, campaignId, {}, deps);
   } catch (error) {
     console.error(`Auto-selection failed for campaign ${campaignId}:`, error);

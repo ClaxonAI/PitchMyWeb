@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Search } from "lucide-react";
 import type { z } from "zod";
 import { campaignFormSchema } from "@/lib/schemas/campaign-create";
-import { ApiError, campaignsApi } from "@/lib/api-client";
+import { ApiError, campaignsApi, whatsappApi } from "@/lib/api-client";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent } from "@/components/dashboard-ui/card";
 import { Input } from "@/components/dashboard-ui/input";
@@ -34,6 +34,9 @@ export function DiscoverForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [parseHint, setParseHint] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
+  const [showConnectionChoice, setShowConnectionChoice] = useState(false);
+  const [continueWithoutWhatsApp, setContinueWithoutWhatsApp] = useState(false);
   const {
     register,
     handleSubmit,
@@ -49,8 +52,19 @@ export function DiscoverForm() {
     },
   });
 
+  useEffect(() => {
+    void whatsappApi
+      .listAccounts()
+      .then(({ items }) => setWhatsappConnected(items.some((account) => account.status === "CONNECTED")))
+      .catch(() => setWhatsappConnected(null));
+  }, []);
+
   async function onSubmit(values: z.output<typeof campaignFormSchema>) {
     setSubmitError(null);
+    if (whatsappConnected === false && !continueWithoutWhatsApp) {
+      setShowConnectionChoice(true);
+      return;
+    }
     try {
       const campaign = await campaignsApi.create({
         ...values,
@@ -60,7 +74,7 @@ export function DiscoverForm() {
       });
       await campaignsApi.update(campaign.id, { status: "READY" });
       await campaignsApi.run(campaign.id);
-      router.push(`/campaigns/${campaign.id}`);
+      router.push(`/campaigns/${campaign.id}${whatsappConnected === false ? "?connect=1" : ""}`);
     } catch (error) {
       if (error instanceof ApiError && error.code === "PAYMENT_REQUIRED") {
         router.push("/pricing");
@@ -68,6 +82,11 @@ export function DiscoverForm() {
       }
       setSubmitError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     }
+  }
+
+  function continueAndCreate(): void {
+    setContinueWithoutWhatsApp(true);
+    setShowConnectionChoice(false);
   }
 
   async function onParse() {
@@ -118,6 +137,36 @@ export function DiscoverForm() {
 
   return (
     <div className="flex flex-col gap-6">
+      {whatsappConnected === false && (
+        <Card className="border-dash-primary/30 bg-dash-secondary/30">
+          <CardContent className="flex flex-col gap-3 p-5">
+            <p className="text-sm font-medium text-dash-foreground">Connect WhatsApp before you start</p>
+            <p className="text-sm text-dash-muted-foreground">
+              Your campaign can still be created without it. We&apos;ll show the QR code after you submit, and pitches can start once your number is linked.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => router.push("/whatsapp")}>Connect WhatsApp</Button>
+              <Button type="button" variant="outline" onClick={() => setContinueWithoutWhatsApp(true)}>Continue without connecting</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showConnectionChoice && (
+        <Card className="border-dash-primary/30 bg-dash-secondary/30">
+          <CardContent className="flex flex-col gap-3 p-5">
+            <p className="text-sm font-medium text-dash-foreground">WhatsApp is not connected</p>
+            <p className="text-sm text-dash-muted-foreground">
+              Connect now so your pitches can send automatically, or continue entering your campaign details. The QR code will appear after the campaign is created.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => router.push("/whatsapp")}>Connect WhatsApp</Button>
+              <Button type="button" variant="outline" onClick={continueAndCreate}>Create campaign anyway</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <p className="text-sm text-dash-muted-foreground">
         {availableCredits} pitch {availableCredits === 1 ? "credit" : "credits"} available. Searching costs nothing — you choose how many of the leads to
         pitch once you can see them.

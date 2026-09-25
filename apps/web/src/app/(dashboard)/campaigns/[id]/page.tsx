@@ -15,6 +15,7 @@ import { DiscoveryProgress } from "@/components/dashboard/DiscoveryProgress";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PitchBatchPanel } from "@/components/dashboard/PitchBatchPanel";
 import { WebsiteVerificationBadge } from "@/components/dashboard/WebsiteVerificationBadge";
+import { CampaignWhatsAppPrompt } from "@/components/dashboard/CampaignWhatsAppPrompt";
 
 export const metadata: Metadata = { title: "Campaign" };
 export const dynamic = "force-dynamic";
@@ -47,8 +48,9 @@ function BlockedReason({ reason }: { reason: CampaignLeadRow["blockedReason"] })
   return <span className="text-sm text-dash-muted-foreground">{BLOCKED_REASON_TEXT[reason]}</span>;
 }
 
-export default async function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CampaignDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ connect?: string }> }) {
   const { id } = await params;
+  const { connect } = await searchParams;
   const cookie = (await cookies()).toString();
 
   const overview = await fetchJson<CampaignOverview>(`/api/campaigns/${id}/overview`, cookie);
@@ -82,6 +84,8 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       {execution?.errorMessage && (
         <p className="rounded-dash-lg border border-dash-destructive/30 bg-dash-destructive/10 p-4 text-sm text-dash-destructive">{execution.errorMessage}</p>
       )}
+
+      {connect === "1" && <CampaignWhatsAppPrompt campaignId={id} />}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Leads found" icon={Building2} value={counts.leads} hint={counts.leads < campaign.targetCount ? `You asked for ${campaign.targetCount}` : undefined} />

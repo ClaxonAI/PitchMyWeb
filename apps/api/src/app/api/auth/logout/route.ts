@@ -5,6 +5,8 @@ import { prisma } from "../../../../lib/db/client";
 import { SESSION_COOKIE_NAME, deleteSessionByToken } from "../../../../lib/auth/session";
 import { errorResponse, jsonOk } from "../../../../lib/api/response";
 
+const SIGNED_IN_HINT_COOKIE = "pmw_signed_in";
+
 export async function handleLogout(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (token) {
@@ -12,7 +14,21 @@ export async function handleLogout(db: PrismaClient, request: NextRequest): Prom
   }
 
   const response = jsonOk({ success: true });
-  response.cookies.delete(SESSION_COOKIE_NAME);
+  response.cookies.set(SESSION_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: new Date(0),
+    maxAge: 0,
+  });
+  response.cookies.set(SIGNED_IN_HINT_COOKIE, "", {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(0),
+    maxAge: 0,
+  });
   return response;
 }
 

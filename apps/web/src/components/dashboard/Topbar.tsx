@@ -39,8 +39,7 @@ export function Topbar() {
     try {
       await authApi.logout();
     } finally {
-      router.push("/login");
-      router.refresh();
+      window.location.replace("/login");
     }
   }
 

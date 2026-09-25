@@ -5,7 +5,7 @@ import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
 import { runCampaign } from "../campaigns/run.service";
-import { autoSelectForUser, listCampaignLeads, selectLeads } from "../campaigns/selection.service";
+import { autoSelectForUser, listCampaignLeads, onDiscoveryCompleted, selectLeads } from "../campaigns/selection.service";
 import { getOrCreateWallet, grantCredits } from "../checkout/wallet.service";
 import { ingestBusinessAsLead } from "../leads/lead.service";
 import type { AsyncLeadProvider } from "../providers/async-provider";
@@ -77,7 +77,7 @@ function clinic(name: string, overrides: Record<string, unknown> = {}) {
 async function discoveredCampaign(
   label: string,
   businesses: unknown[],
-  settings: { selectionMode?: "MANUAL" | "AUTO"; targetCount?: number; deliveryMode?: "AUTO" | "DIRECT" } = {},
+  settings: { selectionMode?: "MANUAL" | "AUTO"; targetCount?: number; deliveryMode?: "AUTO" | "DIRECT"; connected?: boolean } = {},
   // Pass an existing user to give them a second campaign — repeat-lead
   // protection is per user, so proving it needs two campaigns under one.
   existingUser?: Awaited<ReturnType<typeof createTestUser>>,
@@ -91,6 +91,7 @@ async function discoveredCampaign(
     // wallet.service.test.ts and selection.service.test.ts cover that.
     await grantCredits(prisma, { userId: user.id, amount: 500, type: "PURCHASE", referenceId: `test-grant:${user.id}` });
   }
+  if (settings.connected) await connectWhatsApp(user.id);
   const campaign = await createCampaign(prisma, user.id, {
     name: `Pipeline ${label}`,
     location: "Chennai",
@@ -247,6 +248,22 @@ describe("repeat leads", () => {
 });
 
 describe("selection", () => {
+  it("defers AUTO pitches until WhatsApp is connected, then starts them", async () => {
+    const { user, campaign } = await discoveredCampaign(
+      "deferred-auto",
+      [clinic("Deferred Dental")],
+      { selectionMode: "AUTO", targetCount: 1 },
+    );
+
+    expect(await prisma.pitchBatch.count({ where: { campaignId: campaign.id } })).toBe(0);
+
+    await connectWhatsApp(user.id);
+    await onDiscoveryCompleted(prisma, campaign.id, fakeDeps().deps);
+
+    expect(await prisma.pitchBatch.count({ where: { campaignId: campaign.id } })).toBe(1);
+    expect(await prisma.leadPipeline.count({ where: { campaignId: campaign.id } })).toBe(1);
+  });
+
   // Discovery order, not score. "No Phone Dental" sits between the two
   // reachable clinics and must not consume a slot: targetCount promises
   // leads that can be pitched, so the search continues past it.
@@ -259,7 +276,7 @@ describe("selection", () => {
         clinic("Top Dental", { rating: 4.9, reviewCount: 800 }),
         clinic("Mid Dental", { rating: 4.4, reviewCount: 90 }),
       ],
-      { selectionMode: "AUTO", targetCount: 2 },
+      { selectionMode: "AUTO", targetCount: 2, connected: true },
     );
 
     const pipelines = await prisma.leadPipeline.findMany({ where: { campaignId: campaign.id }, include: { lead: { include: { business: true } } } });

@@ -322,7 +322,7 @@ export const campaignsApi = {
    * leads, so the number that comes back can legitimately be smaller than
    * what was asked for.
    */
-  pitch: (id: string, count: number) => api.post<{ started: number }>(`/api/campaigns/${id}/selection`, { auto: true, count }),
+  pitch: (id: string, count?: number) => api.post<{ started: number }>(`/api/campaigns/${id}/selection`, { auto: true, ...(count === undefined ? {} : { count }) }),
   batches: (id: string) => api.get<{ items: PitchBatch[] }>(`/api/campaigns/${id}/batches`),
 };
 
