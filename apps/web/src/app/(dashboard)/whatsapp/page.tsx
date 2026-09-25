@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { SectionTabs } from "@/components/dashboard/SectionTabs";
 import { WhatsAppPanel } from "@/components/dashboard/WhatsAppPanel";
 import type { WhatsAppAccount } from "@/lib/api-client";
 
@@ -32,5 +33,12 @@ async function loadAccounts(): Promise<WhatsAppAccount[]> {
 
 export default async function WhatsAppDashboardPage() {
   const accounts = await loadAccounts();
-  return <WhatsAppPanel initialAccounts={accounts} />;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="mx-auto w-full max-w-5xl">
+        <SectionTabs section="settings" />
+      </div>
+      <WhatsAppPanel initialAccounts={accounts} />
+    </div>
+  );
 }

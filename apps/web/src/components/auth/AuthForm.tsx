@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { ApiError, authApi } from "@/lib/api-client";
 import { ClerkProviderButtons } from "./ClerkProviderButtons";
+import { deviceFingerprint } from "@/lib/device-fingerprint";
 
 // Shared by /login and /register. Email/password plus Google OAuth (proxied
 // through /api/auth/google → apps/api).
@@ -36,6 +37,7 @@ const googleErrors: Record<string, string> = {
   google: "Google sign-in failed. Please try again.",
   google_denied: "Google sign-in was cancelled.",
   suspended: "This account has been suspended.",
+  device_limit: "This device already has 3 accounts. Sign in to one of them instead.",
 };
 
 export function AuthForm({ mode }: { mode: Mode }) {
@@ -70,9 +72,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
     let active = true;
     // Loaded on demand: the form works without it, so it stays out of the
     // sign-in page bundle.
-    import("@fingerprintjs/fingerprintjs").then(({ default: FingerprintJS }) => FingerprintJS.load()).then((agent) => agent.get()).then((result) => {
-      if (active) setFingerprintId(result.visitorId);
-    }).catch(() => undefined);
+    void deviceFingerprint().then((visitorId) => {
+      if (active && visitorId) setFingerprintId(visitorId);
+    });
     return () => { active = false; };
   }, []);
 

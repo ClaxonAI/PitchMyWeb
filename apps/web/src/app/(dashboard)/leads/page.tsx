@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { LeadFilters } from "@/components/dashboard/LeadFilters";
+import { SectionTabs } from "@/components/dashboard/SectionTabs";
 
 export const metadata: Metadata = { title: "Leads" };
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <SectionTabs section="campaigns" />
       <PageHeader title="Leads" description={`${total} ${total === 1 ? "lead" : "leads"} across every campaign.`} />
 
       <LeadFilters />

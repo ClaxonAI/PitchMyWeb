@@ -6,6 +6,7 @@ import type { Campaign, Paginated } from "@/lib/api-client";
 import { Button } from "@/components/dashboard-ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { SectionTabs } from "@/components/dashboard/SectionTabs";
 
 export const metadata: Metadata = { title: "Campaigns" };
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export default async function CampaignsPage() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <SectionTabs section="campaigns" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="display text-2xl text-dash-foreground">Campaigns</h1>

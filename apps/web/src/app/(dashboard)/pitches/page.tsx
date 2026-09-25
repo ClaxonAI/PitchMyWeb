@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/dashboard-ui/empty-state";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PitchBody } from "@/components/dashboard/PitchBody";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { SectionTabs } from "@/components/dashboard/SectionTabs";
 
 export const metadata: Metadata = { title: "Pitches" };
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function PitchesPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <SectionTabs section="campaigns" />
       <PageHeader title="Pitches" description="Every pitch generated across your campaigns." />
 
       {pitches.length === 0 ? (

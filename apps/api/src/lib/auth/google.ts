@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { PrismaClient, User } from "@pitchmyweb/db";
 import { AccountSuspendedError, ConflictError, ValidationError } from "../errors";
 import { claimOrder, claimPaidOrdersForUser } from "../checkout/checkout.service";
-import { claimTrialDevice, hashFingerprint } from "./trial-device";
+import { assertDeviceCanCreateAccount, claimTrialDevice } from "./trial-device";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "pmw_google_oauth";
 
@@ -183,10 +183,7 @@ export async function upsertGoogleUser(
     return user;
   }
 
-  if (fingerprintId) {
-    const existingDevice = await db.trialDevice.findUnique({ where: { visitorIdHash: hashFingerprint(fingerprintId) } });
-    if (existingDevice) throw new ConflictError("This device has already used the free pitch allowance");
-  }
+  await assertDeviceCanCreateAccount(db, fingerprintId);
 
   const user = await db.user.create({
     data: {

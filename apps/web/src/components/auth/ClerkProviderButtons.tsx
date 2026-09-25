@@ -43,8 +43,20 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
     let active = true;
     void exchangeClerkSession(getToken).then(async (ok) => {
       if (!active) return;
-      if (ok) {
+      if (ok === true) {
         window.location.assign("/dashboard");
+        return;
+      }
+      if (ok !== false) {
+        // A new account this device may not create (three already exist on
+        // it). Drop the Clerk session so the visitor can sign in to one of
+        // those instead of being retried into the same refusal.
+        try {
+          await signOut();
+        } catch {
+          // The message below still explains what to do.
+        }
+        if (active) setError(ok.message);
         return;
       }
       // Not exchangeable — most often a Clerk session signed by a rotated
@@ -70,9 +82,14 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
       // new sign-in would be rejected with "already signed in", so just
       // re-create the app session and continue.
       if (isSignedIn) {
-        if (await exchangeClerkSession(getToken)) {
+        const exchanged = await exchangeClerkSession(getToken);
+        if (exchanged === true) {
           window.location.assign("/dashboard");
           return;
+        }
+        if (exchanged !== false) {
+          await signOut();
+          throw new Error(exchanged.message);
         }
         // The Clerk session is no longer exchangeable — the usual cause is the
         // secret key being rotated while a browser still holds a session signed

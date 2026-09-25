@@ -3,7 +3,7 @@ import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { InsufficientPitchCreditsError } from "../errors";
 import { FREE_PITCH_ALLOWANCE } from "./paid-access";
-import { consumeReservedCredit, ensureFreeGrant, getOrCreateWallet, grantCredits, refundReservedCredit, releasePitchCredits, reservePitchCredits } from "./wallet.service";
+import { consumeReservedCredit, ensureFreeGrant, getOrCreateWallet, grantCredits, reconcileCreditLedger, refundReservedCredit, releasePitchCredits, reservePitchCredits } from "./wallet.service";
 
 // These tests exercise the reserve/release primitives on their own, so
 // there is no real PitchBatch behind them. The ledger's batchId carries no
@@ -215,5 +215,56 @@ describe("the books balance", () => {
 
     expect(await getOrCreateWallet(prisma, user.id)).toEqual(after);
     expect(await prisma.pitchCreditLedger.count({ where: { userId: user.id, type: "CONSUME" } })).toBe(1);
+  });
+});
+
+describe("credit ledger reconciliation", () => {
+  it("tracks every increase and decrease: the wallet always equals the sum of its ledger", async () => {
+    const user = await newUser("ledger-walk");
+    const expectWallet = async (available: number, reserved: number, used: number) => {
+      expect(await getOrCreateWallet(prisma, user.id)).toEqual({ availableCredits: available, reservedCredits: reserved, usedCredits: used });
+      expect((await reconcileCreditLedger(prisma, { userId: user.id })).mismatches).toEqual([]);
+    };
+
+    await grantCredits(prisma, { userId: user.id, amount: 20, type: "PURCHASE", referenceId: `ledger-walk:purchase:${user.id}` });
+    await expectWallet(20, 0, 0); // bought 20: +20 available
+    await prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 5, referenceId: `ledger-walk:reserve:${user.id}` }));
+    await expectWallet(15, 5, 0); // pitched 5: 5 held
+    await prisma.$transaction((tx) => releasePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 1, referenceId: `ledger-walk:release:${user.id}` }));
+    await expectWallet(16, 4, 0); // only 4 were eligible: 1 back
+    await prisma.$transaction((tx) => consumeReservedCredit(tx, { userId: user.id, batchId: TEST_BATCH_ID, pipelineId: `ledger-walk-a-${user.id}` }));
+    await prisma.$transaction((tx) => consumeReservedCredit(tx, { userId: user.id, batchId: TEST_BATCH_ID, pipelineId: `ledger-walk-b-${user.id}` }));
+    await expectWallet(16, 2, 2); // 2 delivered: spent
+    await prisma.$transaction((tx) => refundReservedCredit(tx, { userId: user.id, batchId: TEST_BATCH_ID, pipelineId: `ledger-walk-c-${user.id}` }));
+    await expectWallet(17, 1, 2); // 1 failed for good: refunded
+  });
+
+  it("a repeated consume moves the wallet once, not twice (ledger written before the wallet)", async () => {
+    const user = await newUser("ledger-dup");
+    await grantCredits(prisma, { userId: user.id, amount: 3, type: "PURCHASE", referenceId: `ledger-dup:purchase:${user.id}` });
+    await prisma.$transaction((tx) => reservePitchCredits(tx, { userId: user.id, batchId: TEST_BATCH_ID, amount: 2, referenceId: `ledger-dup:reserve:${user.id}` }));
+    const pipelineId = `ledger-dup-${user.id}`;
+    await prisma.$transaction((tx) => consumeReservedCredit(tx, { userId: user.id, batchId: TEST_BATCH_ID, pipelineId }));
+    await prisma.$transaction((tx) => consumeReservedCredit(tx, { userId: user.id, batchId: TEST_BATCH_ID, pipelineId }));
+
+    expect(await getOrCreateWallet(prisma, user.id)).toEqual({ availableCredits: 1, reservedCredits: 1, usedCredits: 1 });
+    expect((await reconcileCreditLedger(prisma, { userId: user.id })).mismatches).toEqual([]);
+  });
+
+  it("reports a wallet that disagrees with its ledger, without changing it", async () => {
+    const user = await newUser("ledger-drift");
+    await grantCredits(prisma, { userId: user.id, amount: 10, type: "PURCHASE", referenceId: `ledger-drift:purchase:${user.id}` });
+    // Something wrote the balance directly, bypassing the ledger.
+    await prisma.pitchWallet.update({ where: { userId: user.id }, data: { availableCredits: 12 } });
+
+    const { mismatches } = await reconcileCreditLedger(prisma, { userId: user.id });
+    expect(mismatches).toEqual([
+      {
+        userId: user.id,
+        wallet: { availableCredits: 12, reservedCredits: 0, usedCredits: 0 },
+        expected: { availableCredits: 10, reservedCredits: 0, usedCredits: 0 },
+      },
+    ]);
+    expect((await getOrCreateWallet(prisma, user.id)).availableCredits).toBe(12);
   });
 });

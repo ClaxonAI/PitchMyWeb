@@ -28,7 +28,7 @@ function LinkColumn({ title, links }: { title: string; links: { href: string; la
 export function Footer() {
   return (
     <footer className="bg-ink text-white">
-      <Container className="grid gap-12 pt-16 pb-12 md:grid-cols-[1.6fr_1fr_1fr]">
+      <Container className="grid gap-12 pt-16 pb-12 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         <div>
           <Logo tone="dark" />
           <p className="mt-5 max-w-xs text-sm leading-relaxed text-white/60">
@@ -44,6 +44,7 @@ export function Footer() {
           </a>
         </div>
         <LinkColumn title="Product" links={footerLinks.product} />
+        <LinkColumn title="Explore" links={footerLinks.explore} />
         <LinkColumn title="Company" links={footerLinks.company} />
       </Container>
 

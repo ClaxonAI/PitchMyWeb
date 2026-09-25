@@ -160,3 +160,45 @@ export function simplePageSchema(name: string, path: string, type: "ContactPage"
     },
   ]);
 }
+
+/**
+ * The SEO landing pages (industries, cities, guides and their hubs):
+ * breadcrumbs, the page node, and — when the page renders questions — its
+ * own FAQ block. A guide is an Article rather than a WebPage.
+ */
+export function landingPageSchema(input: {
+  name: string;
+  path: string;
+  description: string;
+  trail: { name: string; path: string }[];
+  type?: "WebPage" | "CollectionPage" | "Article";
+  updated?: string;
+  faqs?: Faq[];
+}) {
+  const url = absoluteUrl(input.path);
+  const page =
+    input.type === "Article"
+      ? {
+          "@type": "Article",
+          "@id": `${url}#article`,
+          headline: input.name,
+          description: input.description,
+          url,
+          mainEntityOfPage: url,
+          ...(input.updated ? { dateModified: input.updated, datePublished: input.updated } : {}),
+          author: { "@id": ORGANIZATION_ID },
+          publisher: { "@id": ORGANIZATION_ID },
+          isPartOf: { "@id": WEBSITE_ID },
+          inLanguage: "en",
+        }
+      : {
+          "@type": input.type ?? "WebPage",
+          "@id": `${url}#webpage`,
+          url,
+          name: input.name,
+          description: input.description,
+          isPartOf: { "@id": WEBSITE_ID },
+          inLanguage: "en",
+        };
+  return graph([breadcrumbSchema(input.trail), page, ...(input.faqs?.length ? [faqSchema(`${url}#faq`, input.faqs)] : [])]);
+}

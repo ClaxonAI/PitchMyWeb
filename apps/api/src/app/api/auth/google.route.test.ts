@@ -12,6 +12,7 @@ import {
 import { handleGoogleCallback } from "./google/callback/route";
 import { handleRegister } from "./register/route";
 import { AccountSuspendedError } from "../../../lib/errors";
+import { DeviceAccountLimitError } from "../../../lib/auth/trial-device";
 
 const createdUserIds: string[] = [];
 afterAll(async () => {
@@ -134,5 +135,21 @@ describe("handleGoogleCallback", () => {
     const stored = await prisma.user.findUniqueOrThrow({ where: { email } });
     createdUserIds.push(stored.id);
     expect(stored.googleId).toBe(`google-sub-${email}`);
+  });
+});
+
+describe("upsertGoogleUser device limit", () => {
+  const profile = (label: string) => ({ sub: `google-${label}-${Date.now()}-${Math.random()}`, email: uniqueEmail(label), emailVerified: true as const });
+
+  it("creates up to three Google accounts on one device, refuses a fourth, and always signs existing ones in", async () => {
+    const fingerprintId = `google-device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const first = profile("g-device-1");
+    for (const p of [first, profile("g-device-2"), profile("g-device-3")]) {
+      const user = await upsertGoogleUser(prisma, p, null, fingerprintId);
+      createdUserIds.push(user.id);
+    }
+    await expect(upsertGoogleUser(prisma, profile("g-device-4"), null, fingerprintId)).rejects.toThrow(DeviceAccountLimitError);
+    // An account that already exists is a sign-in, never limited.
+    await expect(upsertGoogleUser(prisma, first, null, fingerprintId)).resolves.toMatchObject({ email: first.email });
   });
 });

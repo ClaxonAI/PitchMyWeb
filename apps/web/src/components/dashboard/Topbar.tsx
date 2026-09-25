@@ -10,7 +10,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/dashboard-ui/sheet";
 import { SidebarNav } from "./Sidebar";
 import { useSession } from "./SessionProvider";
-import { authApi } from "@/lib/api-client";
 import { Badge } from "@/components/dashboard-ui/badge";
 
 function initialsOf(name: string | null, email: string): string {
@@ -33,15 +32,23 @@ export function Topbar() {
   // a server/client mismatch. Render a neutral icon until mounted.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // Back after logging out restores the dashboard from the back/forward
+  // cache without asking the server. Reload it instead, so the session check
+  // runs and a signed-out visitor is sent to /login rather than shown data.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
-  async function handleLogout() {
+  function handleLogout() {
     setLoggingOut(true);
-    try {
-      await authApi.logout();
-    } finally {
-      router.push("/login");
-      router.refresh();
-    }
+    // A full navigation, not router.push: /logout ends the Clerk session as
+    // well as the app one (see that page), and nothing from the dashboard's
+    // client cache should outlive signing out.
+    window.location.assign("/logout");
   }
 
   return (

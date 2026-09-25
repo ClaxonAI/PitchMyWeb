@@ -15,6 +15,7 @@ import {
 import { recoverStaleBatches } from "../campaigns/selection.service";
 import { getObjectStorage } from "../storage";
 import { sweepWhatsAppSessions } from "../whatsapp/session-policy";
+import { reconcileCreditLedger } from "../checkout/wallet.service";
 
 // Scheduled pipeline housekeeping (every few minutes, same scheduler as
 // expire-stale-runs):
@@ -40,6 +41,8 @@ export type PipelineMaintenanceResult = {
   recordingsTimedOut: number;
   recordingsDeleted: number;
   whatsappSignedOut: number;
+  walletsChecked: number;
+  walletMismatches: number;
   pipelinesRequeued: number;
   pipelinesResumed: number;
   pipelinesAbandoned: number;
@@ -246,6 +249,24 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
   const recordingsDeleted = await deleteExpiredRecordings(db, now);
   // Last, so it sees every pipeline and batch outcome this pass produced.
   const { signedOut: whatsappSignedOut } = await sweepWhatsAppSessions(db, now);
+  // Every wallet must equal the sum of its ledger. Read-only; a mismatch is a
+  // bug to investigate, so it alerts rather than being corrected here.
+  const { checked: walletsChecked, mismatches } = await reconcileCreditLedger(db);
+  for (const mismatch of mismatches.slice(0, 20)) {
+    emitEvent(
+      "credits.ledger_mismatch",
+      {
+        userId: mismatch.userId,
+        available: mismatch.wallet.availableCredits,
+        expectedAvailable: mismatch.expected.availableCredits,
+        reserved: mismatch.wallet.reservedCredits,
+        expectedReserved: mismatch.expected.reservedCredits,
+        used: mismatch.wallet.usedCredits,
+        expectedUsed: mismatch.expected.usedCredits,
+      },
+      { level: "error", alert: true },
+    );
+  }
 
   const result = {
     deliveriesSynced,
@@ -258,6 +279,8 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
     recordingsTimedOut,
     recordingsDeleted,
     whatsappSignedOut,
+    walletsChecked,
+    walletMismatches: mismatches.length,
     durationMs: Date.now() - started,
   };
   emitEvent("preview.cleanup", result);

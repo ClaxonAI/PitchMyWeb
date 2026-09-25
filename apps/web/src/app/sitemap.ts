@@ -1,4 +1,7 @@
 import type { MetadataRoute } from "next";
+import { cities } from "@/data/cities";
+import { guides } from "@/data/guides";
+import { industries } from "@/data/industries";
 import { absoluteUrl } from "@/lib/seo/site-url";
 
 // Next builds this into a static /sitemap.xml at `next build` time.
@@ -41,6 +44,9 @@ type Entry = {
   lastModified: string;
 };
 
+/** Bump when the shared industry/city page copy changes (same rule as below). */
+const LANDING_PAGES_UPDATED = "2026-09-25";
+
 const ROUTES: Entry[] = [
   { path: "/", lastModified: "2026-09-23" },
   { path: "/pricing", lastModified: "2026-09-23" },
@@ -48,6 +54,17 @@ const ROUTES: Entry[] = [
   { path: "/terms", lastModified: "2026-09-22" },
   { path: "/privacy", lastModified: "2026-09-22" },
   { path: "/refunds", lastModified: "2026-09-22" },
+  { path: "/how-it-works", lastModified: "2026-09-25" },
+  // The SEO landing pages: hubs, then one page per industry, city and guide,
+  // generated from the same data files the pages render (data/industries.ts,
+  // data/cities.ts, data/guides.ts), so a page cannot exist without its entry
+  // or the other way round.
+  { path: "/for", lastModified: LANDING_PAGES_UPDATED },
+  { path: "/in", lastModified: LANDING_PAGES_UPDATED },
+  { path: "/guides", lastModified: LANDING_PAGES_UPDATED },
+  ...industries.map((industry) => ({ path: `/for/${industry.slug}`, lastModified: LANDING_PAGES_UPDATED })),
+  ...cities.map((city) => ({ path: `/in/${city.slug}`, lastModified: LANDING_PAGES_UPDATED })),
+  ...guides.map((guide) => ({ path: `/guides/${guide.slug}`, lastModified: guide.updated })),
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import type { Me } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { ProfileForm } from "@/components/dashboard/ProfileForm";
+import { SectionTabs } from "@/components/dashboard/SectionTabs";
 
 export const metadata: Metadata = { title: "Profile" };
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      <SectionTabs section="settings" />
       <div>
         <h1 className="display text-2xl text-dash-foreground">Profile</h1>
         <p className="mt-1 text-sm text-dash-muted-foreground">Your account details.</p>

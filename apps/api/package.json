@@ -17,7 +17,8 @@
     "job:backfill-pitch-credits": "tsx scripts/backfill-pitch-credits.ts",
     "job:enqueue-website-verifications": "tsx scripts/enqueue-website-verifications.ts",
     "demo:preview": "tsx scripts/demo-preview.ts",
-    "admin:promote": "tsx scripts/promote-admin.ts"
+    "admin:promote": "tsx scripts/promote-admin.ts",
+    "credits:check": "tsx --env-file-if-exists=.env scripts/check-credits.ts"
   },
   "repository": {
     "type": "git",
@@ -50,6 +51,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.63.0",
     "dotenv": "^17.2.3",
+    "fflate": "^0.8.3",
     "ioredis": "^5.9.1",
     "libphonenumber-js": "^1.13.13",
     "next": "^16.3.5",

@@ -20,9 +20,39 @@ import { NextResponse } from "next/server";
 const SESSION_COOKIE = "pmw_session";
 const SIGNED_IN_HINT = "pmw_signed_in";
 
+// Signed-in visitors who open /login or /register are sent to the dashboard
+// instead of being shown a form for an account they are already in. Not when
+// the page carries an orderId (a post-payment sign-in that must claim the
+// order) or the expired flag below.
+const AUTH_FORMS = new Set(["/login", "/register"]);
+
+// requireSession() sends a visitor here with ?expired=1 when their session
+// cookie was present but the API refused it (expired, revoked, or from
+// another database). The cookie itself is HttpOnly and only a response can
+// clear it: without this, the stale cookie kept the hint alive, so the home
+// page offered "Go to dashboard" forever and every click bounced to /login.
+const EXPIRED_PARAM = "expired";
+
+function clearSession(response: NextResponse): NextResponse {
+  response.cookies.delete(SESSION_COOKIE);
+  response.cookies.delete(SIGNED_IN_HINT);
+  return response;
+}
+
 export default clerkMiddleware((_auth, request) => {
+  const { pathname, searchParams } = request.nextUrl;
   const signedIn = request.cookies.has(SESSION_COOKIE);
   const hinted = request.cookies.get(SIGNED_IN_HINT)?.value === "1";
+
+  if (AUTH_FORMS.has(pathname)) {
+    if (searchParams.get(EXPIRED_PARAM) === "1") {
+      return signedIn || hinted ? clearSession(NextResponse.next()) : undefined;
+    }
+    if (signedIn && !searchParams.has("orderId")) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
   if (signedIn === hinted) return;
 
   const response = NextResponse.next();

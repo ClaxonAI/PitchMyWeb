@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@pitchmyweb/db";
 import { FREE_PITCH_ALLOWANCE } from "./paid-access";
 import { InsufficientPitchCreditsError, isUniqueConstraintViolation } from "../errors";
+import { emitEvent } from "../observability/events";
 
 // The pitch credit engine (see docs/pitch-credits-plan for the full design).
 // One wallet per user, created lazily on first touch rather than at
@@ -21,6 +22,8 @@ import { InsufficientPitchCreditsError, isUniqueConstraintViolation } from "../e
 // reservation — see pipeline.service.ts's use of LeadPipeline.creditOutcome
 // as the concurrency guard, and PitchCreditLedger.referenceId as the
 // independent second layer against a duplicate call outside that guard.
+// reconcileCreditLedger (below) checks that the wallet still equals the sum
+// of its ledger.
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -185,7 +188,19 @@ export async function releasePitchCredits(tx: Prisma.TransactionClient, input: B
 // backstop: swallowing its P2002 here means even a call that somehow ran
 // twice outside that guard still only ever records one credit movement.
 
-async function recordCreditMovement(
+/**
+ * Writes the ledger row first and moves the wallet only if that write was
+ * new. The order matters: the wallet update used to run first, so a
+ * duplicate call moved the balance a second time while the ledger's unique
+ * referenceId quietly dropped the second row — the balance drifted away from
+ * its own history with nothing recording why.
+ *
+ * A wallet with nothing reserved should be impossible here (the pipeline
+ * reserved this credit); if it happens the ledger row stays, the wallet is
+ * left alone, and the mismatch is raised as an alert for
+ * reconcileCreditLedger to report rather than hidden.
+ */
+async function resolveReservedCredit(
   tx: Prisma.TransactionClient,
   input: { userId: string; batchId: string; pipelineId: string; type: "CONSUME" | "REFUND" },
 ): Promise<void> {
@@ -195,25 +210,91 @@ async function recordCreditMovement(
       data: { userId: input.userId, batchId: input.batchId, pipelineId: input.pipelineId, type: input.type, amount: 1, referenceId },
     });
   } catch (error) {
+    // Already recorded: this movement has happened, so the wallet has too.
     if (isUniqueConstraintViolation(error)) return;
     throw error;
+  }
+  const moved = await tx.pitchWallet.updateMany({
+    where: { userId: input.userId, reservedCredits: { gte: 1 } },
+    data:
+      input.type === "CONSUME"
+        ? { reservedCredits: { decrement: 1 }, usedCredits: { increment: 1 } }
+        : { reservedCredits: { decrement: 1 }, availableCredits: { increment: 1 } },
+  });
+  if (moved.count !== 1) {
+    emitEvent("credits.ledger_mismatch", { userId: input.userId, pipelineId: input.pipelineId, type: input.type, reason: "no_reserved_credit" }, { level: "error", alert: true });
   }
 }
 
 /** A reserved pitch actually sent: reserved -> used. */
 export async function consumeReservedCredit(tx: Prisma.TransactionClient, input: { userId: string; batchId: string; pipelineId: string }): Promise<void> {
-  await tx.pitchWallet.updateMany({
-    where: { userId: input.userId, reservedCredits: { gte: 1 } },
-    data: { reservedCredits: { decrement: 1 }, usedCredits: { increment: 1 } },
-  });
-  await recordCreditMovement(tx, { ...input, type: "CONSUME" });
+  await resolveReservedCredit(tx, { ...input, type: "CONSUME" });
 }
 
 /** A reserved pitch that finally, non-retryably failed: reserved -> available. */
 export async function refundReservedCredit(tx: Prisma.TransactionClient, input: { userId: string; batchId: string; pipelineId: string }): Promise<void> {
-  await tx.pitchWallet.updateMany({
-    where: { userId: input.userId, reservedCredits: { gte: 1 } },
-    data: { reservedCredits: { decrement: 1 }, availableCredits: { increment: 1 } },
-  });
-  await recordCreditMovement(tx, { ...input, type: "REFUND" });
+  await resolveReservedCredit(tx, { ...input, type: "REFUND" });
+}
+
+// --- Reconciliation --------------------------------------------------------
+
+export type LedgerMismatch = {
+  userId: string;
+  wallet: PitchWalletSnapshot;
+  /** What the ledger says the wallet should hold. */
+  expected: PitchWalletSnapshot;
+};
+
+/**
+ * Rebuilds every wallet from its ledger and reports the ones that disagree.
+ * The ledger is the history and the wallet is its running total, so they
+ * must always match:
+ *
+ *   available = PURCHASE + FREE_GRANT - RESERVE + RELEASE + REFUND
+ *   reserved  = RESERVE - RELEASE - CONSUME - REFUND
+ *   used      = CONSUME
+ *
+ * Read-only: it reports, it never "fixes" a balance — a mismatch means a bug
+ * to find, and silently overwriting the wallet would erase the evidence.
+ * Run by every pipeline-maintenance pass (alerting on any mismatch) and on
+ * demand with `npm run credits:check -w apps/api`.
+ */
+export async function reconcileCreditLedger(db: PrismaClient, filter: { userId?: string } = {}): Promise<{ checked: number; mismatches: LedgerMismatch[] }> {
+  const where = filter.userId ? { userId: filter.userId } : {};
+  const [sums, wallets] = await Promise.all([
+    db.pitchCreditLedger.groupBy({ by: ["userId", "type"], where, _sum: { amount: true } }),
+    db.pitchWallet.findMany({ where, select: { userId: true, availableCredits: true, reservedCredits: true, usedCredits: true } }),
+  ]);
+
+  const totals = new Map<string, Record<string, number>>();
+  for (const row of sums) {
+    const byType = totals.get(row.userId) ?? {};
+    byType[row.type] = row._sum.amount ?? 0;
+    totals.set(row.userId, byType);
+  }
+
+  const mismatches: LedgerMismatch[] = [];
+  const userIds = new Set([...wallets.map((wallet) => wallet.userId), ...totals.keys()]);
+  const walletByUser = new Map(wallets.map((wallet) => [wallet.userId, wallet]));
+  for (const userId of userIds) {
+    const t = totals.get(userId) ?? {};
+    const n = (type: string) => t[type] ?? 0;
+    const expected = {
+      availableCredits: n("PURCHASE") + n("FREE_GRANT") - n("RESERVE") + n("RELEASE") + n("REFUND"),
+      reservedCredits: n("RESERVE") - n("RELEASE") - n("CONSUME") - n("REFUND"),
+      usedCredits: n("CONSUME"),
+    };
+    const row = walletByUser.get(userId);
+    const wallet = row
+      ? { availableCredits: row.availableCredits, reservedCredits: row.reservedCredits, usedCredits: row.usedCredits }
+      : { availableCredits: 0, reservedCredits: 0, usedCredits: 0 };
+    if (
+      wallet.availableCredits !== expected.availableCredits ||
+      wallet.reservedCredits !== expected.reservedCredits ||
+      wallet.usedCredits !== expected.usedCredits
+    ) {
+      mismatches.push({ userId, wallet, expected });
+    }
+  }
+  return { checked: userIds.size, mismatches };
 }
