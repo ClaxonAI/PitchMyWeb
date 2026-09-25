@@ -22,6 +22,17 @@ LOG=/var/log/pitchmyweb-bootstrap.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== bootstrap $(date -Is) ==="
 
+# One deploy at a time. Two runs at once (a send-command issued twice) share
+# this tree: two `npm ci`s delete each other's node_modules and two builds
+# swap half-written .next directories into place, leaving the box serving a
+# broken app. A second run waits up to an hour for the first, then runs
+# against its result; it never overlaps.
+exec 9>/var/lock/pitchmyweb-bootstrap.lock
+if ! flock -n 9; then
+  echo "Another deploy is running; waiting for it to finish before starting."
+  flock -w 3600 9 || { echo "Gave up waiting for the other deploy after an hour." >&2; exit 1; }
+fi
+
 step() { echo; echo "--- $* ---"; }
 
 # Every command this script runs as the app user goes through one of these
