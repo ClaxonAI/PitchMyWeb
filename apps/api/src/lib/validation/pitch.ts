@@ -6,7 +6,7 @@ import { paginationQuerySchema, pitchStatusSchema } from "./common";
 // untrusted until it passes validation).
 //
 // Drafted in Phase 2 before the AI generation flow existed, and NOT used by
-// the final Phase 7 design: pitch content only ever comes from Ollama
+// the final Phase 7 design: pitch content only ever comes from the model
 // (validated by aiPitchResponseSchema below), never from a client-supplied
 // request body, so no route parses a request against pitchCreateSchema.
 // Left in place (harmless, matches the project's "do not modify unrelated
@@ -48,11 +48,11 @@ export const whatsappConfirmSendSchema = z.object({
 
 export type WhatsappConfirmSendInput = z.infer<typeof whatsappConfirmSendSchema>;
 
-// Ollama pitch structured-output contract (Phase 7 section 6). A single
+// Pitch structured-output contract (Phase 7 section 6). A single
 // message field — pitch generation reuses the lead's already-validated
 // Lead.recommendedService/estimatedDealMin/Max (Phase 5) as context, it
 // never asks the model to re-decide them, so there is nothing else
-// structured for Ollama to return here. `.strict()`: an unexpected extra
+// structured for the model to return here. `.strict()`: an unexpected extra
 // field is treated as invalid output, not silently dropped, same
 // convention as aiLeadAnalysisResponseSchema.
 export const aiPitchResponseSchema = z

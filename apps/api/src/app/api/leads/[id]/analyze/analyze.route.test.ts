@@ -7,7 +7,7 @@ import { AiAnalysisFailedError, NotFoundError, RateLimitedError, Unauthenticated
 import { createCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { ingestBusinessAsLead } from "../../../../../lib/leads/lead.service";
 import type { BusinessProviderInput } from "../../../../../lib/validation/business";
-import type { OllamaClient, OllamaGenerateResult } from "../../../../../lib/ai/ollama-client";
+import type { AiClient, AiGenerateResult } from "../../../../../lib/ai/ai-client";
 import { handleAnalyzeLead } from "./route";
 
 const createdUserIds: string[] = [];
@@ -59,9 +59,9 @@ async function newAnalyzableLead(prefix: string) {
   return { user, cookieHeader, lead };
 }
 
-function fakeOllama(text: string): OllamaClient {
+function fakeAi(text: string): AiClient {
   return {
-    async generate(): Promise<OllamaGenerateResult> {
+    async generate(): Promise<AiGenerateResult> {
       return {
         text,
         latencyMs: 5,
@@ -82,36 +82,36 @@ const validResponseText = JSON.stringify({
 });
 
 describe("POST /api/leads/:id/analyze", () => {
-  it("rejects an unauthenticated request before touching Ollama", async () => {
+  it("rejects an unauthenticated request before touching the model", async () => {
     const { lead } = await newAnalyzableLead("unauth");
     let called = false;
-    const ollama: OllamaClient = {
+    const ai: AiClient = {
       async generate() {
         called = true;
         return { text: validResponseText, latencyMs: 1 };
       },
     };
-    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`), { id: lead.id }, ollama)).rejects.toThrow(UnauthenticatedError);
+    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`), { id: lead.id }, ai)).rejects.toThrow(UnauthenticatedError);
     expect(called).toBe(false);
   });
 
-  it("returns NotFoundError for another user's lead (no data leakage), never calling Ollama", async () => {
+  it("returns NotFoundError for another user's lead (no data leakage), never calling the model", async () => {
     const { lead } = await newAnalyzableLead("owner-a");
     const { cookieHeader: otherCookie } = await authedUser("owner-b");
     let called = false;
-    const ollama: OllamaClient = {
+    const ai: AiClient = {
       async generate() {
         called = true;
         return { text: validResponseText, latencyMs: 1 };
       },
     };
-    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, otherCookie), { id: lead.id }, ollama)).rejects.toThrow(NotFoundError);
+    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, otherCookie), { id: lead.id }, ai)).rejects.toThrow(NotFoundError);
     expect(called).toBe(false);
   });
 
   it("returns the full lead detail (with the new analysis) on success", async () => {
     const { cookieHeader, lead } = await newAnalyzableLead("success");
-    const response = await handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeOllama(validResponseText));
+    const response = await handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeAi(validResponseText));
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -124,7 +124,7 @@ describe("POST /api/leads/:id/analyze", () => {
 
   it("maps a permanently failed analysis to a controlled error, not a raw crash", async () => {
     const { cookieHeader, lead } = await newAnalyzableLead("failure");
-    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeOllama("not json at all"))).rejects.toThrow(
+    await expect(handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeAi("not json at all"))).rejects.toThrow(
       AiAnalysisFailedError,
     );
 
@@ -167,12 +167,12 @@ describe("POST /api/leads/:id/analyze - rate limiting (section 41)", () => {
           externalId: `${EXTERNAL_ID_PREFIX}${Date.now()}-${providerSeq}`,
         },
       });
-      const response = await handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeOllama(validResponseText));
+      const response = await handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${lead.id}/analyze`, cookieHeader), { id: lead.id }, fakeAi(validResponseText));
       expect(response.status).toBe(200);
     }
 
     // A 21st lead for the same user: the rate limit check runs before any
-    // Ollama/business logic, so this fails purely on the count, regardless
+    // model/business logic, so this fails purely on the count, regardless
     // of the lead's own eligibility.
     providerSeq += 1;
     const { lead: overLimitLead } = await ingestBusinessAsLead(prisma, {
@@ -197,7 +197,7 @@ describe("POST /api/leads/:id/analyze - rate limiting (section 41)", () => {
       },
     });
     await expect(
-      handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${overLimitLead.id}/analyze`, cookieHeader), { id: overLimitLead.id }, fakeOllama(validResponseText)),
+      handleAnalyzeLead(prisma, req(`http://localhost/api/leads/${overLimitLead.id}/analyze`, cookieHeader), { id: overLimitLead.id }, fakeAi(validResponseText)),
     ).rejects.toThrow(RateLimitedError);
   }, 30000);
 });

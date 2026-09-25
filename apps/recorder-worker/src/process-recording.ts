@@ -2,11 +2,14 @@ import { rm } from "node:fs/promises";
 import type { PrismaClient } from "@pitchmyweb/db";
 import { storageKeys, videoExpiry } from "@pitchmyweb/storage";
 import { RecordingError, recordTour } from "./record.js";
-import { TranscodeError, transcodeToMp4 } from "./transcode.js";
+import { LAPTOP_OUTPUT_WIDTH, PHONE_OUTPUT_WIDTH, TranscodeError, transcodeToMp4 } from "./transcode.js";
 import { assertPreviewUrl, UrlNotAllowedError } from "./url-guard.js";
 
 // One recording job, end to end:
-//   load -> SSRF check -> RECORDING -> record -> MP4 -> upload -> READY -> notify API
+//   load -> SSRF check -> RECORDING -> record phone + laptop -> MP4s -> upload -> READY -> notify API
+//
+// Both videos belong to the one DemoRecording row and succeed or fail
+// together: a pitch sends both, so a job that produced only one is retried.
 //
 // Failure handling: a retryable failure returns the row to QUEUED and
 // rethrows so BullMQ retries it; the final attempt marks it FAILED with a
@@ -66,7 +69,7 @@ export async function processRecording(
     return "skipped";
   }
 
-  let workDir: string | undefined;
+  const workDirs: string[] = [];
   try {
     if (recording.websiteProject.status !== "PUBLISHED") throw new UrlNotAllowedError();
     const url = assertPreviewUrl(recording.websiteProject.publishedUrl, deps.sitesPublicUrl);
@@ -76,15 +79,23 @@ export async function processRecording(
       data: { status: "RECORDING", attempts: { increment: 1 } },
     });
 
-    const raw = await recordTour(url.toString(), { tourSeconds: deps.tourSeconds, navigationTimeoutMs: deps.navigationTimeoutMs });
-    workDir = raw.workDir;
-    const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds);
+    const recordOptions = { tourSeconds: deps.tourSeconds, navigationTimeoutMs: deps.navigationTimeoutMs };
+    const phoneRaw = await recordTour(url.toString(), { ...recordOptions, device: "phone" });
+    workDirs.push(phoneRaw.workDir);
+    const video = await transcodeToMp4(phoneRaw.webmPath, phoneRaw.workDir, phoneRaw.leadInSeconds, { width: PHONE_OUTPUT_WIDTH, name: "phone" });
+    const laptopRaw = await recordTour(url.toString(), { ...recordOptions, device: "laptop" });
+    workDirs.push(laptopRaw.workDir);
+    const laptop = await transcodeToMp4(laptopRaw.webmPath, laptopRaw.workDir, laptopRaw.leadInSeconds, { width: LAPTOP_OUTPUT_WIDTH, name: "laptop" });
 
     const storageKey = storageKeys.recording(recording.lead.campaignId, recordingId);
     const posterKey = storageKeys.poster(recording.lead.campaignId, recordingId);
+    const desktopStorageKey = storageKeys.recordingDesktop(recording.lead.campaignId, recordingId);
+    const desktopPosterKey = storageKeys.posterDesktop(recording.lead.campaignId, recordingId);
     try {
       await deps.storage.put(storageKey, video.mp4, "video/mp4");
       await deps.storage.put(posterKey, video.poster, "image/jpeg");
+      await deps.storage.put(desktopStorageKey, laptop.mp4, "video/mp4");
+      await deps.storage.put(desktopPosterKey, laptop.poster, "image/jpeg");
     } catch (error) {
       throw new UploadError(error instanceof Error ? error.message : "Upload failed");
     }
@@ -98,13 +109,25 @@ export async function processRecording(
         durationMs: video.durationMs,
         sizeBytes: video.mp4.byteLength,
         mimeType: "video/mp4",
+        desktopStorageKey,
+        desktopPosterKey,
+        desktopDurationMs: laptop.durationMs,
+        desktopSizeBytes: laptop.mp4.byteLength,
         failureReason: null,
         // Downloadable for VIDEO_RETENTION_DAYS; the API's maintenance job
         // deletes the objects after this.
         expiresAt: videoExpiry(),
       },
     });
-    deps.log("info", { recordingId, durationMs: video.durationMs, sizeBytes: video.mp4.byteLength, width: video.width, height: video.height }, "recording ready");
+    deps.log(
+      "info",
+      {
+        recordingId,
+        phone: { durationMs: video.durationMs, sizeBytes: video.mp4.byteLength, width: video.width, height: video.height },
+        laptop: { durationMs: laptop.durationMs, sizeBytes: laptop.mp4.byteLength, width: laptop.width, height: laptop.height },
+      },
+      "recordings ready",
+    );
     await deps.notify(recordingId);
     return "ready";
   } catch (error) {
@@ -120,7 +143,7 @@ export async function processRecording(
     await deps.notify(recordingId);
     return "failed";
   } finally {
-    if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+    for (const dir of workDirs) await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

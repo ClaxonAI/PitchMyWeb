@@ -1,15 +1,15 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "../../../lib/db/client";
-import { createTestUser, deleteTestUsers } from "../../../lib/testing/db-test-helpers";
+import { connectTestWhatsApp, createTestUser, deleteTestUsers } from "../../../lib/testing/db-test-helpers";
 import { SESSION_COOKIE_NAME, createSession } from "../../../lib/auth/session";
-import { UnauthenticatedError, NotFoundError, InvalidCampaignTransitionError } from "../../../lib/errors";
+import { UnauthenticatedError, NotFoundError, InvalidCampaignTransitionError, WhatsAppNotConnectedError } from "../../../lib/errors";
 import { ZodError } from "zod";
 import { handleCreateCampaign, handleListCampaigns } from "./route";
 import { handleGetCampaign, handlePatchCampaign } from "./[id]/route";
 import { handleRunCampaign } from "./[id]/run/route";
 import { handleSelectLeads } from "./[id]/selection/route";
-import { WhatsAppNotConnectedError } from "../../../lib/whatsapp/session-policy";
+import { handleResumeSending } from "./[id]/resume-sending/route";
 
 const createdUserIds: string[] = [];
 afterAll(async () => {
@@ -17,9 +17,10 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function authedUser(prefix: string) {
+async function authedUser(prefix: string, options: { whatsapp?: boolean } = {}) {
   const user = await createTestUser(prefix);
   createdUserIds.push(user.id);
+  if (options.whatsapp !== false) await connectTestWhatsApp(user.id);
   const session = await createSession(prisma, user.id);
   return { user, cookieHeader: `${SESSION_COOKIE_NAME}=${session.token}` };
 }
@@ -54,6 +55,21 @@ describe("POST /api/campaigns", () => {
     const body = await response.json();
     expect(body.userId).toBe(user.id);
     expect(body.status).toBe("DRAFT");
+  });
+
+  it("refuses to create a campaign until WhatsApp is connected", async () => {
+    const { cookieHeader } = await authedUser("create-no-whatsapp", { whatsapp: false });
+    await expect(handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
+  });
+
+  it("refuses when the only linked WhatsApp is not connected right now", async () => {
+    const { user, cookieHeader } = await authedUser("create-whatsapp-disconnected", { whatsapp: false });
+    await prisma.whatsAppAccount.create({ data: { userId: user.id, status: "DISCONNECTED" } });
+    await expect(handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
   });
 
   it("rejects invalid input (missing name) with a ZodError", async () => {
@@ -178,6 +194,19 @@ describe("POST /api/campaigns/:id/run", () => {
     expect(body.execution.leadsCreated).toBeGreaterThan(0);
   });
 
+  it("refuses to run once WhatsApp has disconnected, without starting a run", async () => {
+    const { user, cookieHeader } = await authedUser("run-whatsapp-gone");
+    const created = await (await handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).json();
+    await handlePatchCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}`, { method: "PATCH", body: { status: "READY" }, cookieHeader }), { id: created.id });
+    await prisma.whatsAppAccount.updateMany({ where: { userId: user.id }, data: { status: "DISCONNECTED" } });
+
+    await expect(handleRunCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}/run`, { method: "POST", cookieHeader }), { id: created.id })).rejects.toThrow(
+      WhatsAppNotConnectedError,
+    );
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: created.id } })).status).toBe("READY");
+    expect(await prisma.campaignExecution.count({ where: { campaignId: created.id } })).toBe(0);
+  });
+
   it("rejects running a DRAFT campaign (never marked READY)", async () => {
     const { user, cookieHeader } = await authedUser("run-not-ready");
     await linkWhatsApp(user.id);
@@ -201,9 +230,11 @@ describe("POST /api/campaigns/:id/run", () => {
   });
 
   it("refuses to start an Auto campaign until a WhatsApp number is linked", async () => {
-    const { cookieHeader } = await authedUser("run-no-whatsapp");
+    const { user, cookieHeader } = await authedUser("run-no-whatsapp");
     const created = await (await handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).json();
     await handlePatchCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}`, { method: "PATCH", body: { status: "READY" }, cookieHeader }), { id: created.id });
+    // Signed out between creating and running (another campaign finished).
+    await prisma.whatsAppAccount.updateMany({ where: { userId: user.id }, data: { status: "DISCONNECTED" } });
 
     await expect(handleRunCampaign(prisma, req(`http://localhost/api/campaigns/${created.id}/run`, { method: "POST", cookieHeader }), { id: created.id })).rejects.toThrow(
       WhatsAppNotConnectedError,
@@ -264,5 +295,23 @@ describe("POST /api/campaigns/:id/selection", () => {
       }),
     ).rejects.toThrow(WhatsAppNotConnectedError);
     expect(await prisma.pitchBatch.count({ where: { campaignId: created.id } })).toBe(0);
+  });
+});
+
+describe("POST /api/campaigns/:id/resume-sending", () => {
+  it("asks for a fresh WhatsApp link when the number was signed out during a long pause", async () => {
+    const { user, cookieHeader } = await authedUser("resume-signed-out");
+    const created = await (await handleCreateCampaign(prisma, req("http://localhost/api/campaigns", { method: "POST", body: validCampaignBody, cookieHeader }))).json();
+    await prisma.campaign.update({ where: { id: created.id }, data: { sendingPaused: true } });
+    await prisma.whatsAppAccount.updateMany({ where: { userId: user.id }, data: { status: "DISCONNECTED" } });
+
+    const resume = () => handleResumeSending(prisma, req(`http://localhost/api/campaigns/${created.id}/resume-sending`, { method: "POST", cookieHeader }), { id: created.id });
+    await expect(resume()).rejects.toThrow(WhatsAppNotConnectedError);
+    // Still paused: nothing was released to a socket that is gone.
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: created.id } })).sendingPaused).toBe(true);
+
+    await prisma.whatsAppAccount.updateMany({ where: { userId: user.id }, data: { status: "CONNECTED" } });
+    expect((await resume()).status).toBe(200);
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: created.id } })).sendingPaused).toBe(false);
   });
 });

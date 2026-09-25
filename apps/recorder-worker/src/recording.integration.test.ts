@@ -6,7 +6,7 @@ import { PrismaClient } from "@pitchmyweb/db";
 import { getConfig } from "./config.js";
 import { processRecording, type ProcessDeps } from "./process-recording.js";
 import { closeBrowser, recordTour } from "./record.js";
-import { MAX_MP4_BYTES, transcodeToMp4 } from "./transcode.js";
+import { LAPTOP_OUTPUT_WIDTH, MAX_MP4_BYTES, transcodeToMp4 } from "./transcode.js";
 
 // Real Chromium, real ffmpeg, real Postgres. A tiny local server plays the
 // part of apps/sites so the test needs no other app running.
@@ -50,15 +50,32 @@ afterAll(async () => {
 });
 
 describe("recordTour + transcodeToMp4", () => {
-  it("produces a landscape laptop-view H.264 MP4 within the WhatsApp budget, plus a poster", async () => {
+  it("produces a landscape laptop-size H.264 MP4 within the WhatsApp budget", async () => {
+    const raw = await recordTour(`${origin}/s/fixture-clinic`, { tourSeconds: 10, navigationTimeoutMs: 20_000, device: "laptop" });
+    try {
+      const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds, { width: LAPTOP_OUTPUT_WIDTH, name: "laptop" });
+      expect(video.codec).toBe("h264");
+      expect(video.width).toBe(1280);
+      expect(video.height).toBe(720);
+      expect(video.durationMs).toBeGreaterThan(8_000);
+      expect(video.mp4.byteLength).toBeLessThanOrEqual(MAX_MP4_BYTES);
+      expect(video.mp4.indexOf("moov")).toBeLessThan(video.mp4.indexOf("mdat"));
+      expect(video.poster.subarray(0, 2).toString("hex")).toBe("ffd8");
+    } finally {
+      const { rm } = await import("node:fs/promises");
+      await rm(raw.workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("produces a portrait H.264 MP4 within the WhatsApp budget, plus a poster", async () => {
     const raw = await recordTour(`${origin}/s/fixture-clinic`, { tourSeconds: 10, navigationTimeoutMs: 20_000 });
     try {
       expect(raw.tourSeconds).toBeGreaterThanOrEqual(9);
       const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds);
       expect(video.codec).toBe("h264");
-      // 720p landscape: the desktop layout, never a phone-shaped video.
-      expect(video.width).toBe(1280);
-      expect(video.height).toBe(720);
+      // The default device is the phone: 720-wide portrait.
+      expect(video.width).toBe(720);
+      expect(video.height).toBeGreaterThan(video.width);
       expect(video.width % 2).toBe(0);
       expect(video.height % 2).toBe(0);
       expect(video.durationMs).toBeGreaterThan(8_000);
@@ -122,18 +139,28 @@ describe("processRecording", () => {
     expect(row.storageKey).toBe(`recordings/${campaign.id}/${recording.id}.mp4`);
     expect(row.mimeType).toBe("video/mp4");
     expect(row.sizeBytes).toBeGreaterThan(0);
+    // The laptop walkthrough is recorded in the same job, next to the phone one.
+    expect(row.desktopStorageKey).toBe(`recordings/${campaign.id}/${recording.id}-laptop.mp4`);
+    expect(row.desktopPosterKey).toBe(`recordings/${campaign.id}/${recording.id}-laptop.jpg`);
+    expect(row.desktopSizeBytes).toBeGreaterThan(0);
+    expect(row.desktopDurationMs).toBeGreaterThan(0);
     expect(row.attempts).toBe(1);
+    expect(put).toHaveBeenCalledTimes(4);
+    expect(put.mock.calls.map((call) => [call[0], call[2]])).toEqual([
+      [row.storageKey, "video/mp4"],
+      [row.posterKey, "image/jpeg"],
+      [row.desktopStorageKey, "video/mp4"],
+      [row.desktopPosterKey, "image/jpeg"],
+    ]);
     // Downloadable for the default 7 days, then cleaned out of storage.
     const days = (row.expiresAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
     expect(days).toBeGreaterThan(6.9);
     expect(days).toBeLessThanOrEqual(7);
-    expect(put).toHaveBeenCalledTimes(2);
-    expect(put.mock.calls[0]?.[2]).toBe("video/mp4");
     expect(notify).toHaveBeenCalledWith(recording.id);
 
     // A duplicate job is a no-op that re-sends the callback.
     await expect(processRecording(value, recording.id, { number: 1, max: 2 })).resolves.toBe("skipped");
-    expect(put).toHaveBeenCalledTimes(2);
+    expect(put).toHaveBeenCalledTimes(4);
   });
 
   it("refuses URLs outside the preview origin without retrying", async () => {

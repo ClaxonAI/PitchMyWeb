@@ -11,7 +11,9 @@ import { cuidSchema, emptyBodySchema } from "../../../../../lib/validation/commo
 type RouteParams = { params: Promise<{ id: string }> };
 
 // POST /api/campaigns/:id/pause-sending
-// Cancels this campaign's queued WhatsApp sends; they can be retried later.
+// Pauses sending: pitches keep building and recording, then wait before
+// WhatsApp until POST /api/campaigns/:id/resume-sending. Nothing is failed or
+// refunded.
 export async function handlePauseSending(db: PrismaClient, request: NextRequest, params: { id: string }): Promise<NextResponse> {
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);

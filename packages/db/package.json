@@ -19,6 +19,7 @@
     "deploy": "prisma migrate deploy",
     "validate": "prisma validate",
     "seed": "tsx prisma/seed.ts",
+    "seed:services": "tsx prisma/seed.ts --services-only",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },

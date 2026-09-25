@@ -118,6 +118,18 @@ async function seenBusinessKeys(db: PrismaClient, campaign: Campaign): Promise<S
 }
 
 /**
+ * Extra pitchable leads kept on standby beyond targetCount. Selection still
+ * pitches exactly targetCount; these exist so a pitch whose number turns out
+ * not to be on WhatsApp can hand its credit to another business in the same
+ * campaign (pipeline.service.ts::claimReplacementLead) instead of refunding
+ * it. Without them there is never anyone to hand it to: the cap below used
+ * to stop at exactly targetCount, and auto-selection pitches all of those.
+ */
+export function replacementReserve(targetCount: number): number {
+  return Math.min(20, Math.max(2, Math.ceil(targetCount * 0.25)));
+}
+
+/**
  * Ingests raw provider records for one execution, stopping once the campaign
  * has targetCount leads that can actually be pitched. `alreadyCreated` is the
  * number of leads this execution has already produced (from earlier batches),
@@ -155,9 +167,10 @@ export async function ingestBusinesses(
   // than hiding it — but it does not consume one of the slots, and the
   // search keeps going to replace it.
   let pitchable = await countPitchableLeads(db, campaign.id);
+  const wanted = campaign.targetCount + replacementReserve(campaign.targetCount);
 
   for (const providerInput of records) {
-    if (pitchable >= campaign.targetCount) break;
+    if (pitchable >= wanted) break;
     // Bound on how many candidates may be looked at, so a campaign whose
     // results are nearly all unreachable or already-seen stops rather than
     // ingesting the entire result set.

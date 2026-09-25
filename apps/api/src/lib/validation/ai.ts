@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { serviceCodeSchema } from "./common";
 
-// Ollama structured-output contract (backend_tasks.md section 27). Used by
-// lib/ai/lead-analysis.service.ts (Phase 5) to validate every raw Ollama
+// Model structured-output contract (backend_tasks.md section 27). Used by
+// lib/ai/lead-analysis.service.ts (Phase 5) to validate every raw model
 // response before anything downstream trusts it (Rule 6: AI output is
 // untrusted until parsed + validated).
 //

@@ -8,6 +8,7 @@ import { errorResponse, jsonOk } from "../../../lib/api/response";
 import { assertCanStartDiscovery, assertMarketAllowed } from "../../../lib/checkout/paid-access";
 import { createCampaign, listCampaignsForUser } from "../../../lib/campaigns/campaign.service";
 import { campaignCreateSchema, campaignListQuerySchema } from "../../../lib/validation/campaign";
+import { assertWhatsAppReady } from "../../../lib/whatsapp/session-policy";
 
 // GET /api/campaigns (section 7): campaigns belonging only to the
 // authenticated user, paginated. All business logic (ownership scoping,
@@ -28,6 +29,9 @@ export async function handleCreateCampaign(db: PrismaClient, request: NextReques
   const user = await requireCurrentUser(db, request);
   const body = await parseJsonBody(request, campaignCreateSchema);
   await assertCanStartDiscovery(db, user.id);
+  // Auto campaigns send from the user's own number, which is signed out
+  // after every campaign: link it before creating the next one.
+  await assertWhatsAppReady(db, user.id, body);
   await assertMarketAllowed(db, user.id, body.market);
   const campaign = await createCampaign(db, user.id, body);
   return jsonOk(campaign, 201);

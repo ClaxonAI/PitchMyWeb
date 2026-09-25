@@ -10,12 +10,16 @@ export function CampaignActions({ campaign }: { campaign: Campaign }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Shown immediately on click rather than after the refresh round-trip, so
+  // the button never looks like it did nothing.
+  const [paused, setPaused] = useState(campaign.sendingPaused);
 
-  async function run(action: string, fn: () => Promise<unknown>) {
+  async function run(action: string, fn: () => Promise<unknown>, after?: () => void) {
     setPending(action);
     setError(null);
     try {
       await fn();
+      after?.();
       router.refresh();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
@@ -24,9 +28,11 @@ export function CampaignActions({ campaign }: { campaign: Campaign }) {
     }
   }
 
+  const started = campaign.status === "RUNNING" || campaign.status === "PROCESSING" || campaign.status === "COMPLETED";
+
   return (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         {campaign.status === "DRAFT" && (
           <Button variant="secondary" disabled={pending !== null} onClick={() => run("ready", () => campaignsApi.update(campaign.id, { status: "READY" }))}>
             <RefreshCcw className="h-4 w-4" /> {pending === "ready" ? "Marking ready…" : "Mark ready"}
@@ -37,12 +43,22 @@ export function CampaignActions({ campaign }: { campaign: Campaign }) {
             <Play className="h-4 w-4" /> {pending === "run" ? "Starting…" : "Run campaign"}
           </Button>
         )}
-        {(campaign.status === "RUNNING" || campaign.status === "PROCESSING" || campaign.status === "COMPLETED") && (
-          <Button variant="outline" disabled={pending !== null} onClick={() => run("pause", () => campaignsApi.pauseSending(campaign.id))}>
-            <Pause className="h-4 w-4" /> {pending === "pause" ? "Pausing…" : "Pause sending"}
-          </Button>
-        )}
+        {started &&
+          (paused ? (
+            <Button disabled={pending !== null} onClick={() => run("resume", () => campaignsApi.resumeSending(campaign.id), () => setPaused(false))}>
+              <Play className="h-4 w-4" /> {pending === "resume" ? "Resuming…" : "Resume sending"}
+            </Button>
+          ) : (
+            <Button variant="outline" disabled={pending !== null} onClick={() => run("pause", () => campaignsApi.pauseSending(campaign.id), () => setPaused(true))}>
+              <Pause className="h-4 w-4" /> {pending === "pause" ? "Pausing…" : "Pause sending"}
+            </Button>
+          ))}
       </div>
+      {started && paused && (
+        <p className="max-w-xs text-right text-xs text-dash-muted-foreground">
+          Paused. Sites and videos keep getting made; nothing is sent until you resume. No credits are lost.
+        </p>
+      )}
       {error && <p className="text-xs text-dash-destructive">{error}</p>}
     </div>
   );

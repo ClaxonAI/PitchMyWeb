@@ -13,7 +13,7 @@ import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
 // POST /api/checkout/create-order — public (no session): /pricing has no
 // account to attach a purchase to yet (see checkout.service.ts's header
 // comment on anonymous orders). `razorpay` is injectable the same way
-// `ollama`/`provider` are elsewhere in this codebase (section 17): tests
+// `ai`/`provider` are elsewhere in this codebase (section 17): tests
 // pass a fake RazorpayClient, production resolves the real env-configured
 // one, lazily, so a missing key surfaces as a normal caught 503.
 export async function handleCreateOrder(db: PrismaClient, request: NextRequest, razorpay?: RazorpayClient): Promise<NextResponse> {

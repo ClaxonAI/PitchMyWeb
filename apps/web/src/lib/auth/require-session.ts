@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export type SessionUser = { id: string; email: string; name: string | null; role: "USER" | "ADMIN" | "SUPER_ADMIN"; planId: string | null; hasPaidAccess: boolean; allowedMarkets: Array<"india" | "foreign">; canDiscover: boolean; availableCredits: number; reservedCredits: number; usedCredits: number };
+export type SessionUser = { id: string; email: string; name: string | null; role: "USER" | "ADMIN" | "SUPER_ADMIN"; planId: string | null; hasPaidAccess: boolean; allowedMarkets: Array<"india" | "foreign">; canDiscover: boolean; availableCredits: number; reservedCredits: number; usedCredits: number; whatsappConnected: boolean };
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 

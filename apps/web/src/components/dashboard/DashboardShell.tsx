@@ -10,7 +10,10 @@ export function DashboardShell({ user, children }: { user: SessionUser; children
       <ThemeProvider>
         <div className="dashboard-shell flex">
           <Sidebar />
-          <div className="flex min-h-dvh flex-1 flex-col">
+          {/* min-w-0: a flex item will not shrink below its widest child
+              otherwise, so a wide table widened the whole page on a phone
+              instead of scrolling inside its own overflow-x-auto wrapper. */}
+          <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
             <Topbar />
             <main className="flex-1 p-4 md:p-6">{children}</main>
           </div>

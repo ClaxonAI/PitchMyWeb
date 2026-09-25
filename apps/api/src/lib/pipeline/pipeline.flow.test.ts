@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { buildDentalContent, buildPreviewContent, dentalContentSchema, pickPreviewTemplate, PREVIEW_TEMPLATE_CODES } from "@pitchmyweb/templates";
 import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
-import { createCampaign, markCampaignReady } from "../campaigns/campaign.service";
+import { createCampaign, markCampaignReady, updateCampaignMessage } from "../campaigns/campaign.service";
 import { runCampaign } from "../campaigns/run.service";
 import { autoSelectForUser, listCampaignLeads, selectLeads } from "../campaigns/selection.service";
 import { getOrCreateWallet, grantCredits } from "../checkout/wallet.service";
@@ -19,6 +19,7 @@ import {
   onRecordingFinished,
   pauseCampaignSending,
   prepareDelivery,
+  resumeCampaignSending,
   retryPipeline,
   syncDeliveries,
   type PipelineDeps,
@@ -78,7 +79,7 @@ function clinic(name: string, overrides: Record<string, unknown> = {}) {
 async function discoveredCampaign(
   label: string,
   businesses: unknown[],
-  settings: { selectionMode?: "MANUAL" | "AUTO"; targetCount?: number; deliveryMode?: "AUTO" | "DIRECT" } = {},
+  settings: { selectionMode?: "MANUAL" | "AUTO"; targetCount?: number; deliveryMode?: "AUTO" | "DIRECT"; messageTemplate?: string } = {},
   // Pass an existing user to give them a second campaign — repeat-lead
   // protection is per user, so proving it needs two campaigns under one.
   existingUser?: Awaited<ReturnType<typeof createTestUser>>,
@@ -100,6 +101,7 @@ async function discoveredCampaign(
     selectionMode: settings.selectionMode ?? "MANUAL",
     targetCount: settings.targetCount ?? 5,
     deliveryMode: settings.deliveryMode ?? "AUTO",
+    messageTemplate: settings.messageTemplate,
   });
   await markCampaignReady(prisma, user.id, campaign.id);
   const { execution } = await runCampaign(prisma, user.id, campaign.id, { provider: acceptingProvider });
@@ -118,11 +120,23 @@ async function postDiscoveryResults(executionId: string, businesses: unknown[]) 
   return handleDiscoveryResults(prisma, request, JOB_SECRET);
 }
 
-async function readyRecording(recordingId: string) {
+async function readyRecording(recordingId: string, options: { laptop?: boolean } = {}) {
   await prisma.demoRecording.update({
     where: { id: recordingId },
-    data: { status: "READY", storageKey: `recordings/test/${recordingId}.mp4`, mimeType: "video/mp4", durationMs: 22000, sizeBytes: 3_000_000 },
+    data: {
+      status: "READY",
+      storageKey: `recordings/test/${recordingId}.mp4`,
+      mimeType: "video/mp4",
+      durationMs: 22000,
+      sizeBytes: 3_000_000,
+      ...(options.laptop ? { desktopStorageKey: `recordings/test/${recordingId}-laptop.mp4`, desktopDurationMs: 22000, desktopSizeBytes: 4_000_000 } : {}),
+    },
   });
+}
+
+/** What the worker records when the number is not on WhatsApp (send.worker.ts). */
+async function blockAsNotOnWhatsApp(messageId: string) {
+  await prisma.whatsAppMessage.update({ where: { id: messageId }, data: { status: "BLOCKED", failureReason: "invalid_number" } });
 }
 
 async function connectWhatsApp(userId: string) {
@@ -401,20 +415,171 @@ describe("recording hand-off and delivery", () => {
     expect((await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } })).failureReason).toBe("opted_out");
   });
 
-  it("Auto: a blocked or cancelled message fails the pipeline; pause cancels queued sends", async () => {
+  it("Auto: pause holds a queued send without failing or refunding it, and resume sends it", async () => {
     const { user, pipeline } = await recordingStage("pause", "AUTO");
     await connectWhatsApp(user.id);
     await readyRecording(pipeline.recordingId!);
     await onRecordingFinished(prisma, pipeline.recordingId!);
     const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
     expect(queued.stage).toBe("DELIVERY_QUEUED");
+    const walletBefore = await getOrCreateWallet(prisma, user.id);
 
-    const { cancelled } = await pauseCampaignSending(prisma, user.id, pipeline.campaignId);
-    expect(cancelled).toBe(1);
-    const paused = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
-    expect(paused.stage).toBe("FAILED");
-    expect(paused.failureReason).toBe("paused");
+    const paused = await pauseCampaignSending(prisma, user.id, pipeline.campaignId);
+    expect(paused).toEqual({ paused: true, held: 1 });
+    const held = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(held.stage).toBe("VIDEO_UPLOADED");
+    expect(held.failureReason).toBeNull();
+    expect(held.creditOutcome).toBeNull();
+    expect(held.whatsappMessageId).toBeNull();
     expect((await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: queued.whatsappMessageId! } })).status).toBe("CANCELLED");
+    // The credit is still reserved for this pitch, not refunded.
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ reservedCredits: walletBefore.reservedCredits, availableCredits: walletBefore.availableCredits });
+
+    const resumed = await resumeCampaignSending(prisma, user.id, pipeline.campaignId);
+    expect(resumed).toEqual({ paused: false, released: 1 });
+    const requeued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(requeued.stage).toBe("DELIVERY_QUEUED");
+    expect(requeued.whatsappMessageId).not.toBe(queued.whatsappMessageId);
+    expect((await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: requeued.whatsappMessageId! } })).status).toBe("QUEUED");
+  });
+
+  it("Auto: pausing while a pitch is still recording holds it once the videos are ready", async () => {
+    const { user, pipeline } = await recordingStage("pause-early", "AUTO");
+    await connectWhatsApp(user.id);
+    await pauseCampaignSending(prisma, user.id, pipeline.campaignId);
+
+    await readyRecording(pipeline.recordingId!);
+    const result = await onRecordingFinished(prisma, pipeline.recordingId!);
+    expect(result.stage).toBe("VIDEO_UPLOADED");
+    expect(await prisma.whatsAppMessage.count({ where: { leadId: pipeline.leadId } })).toBe(0);
+
+    await resumeCampaignSending(prisma, user.id, pipeline.campaignId);
+    expect((await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } })).stage).toBe("DELIVERY_QUEUED");
+  });
+
+  it("Auto: a number not on WhatsApp hands its credit to the next eligible lead instead of refunding", async () => {
+    const { user, campaign } = await discoveredCampaign("replace", [clinic("Replace First Dental"), clinic("Replace Second Dental")]);
+    await connectWhatsApp(user.id);
+    const leads = await prisma.lead.findMany({ where: { campaignId: campaign.id }, orderBy: { createdAt: "asc" } });
+    const { deps, jobs } = fakeDeps();
+    const [pipeline] = (await selectLeads(prisma, user.id, campaign.id, [leads[0]!.id], deps)).started;
+    await readyRecording(pipeline!.recordingId!);
+    await onRecordingFinished(prisma, pipeline!.recordingId!, deps);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    const walletBefore = await getOrCreateWallet(prisma, user.id);
+
+    await blockAsNotOnWhatsApp(queued.whatsappMessageId!);
+    await syncDeliveries(prisma, { campaignId: campaign.id }, deps);
+
+    const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    expect(failed.stage).toBe("FAILED");
+    expect(failed.failureReason).toBe("invalid_number");
+    expect(failed.creditOutcome).toBe("REPLACED");
+    expect(failed.replacedById).toBeTruthy();
+
+    const replacement = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: failed.replacedById! } });
+    expect(replacement.leadId).toBe(leads[1]!.id);
+    expect(replacement.batchId).toBe(failed.batchId);
+    expect(replacement.stage).toBe("RECORDING");
+    expect(jobs).toContain(replacement.recordingId);
+
+    // Same reservation, now carried by the replacement: nothing refunded.
+    expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ reservedCredits: walletBefore.reservedCredits, availableCredits: walletBefore.availableCredits });
+    const batch = await prisma.pitchBatch.findUniqueOrThrow({ where: { id: failed.batchId! } });
+    expect(batch).toMatchObject({ replacedCount: 1, refundedCount: 0, failedCount: 0, status: "PROCESSING" });
+  });
+
+  it("Auto: discovery keeps standby leads, pitches only what was asked, and a failure takes a standby lead", async () => {
+    const businesses = ["Standby A", "Standby B", "Standby C", "Standby D", "Standby E", "Standby F"].map((name) => clinic(`${name} Dental`));
+    const { user, campaign } = await discoveredCampaign("standby", businesses, { selectionMode: "AUTO", targetCount: 2 });
+    await connectWhatsApp(user.id);
+
+    // 2 asked for + a reserve of 2 (replacementReserve), not all 6 found.
+    expect(await prisma.lead.count({ where: { campaignId: campaign.id } })).toBe(4);
+    const pipelines = await prisma.leadPipeline.findMany({ where: { campaignId: campaign.id }, orderBy: { createdAt: "asc" } });
+    expect(pipelines).toHaveLength(2);
+
+    const { deps } = fakeDeps();
+    const [first] = pipelines;
+    await readyRecording(first!.recordingId!);
+    await onRecordingFinished(prisma, first!.recordingId!, deps);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: first!.id } });
+    await blockAsNotOnWhatsApp(queued.whatsappMessageId!);
+    await syncDeliveries(prisma, { campaignId: campaign.id }, deps);
+
+    const replaced = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: first!.id } });
+    expect(replaced.creditOutcome).toBe("REPLACED");
+    const pitchedLeadIds = new Set(pipelines.map((p) => p.leadId));
+    const replacement = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: replaced.replacedById! } });
+    expect(pitchedLeadIds.has(replacement.leadId)).toBe(false);
+    expect(await prisma.leadPipeline.count({ where: { campaignId: campaign.id } })).toBe(3);
+  });
+
+  it("Auto: a number not on WhatsApp is refunded when the campaign has no lead left to replace it", async () => {
+    const { user, pipeline } = await recordingStage("replace-none", "AUTO");
+    await connectWhatsApp(user.id);
+    const { deps } = fakeDeps();
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!, deps);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+
+    await blockAsNotOnWhatsApp(queued.whatsappMessageId!);
+    await syncDeliveries(prisma, { campaignId: pipeline.campaignId }, deps);
+
+    const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(failed.creditOutcome).toBe("REFUNDED");
+    expect(failed.replacedById).toBeNull();
+    const batch = await prisma.pitchBatch.findUniqueOrThrow({ where: { id: failed.batchId! } });
+    expect(batch).toMatchObject({ refundedCount: 1, replacedCount: 0, status: "COMPLETED" });
+  });
+
+  it("Auto: an opted-out number is still refunded, never replaced", async () => {
+    const { user, campaign } = await discoveredCampaign("optout-refund", [clinic("Optout One Dental"), clinic("Optout Two Dental")]);
+    await connectWhatsApp(user.id);
+    const leads = await prisma.lead.findMany({ where: { campaignId: campaign.id }, orderBy: { createdAt: "asc" }, include: { business: true } });
+    const { deps } = fakeDeps();
+    const [pipeline] = (await selectLeads(prisma, user.id, campaign.id, [leads[0]!.id], deps)).started;
+    await prisma.optOut.create({ data: { phoneNumber: leads[0]!.business.phone!.replace(/\D/g, ""), source: "MANUAL", reason: "pipeline-test" } });
+    await readyRecording(pipeline!.recordingId!);
+    await onRecordingFinished(prisma, pipeline!.recordingId!, deps);
+
+    const failed = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    expect(failed.failureReason).toBe("opted_out");
+    expect(failed.creditOutcome).toBe("REFUNDED");
+    expect(await prisma.leadPipeline.count({ where: { campaignId: campaign.id } })).toBe(1);
+  });
+
+  it("Auto: sends the campaign's own message, filled in per business, and picks up edits before sending", async () => {
+    const template = "Hello {{business_name}}! Here is a free sample site we made for you: {{site_link}} — reply YES to go live.";
+    const { user, campaign } = await discoveredCampaign("template", [clinic("Template Dental")], { messageTemplate: template });
+    await connectWhatsApp(user.id);
+    const lead = await prisma.lead.findFirstOrThrow({ where: { campaignId: campaign.id } });
+    const { deps } = fakeDeps();
+    const [pipeline] = (await selectLeads(prisma, user.id, campaign.id, [lead.id], deps)).started;
+
+    await updateCampaignMessage(prisma, user.id, campaign.id, "Hi {{business_name}}, take a look: {{site_link}} — thanks!");
+    await readyRecording(pipeline!.recordingId!);
+    await onRecordingFinished(prisma, pipeline!.recordingId!, deps);
+
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
+    const message = await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: queued.whatsappMessageId! } });
+    const project = await prisma.websiteProject.findUniqueOrThrow({ where: { id: queued.websiteProjectId! } });
+    expect(message.body).toBe(`Hi Template Dental, take a look: ${project.publishedUrl} — thanks!`);
+    expect(message.body).not.toContain("{{");
+  });
+
+  it("Auto: sends the phone video with the pitch and the laptop video after it", async () => {
+    const { user, pipeline } = await recordingStage("two-videos", "AUTO");
+    await connectWhatsApp(user.id);
+    await readyRecording(pipeline.recordingId!, { laptop: true });
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    const message = await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: queued.whatsappMessageId! } });
+    expect(message.mediaKind).toBe("VIDEO");
+    expect(message.mediaStorageKey).toBe(`recordings/test/${pipeline.recordingId}.mp4`);
+    expect(message.secondaryMediaStorageKey).toBe(`recordings/test/${pipeline.recordingId}-laptop.mp4`);
+    expect(message.secondaryCaption).toContain("laptop");
   });
 
   it("Direct: prepares a wa.me link with the site and video links, then marks SENT on confirmation", async () => {
@@ -462,7 +627,7 @@ describe("recording hand-off and delivery", () => {
 });
 
 describe("WhatsApp session after the campaign", () => {
-  async function deliverOnlyPitch(label: string, stayLinked: boolean) {
+  async function deliverOnlyPitch(label: string) {
     const { user, pipeline } = await recordingStage(label, "AUTO");
     const linkedAt = new Date();
     const account = await prisma.whatsAppAccount.create({
@@ -472,7 +637,6 @@ describe("WhatsApp session after the campaign", () => {
         phoneNumber: "919000000001",
         lastConnectedAt: linkedAt,
         linkedAt,
-        stayLinkedUntil: stayLinked ? new Date(linkedAt.getTime() + 3 * 24 * 60 * 60 * 1000) : null,
       },
     });
     await readyRecording(pipeline.recordingId!);
@@ -488,14 +652,10 @@ describe("WhatsApp session after the campaign", () => {
   }
 
   it("signs the number out the moment the campaign's last pitch is delivered", async () => {
-    const account = await deliverOnlyPitch("signout-after", false);
+    const account = await deliverOnlyPitch("signout-after");
     expect(account.logoutReason).toBe("campaign_finished");
   });
 
-  it("keeps it linked when the user chose to stay signed in for 3 days", async () => {
-    const account = await deliverOnlyPitch("stay-linked-after", true);
-    expect(account.logoutReason).toBeNull();
-  });
 });
 
 describe("credit resolution", () => {

@@ -25,8 +25,6 @@ export type SessionState = {
   phoneNumber: string | null;
   lastSeenAt: string | null;
   error: string | null;
-  /** "Keep me signed in" deadline; null means signed out after the campaign. */
-  stayLinkedUntil: string | null;
   /** Why the system signed the number out, when it did. */
   logoutReason: WhatsAppLogoutReason | null;
   /** Whether the event stream is currently connected. */
@@ -40,7 +38,6 @@ const INITIAL: SessionState = {
   phoneNumber: null,
   lastSeenAt: null,
   error: null,
-  stayLinkedUntil: null,
   logoutReason: null,
   live: false,
 };
@@ -57,13 +54,12 @@ export function useWhatsAppSession(
   accountId: string | null,
   initialStatus?: WaStatus,
   initialPhone?: string | null,
-  initialSession: { stayLinkedUntil?: string | null; logoutReason?: WhatsAppLogoutReason | null } = {},
+  initialSession: { logoutReason?: WhatsAppLogoutReason | null } = {},
 ) {
   const [state, setState] = useState<SessionState>({
     ...INITIAL,
     status: initialStatus ?? INITIAL.status,
     phoneNumber: initialPhone ?? null,
-    stayLinkedUntil: initialSession.stayLinkedUntil ?? null,
     logoutReason: initialSession.logoutReason ?? null,
   });
   // Kept in a ref so the polling effect does not have to re-subscribe every
@@ -149,7 +145,6 @@ export function useWhatsAppSession(
           phoneNumber: status.phoneNumber ?? current.phoneNumber,
           lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
           error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,
-          stayLinkedUntil: status.stayLinkedUntil,
           logoutReason: status.logoutReason,
         }));
       } catch {
@@ -176,13 +171,12 @@ export function useWhatsAppSession(
    */
   const applyAccount = useCallback(
     (
-      account: { status: WaStatus; phoneNumber: string | null; stayLinkedUntil: string | null; logoutReason: WhatsAppLogoutReason | null },
+      account: { status: WaStatus; phoneNumber: string | null; logoutReason: WhatsAppLogoutReason | null },
       options: { seed?: boolean } = {},
     ) => {
       setState((current) => ({
         ...current,
         ...(options.seed ? { status: account.status, phoneNumber: account.phoneNumber ?? current.phoneNumber } : {}),
-        stayLinkedUntil: account.stayLinkedUntil,
         logoutReason: account.logoutReason,
       }));
     },

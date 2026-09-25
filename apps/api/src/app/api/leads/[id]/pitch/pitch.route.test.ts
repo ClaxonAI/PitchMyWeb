@@ -8,7 +8,7 @@ import { createCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { ingestBusinessAsLead, applyLeadAnalysis } from "../../../../../lib/leads/lead.service";
 import { calculateOpportunityScore } from "../../../../../lib/scoring/scoring";
 import type { BusinessProviderInput } from "../../../../../lib/validation/business";
-import type { OllamaClient, OllamaGenerateResult } from "../../../../../lib/ai/ollama-client";
+import type { AiClient, AiGenerateResult } from "../../../../../lib/ai/ai-client";
 import { handleGeneratePitch } from "./route";
 
 const createdUserIds: string[] = [];
@@ -63,9 +63,9 @@ async function newAnalyzedLead(prefix: string) {
   return { user, cookieHeader, lead };
 }
 
-function fakeOllama(text: string): OllamaClient {
+function fakeAi(text: string): AiClient {
   return {
-    async generate(): Promise<OllamaGenerateResult> {
+    async generate(): Promise<AiGenerateResult> {
       return { text, latencyMs: 5 };
     },
   };
@@ -74,36 +74,36 @@ function fakeOllama(text: string): OllamaClient {
 const validResponseText = JSON.stringify({ message: "Hi Lakshmi Dental Care, we noticed you don't have a website yet." });
 
 describe("POST /api/leads/:id/pitch", () => {
-  it("rejects an unauthenticated request before touching Ollama", async () => {
+  it("rejects an unauthenticated request before touching the model", async () => {
     const { lead } = await newAnalyzedLead("unauth");
     let called = false;
-    const ollama: OllamaClient = {
+    const ai: AiClient = {
       async generate() {
         called = true;
         return { text: validResponseText, latencyMs: 1 };
       },
     };
-    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`), { id: lead.id }, ollama)).rejects.toThrow(UnauthenticatedError);
+    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`), { id: lead.id }, ai)).rejects.toThrow(UnauthenticatedError);
     expect(called).toBe(false);
   });
 
-  it("returns NotFoundError for another user's lead, never calling Ollama", async () => {
+  it("returns NotFoundError for another user's lead, never calling the model", async () => {
     const { lead } = await newAnalyzedLead("owner-a");
     const { cookieHeader: otherCookie } = await authedUser("owner-b");
     let called = false;
-    const ollama: OllamaClient = {
+    const ai: AiClient = {
       async generate() {
         called = true;
         return { text: validResponseText, latencyMs: 1 };
       },
     };
-    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, otherCookie), { id: lead.id }, ollama)).rejects.toThrow(NotFoundError);
+    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, otherCookie), { id: lead.id }, ai)).rejects.toThrow(NotFoundError);
     expect(called).toBe(false);
   });
 
   it("returns the full lead detail (with the new pitch and activity) on success, without transitioning status", async () => {
     const { cookieHeader, lead } = await newAnalyzedLead("success");
-    const response = await handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeOllama(validResponseText));
+    const response = await handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeAi(validResponseText));
 
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -115,7 +115,7 @@ describe("POST /api/leads/:id/pitch", () => {
 
   it("maps a permanently failed generation to a controlled error", async () => {
     const { cookieHeader, lead } = await newAnalyzedLead("failure");
-    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeOllama("not json at all"))).rejects.toThrow(
+    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeAi("not json at all"))).rejects.toThrow(
       AiPitchFailedError,
     );
 
@@ -133,11 +133,11 @@ describe("POST /api/leads/:id/pitch - rate limiting (section 41)", () => {
     const { cookieHeader, lead } = await newAnalyzedLead("rate-limit");
 
     for (let i = 0; i < 20; i += 1) {
-      const response = await handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeOllama(validResponseText));
+      const response = await handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeAi(validResponseText));
       expect(response.status).toBe(200);
     }
 
-    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeOllama(validResponseText))).rejects.toThrow(
+    await expect(handleGeneratePitch(prisma, req(`http://localhost/api/leads/${lead.id}/pitch`, cookieHeader), { id: lead.id }, fakeAi(validResponseText))).rejects.toThrow(
       RateLimitedError,
     );
   }, 30000);

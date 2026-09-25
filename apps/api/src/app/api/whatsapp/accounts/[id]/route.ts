@@ -3,11 +3,9 @@ import { NextResponse } from "next/server";
 import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../../lib/db/client";
 import { requireCurrentUser } from "../../../../../lib/auth/current-user";
-import { parseJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
-import { deleteAccount, getAccount, setStayLinked } from "../../../../../lib/whatsapp/account.service";
+import { deleteAccount, getAccount } from "../../../../../lib/whatsapp/account.service";
 import { cuidSchema } from "../../../../../lib/validation/common";
-import { accountUpdateSchema } from "../../../../../lib/validation/whatsapp";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -18,17 +16,6 @@ export async function handleGetWhatsAppAccount(db: PrismaClient, request: NextRe
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
   const account = await getAccount(db, user.id, id);
-  return jsonOk(account);
-}
-
-// PATCH /api/whatsapp/accounts/:id — { stayLinked: boolean }: keep this
-// number signed in for 3 days, or sign it out when the campaign finishes
-// (lib/whatsapp/session-policy.ts).
-export async function handlePatchWhatsAppAccount(db: PrismaClient, request: NextRequest, params: { id: string }): Promise<NextResponse> {
-  const user = await requireCurrentUser(db, request);
-  const id = cuidSchema.parse(params.id);
-  const body = await parseJsonBody(request, accountUpdateSchema);
-  const account = await setStayLinked(db, user.id, id, body.stayLinked);
   return jsonOk(account);
 }
 
@@ -45,14 +32,6 @@ export async function handleDeleteWhatsAppAccount(db: PrismaClient, request: Nex
 export async function GET(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
   try {
     return await handleGetWhatsAppAccount(prisma, request, await params);
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
-
-export async function PATCH(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    return await handlePatchWhatsAppAccount(prisma, request, await params);
   } catch (error) {
     return errorResponse(error);
   }

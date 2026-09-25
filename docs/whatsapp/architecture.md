@@ -44,7 +44,7 @@ an instance recycle in production — and, worse, risking two instances sharing 
 
 | Table | What it holds |
 | --- | --- |
-| `whatsapp_accounts` | One linked account per user (Phase 2 limit, enforced in the service). Status, phone number, last error, and the session lifetime (`linkedAt`, `stayLinkedUntil`, `logoutReason`). |
+| `whatsapp_accounts` | One linked account per user (Phase 2 limit, enforced in the service). Status, phone number, last error, and the session lifetime (`linkedAt`, `logoutReason`). |
 | `whatsapp_auth_keys` | The Baileys credential store, AES-256-GCM encrypted. One row per Signal key. |
 | `whatsapp_messages` | One row per outbound message, from QUEUED to READ. The only source of truth for recipient and body. |
 | `opt_outs` | The global do-not-contact list, keyed by phone number alone. |
@@ -97,18 +97,17 @@ worker took later.
 A linked device can read and send as the user for as long as it stays linked, so it is not left linked
 indefinitely. `apps/api/src/lib/whatsapp/session-policy.ts` owns the rule:
 
-- **Per campaign (the default).** Every Auto campaign needs a linked number to start — `POST /campaigns/:id/run`
-  and `POST /campaigns/:id/selection` refuse with `WHATSAPP_NOT_CONNECTED` otherwise, and the Discover page and
-  the pitch step show the QR inline. Once nothing is left to send, the number is signed out.
-- **Keep me signed in for 3 days.** A checkbox under the QR (`stayLinked` on connect / pairing-code, or
-  `PATCH /whatsapp/accounts/:id`) sets `stayLinkedUntil`. Inside that window new campaigns skip the link step;
-  when it closes the number is signed out the same way.
+- **Per campaign, always.** Every Auto campaign needs a linked number to start — `POST /campaigns`,
+  `POST /campaigns/:id/run` and `POST /campaigns/:id/selection` refuse with `WHATSAPP_NOT_CONNECTED` otherwise,
+  and the Discover page and the pitch step show the QR inline. Once nothing is left to send, the number is signed
+  out, and the next campaign asks for a fresh link. There is no "stay signed in" option (an earlier 3-day opt-in
+  was removed; its column is dropped by migration `20260925130000_whatsapp_link_per_campaign`).
 
 "Nothing left to send" means none of the user's Auto campaigns is discovering (or just finished discovering and
 about to auto-select), no pipeline is unresolved — including a failed one waiting for its automatic retry — and
 no message is queued or sending. Delivery receipts only arrive over a live socket, so waiting for them counts as
 sending. A number is signed out when that holds and either a pitch batch completed after this login
-(`linkedAt`), or the 3-day window closed, or — for a link that never sent anything — a day has passed. Work
+(`linkedAt`), or — for a link that never sent anything — a day has passed. Work
 untouched for two days is treated as dead, so one row stuck by a crash cannot keep a number linked forever.
 
 Two triggers apply it: the scheduled `pipeline-maintenance` job sweeps every signed-in account (including an
@@ -118,7 +117,7 @@ their pitches resolves, so with the dashboard open the sign-out follows the last
 Signing out is the ordinary `disconnect` command — unlink on WhatsApp, wipe the credentials, cancel anything
 queued — with one addition: the automatic command carries `expectedLinkedAt`, and the worker skips it if the
 account has been linked again since. A sign-out that waited in the queue (worker restarting, say) can therefore
-never end the user's newer session. `logoutReason` (`campaign_finished`, `stay_linked_expired`, `unused`) is kept
+never end the user's newer session. `logoutReason` (`campaign_finished`, `unused`; older rows may read `stay_linked_expired`) is kept
 on the account so the dashboard can say why the number needs linking again; the next link clears it.
 
 ## Restore after restart

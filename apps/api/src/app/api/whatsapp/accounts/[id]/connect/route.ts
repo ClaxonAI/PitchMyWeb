@@ -17,14 +17,13 @@ type RouteParams = { params: Promise<{ id: string }> };
 // user takes to reach for their phone, so the QR itself arrives over the
 // event stream (GET .../events) rather than in this response.
 //
-// Optional body { stayLinked: true } keeps the number signed in for 3 days;
-// without it the number is signed out once the campaign finishes
-// (lib/whatsapp/session-policy.ts).
+// The number is signed out again once the campaign finishes
+// (lib/whatsapp/session-policy.ts); there is no option to stay signed in.
 export async function handleConnectWhatsAppAccount(db: PrismaClient, request: NextRequest, params: { id: string }): Promise<NextResponse> {
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
-  const body = await parseOptionalJsonBody(request, connectRequestSchema);
-  const account = await requestConnect(db, user.id, id, { stayLinked: body.stayLinked });
+  await parseOptionalJsonBody(request, connectRequestSchema);
+  const account = await requestConnect(db, user.id, id);
   return jsonOk(account, 202);
 }
 

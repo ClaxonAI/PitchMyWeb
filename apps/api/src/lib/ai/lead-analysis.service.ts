@@ -5,7 +5,7 @@ import { calculateOpportunityScore } from "../scoring/scoring";
 import { aiLeadAnalysisResponseSchema, type AiLeadAnalysisResponse } from "../validation/ai";
 import { buildLeadAnalysisAiInput, buildLeadAnalysisPrompt, buildRepairPrompt, AI_ANALYSIS_PROMPT_VERSION, type LeadAnalysisAiInput } from "./prompt";
 import { validateAiLeadAnalysisBusinessRules } from "./business-validation";
-import type { OllamaClient } from "./ollama-client";
+import type { AiClient } from "./ai-client";
 import { AiAnalysisFailedError, InvalidLeadTransitionError } from "../errors";
 
 // POST /api/leads/:id/analyze domain service (backend_tasks.md section 26,
@@ -13,7 +13,7 @@ import { AiAnalysisFailedError, InvalidLeadTransitionError } from "../errors";
 //
 //   load lead (ownership-checked) -> load business
 //     -> deterministic score (lib/scoring/scoring.ts, reused, not duplicated)
-//     -> build AI input -> call Ollama -> parse -> Zod validate
+//     -> build AI input -> call the model -> parse -> Zod validate
 //     -> business validate -> [repair once if invalid] -> persist
 //     -> LEAD_ANALYZED -> transition to ANALYZED
 //
@@ -33,29 +33,29 @@ export type AnalyzeLeadResult = {
 
 type AttemptOutcome = { success: true; data: AiLeadAnalysisResponse; raw: string; latencyMs: number } | { success: false; reason: string; raw?: string; latencyMs: number };
 
-async function attemptOnce(db: PrismaClient, ollama: OllamaClient, prompt: string, business: { phone: string | null }): Promise<AttemptOutcome> {
+async function attemptOnce(db: PrismaClient, ai: AiClient, prompt: string, business: { phone: string | null }): Promise<AttemptOutcome> {
   let text: string;
   let latencyMs: number;
   try {
-    const result = await ollama.generate({ prompt });
+    const result = await ai.generate({ prompt });
     text = result.text;
     latencyMs = result.latencyMs;
   } catch (error) {
     // Connection failure / non-2xx / timeout, all raised by the client as
-    // OllamaRequestError (section 13). No raw text to retry against.
-    return { success: false, reason: error instanceof Error ? error.message : "Unknown Ollama request error", latencyMs: 0 };
+    // AiRequestError (section 13). No raw text to retry against.
+    return { success: false, reason: error instanceof Error ? error.message : "Unknown AI request error", latencyMs: 0 };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { success: false, reason: "Ollama response was not valid JSON", raw: text, latencyMs };
+    return { success: false, reason: "Model response was not valid JSON", raw: text, latencyMs };
   }
 
   const zodResult = aiLeadAnalysisResponseSchema.safeParse(parsed);
   if (!zodResult.success) {
-    return { success: false, reason: `Ollama response failed schema validation: ${zodResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, raw: text, latencyMs };
+    return { success: false, reason: `Model response failed schema validation: ${zodResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, raw: text, latencyMs };
   }
 
   const businessCheck = await validateAiLeadAnalysisBusinessRules(db, zodResult.data, business);
@@ -67,9 +67,9 @@ async function attemptOnce(db: PrismaClient, ollama: OllamaClient, prompt: strin
 }
 
 /**
- * Runs the analysis pipeline for one lead. Ollama is injectable
- * (section 17: tests never depend on a real Ollama server) — production
- * routes pass a real HttpOllamaClient, tests pass a fake OllamaClient.
+ * Runs the analysis pipeline for one lead. The AI client is injectable
+ * (section 17: tests never depend on a real model) — production
+ * routes pass a real OpenAiJsonClient, tests pass a fake AiClient.
  *
  * Retry behavior (section 12): if the first attempt is invalid for any
  * reason (JSON parse failure, Zod failure, business-rule failure), exactly
@@ -85,13 +85,13 @@ async function attemptOnce(db: PrismaClient, ollama: OllamaClient, prompt: strin
  * row (recordFailedLeadAnalysis) and leaves the Lead completely untouched,
  * so a later retry remains possible.
  */
-export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input: AnalyzeLeadInput): Promise<AnalyzeLeadResult> {
+export async function analyzeLead(db: PrismaClient, ai: AiClient, input: AnalyzeLeadInput): Promise<AnalyzeLeadResult> {
   const lead = await getLeadForUser(db, input.userId, input.leadId);
 
   // Respect the existing lifecycle graph rather than bypassing it (section
   // 15): checked up front so an already-analyzed (or otherwise ineligible)
   // lead is rejected immediately with a clear 409, instead of spending an
-  // Ollama call on a request that is guaranteed to fail at the final
+  // model call on a request that is guaranteed to fail at the final
   // transition step anyway.
   if (!isLeadTransitionAllowed(lead.status, "ANALYZED")) {
     throw new InvalidLeadTransitionError(lead.status, "ANALYZED");
@@ -105,14 +105,14 @@ export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input:
   const aiInput: LeadAnalysisAiInput = buildLeadAnalysisAiInput(lead.business, score);
   const initialPrompt = buildLeadAnalysisPrompt(aiInput);
 
-  let outcome = await attemptOnce(db, ollama, initialPrompt, lead.business);
+  let outcome = await attemptOnce(db, ai, initialPrompt, lead.business);
   let repairUsed = false;
   let totalLatencyMs = outcome.latencyMs;
 
   if (!outcome.success) {
     repairUsed = true;
     const repairPrompt = buildRepairPrompt(aiInput, outcome.raw ?? "(no response text)", outcome.reason);
-    const repaired = await attemptOnce(db, ollama, repairPrompt, lead.business);
+    const repaired = await attemptOnce(db, ai, repairPrompt, lead.business);
     totalLatencyMs += repaired.latencyMs;
     outcome = repaired;
   }
@@ -121,7 +121,7 @@ export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input:
     await recordFailedLeadAnalysis(db, {
       leadId: lead.id,
       promptVersion: AI_ANALYSIS_PROMPT_VERSION,
-      modelName: process.env.OLLAMA_MODEL ?? "unknown",
+      modelName: ai.model ?? "unknown",
       latencyMs: totalLatencyMs,
       repairUsed,
       // Section 19: never persist/return the raw exception — this is
@@ -146,7 +146,7 @@ export async function analyzeLead(db: PrismaClient, ollama: OllamaClient, input:
       whatsappNeed: outcome.data.whatsappNeed,
       reviewAutomationNeed: outcome.data.reviewAutomationNeed,
       voiceAgentNeed: outcome.data.voiceAgentNeed,
-      modelName: process.env.OLLAMA_MODEL ?? "unknown",
+      modelName: ai.model ?? "unknown",
       promptVersion: AI_ANALYSIS_PROMPT_VERSION,
       latencyMs: totalLatencyMs,
       repairUsed,

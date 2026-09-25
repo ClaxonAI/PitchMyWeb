@@ -8,8 +8,6 @@ import {
   assertWhatsAppReady,
   decideSession,
   settleWhatsAppSession,
-  STAY_LINKED_MS,
-  stayLinkedUntilFor,
   sweepWhatsAppSessions,
   UNUSED_LINK_TIMEOUT_MS,
   WhatsAppNotConnectedError,
@@ -42,9 +40,9 @@ async function user(label: string) {
   return created;
 }
 
-async function account(userId: string, data: { linkedAt: Date | null; stayLinkedUntil?: Date | null; status?: WhatsAppStatus }) {
+async function account(userId: string, data: { linkedAt: Date | null; status?: WhatsAppStatus }) {
   return prisma.whatsAppAccount.create({
-    data: { userId, status: data.status ?? "CONNECTED", phoneNumber: "919800000001", linkedAt: data.linkedAt, stayLinkedUntil: data.stayLinkedUntil ?? null },
+    data: { userId, status: data.status ?? "CONNECTED", phoneNumber: "919800000001", linkedAt: data.linkedAt },
   });
 }
 
@@ -89,21 +87,15 @@ async function logoutReason(accountId: string): Promise<string | null> {
 
 describe("decideSession", () => {
   const now = new Date("2026-09-25T12:00:00.000Z");
-  const base = { now, linkedAt: new Date(now.getTime() - HOUR), stayLinkedUntil: null, activeSending: false, campaignFinishedSinceLink: false };
+  const base = { now, linkedAt: new Date(now.getTime() - HOUR), activeSending: false, campaignFinishedSinceLink: false };
 
   it("never signs out while a campaign is still sending, whatever else is true", () => {
     expect(decideSession({ ...base, activeSending: true, campaignFinishedSinceLink: true })).toEqual({ action: "keep", reason: "sending" });
-    expect(decideSession({ ...base, activeSending: true, stayLinkedUntil: new Date(now.getTime() - HOUR) })).toEqual({ action: "keep", reason: "sending" });
+    expect(decideSession({ ...base, activeSending: true, linkedAt: null })).toEqual({ action: "keep", reason: "sending" });
   });
 
   it("signs out as soon as a campaign has finished since this login", () => {
     expect(decideSession({ ...base, campaignFinishedSinceLink: true })).toEqual({ action: "sign_out", reason: "campaign_finished" });
-  });
-
-  it("keeps a 3-day opt-in linked across finished campaigns, and signs it out when the window closes", () => {
-    const stayLinkedUntil = new Date(now.getTime() + HOUR);
-    expect(decideSession({ ...base, stayLinkedUntil, campaignFinishedSinceLink: true })).toEqual({ action: "keep", reason: "stay_linked" });
-    expect(decideSession({ ...base, stayLinkedUntil: now })).toEqual({ action: "sign_out", reason: "stay_linked_expired" });
   });
 
   it("gives a fresh link time to start its campaign, but not forever", () => {
@@ -112,11 +104,6 @@ describe("decideSession", () => {
     expect(decideSession({ ...base, linkedAt: null })).toEqual({ action: "sign_out", reason: "unused" });
   });
 
-  it("the opt-in window is exactly three days", () => {
-    expect(STAY_LINKED_MS).toBe(3 * 24 * HOUR);
-    expect(stayLinkedUntilFor(true, now)).toEqual(new Date(now.getTime() + 3 * 24 * HOUR));
-    expect(stayLinkedUntilFor(false, now)).toBeNull();
-  });
 });
 
 describe("sweepWhatsAppSessions", () => {
@@ -220,20 +207,17 @@ describe("sweepWhatsAppSessions", () => {
     expect(await logoutReason(linked.id)).toBeNull();
   });
 
-  it("keeps a 3-day opt-in linked for the next campaign, then signs it out when the three days are up", async () => {
-    const owner = await user("stay-linked");
+  it("signs out after every campaign: there is no staying signed in for the next one", async () => {
+    const owner = await user("per-campaign");
     const linkedAt = new Date(Date.now() - HOUR);
     const { id: campaignId } = await campaign(owner.id);
     await batch(campaignId, owner.id, { status: "COMPLETED", completedAt: new Date() });
-    const linked = await account(owner.id, { linkedAt, stayLinkedUntil: stayLinkedUntilFor(true, linkedAt) });
+    const linked = await account(owner.id, { linkedAt });
     const { deps, commands } = fakeQueue();
 
     await settleWhatsAppSession(prisma, owner.id, new Date(), deps);
-    expect(commands).toHaveLength(0);
-
-    await settleWhatsAppSession(prisma, owner.id, new Date(linkedAt.getTime() + STAY_LINKED_MS + 1000), deps);
     expect(commands).toHaveLength(1);
-    expect(await logoutReason(linked.id)).toBe("stay_linked_expired");
+    expect(await logoutReason(linked.id)).toBe("campaign_finished");
   });
 
   it("wipes credentials left behind by an account that stopped on an error", async () => {

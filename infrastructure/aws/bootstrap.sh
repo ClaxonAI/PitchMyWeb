@@ -190,6 +190,10 @@ as_app_path npx playwright install --with-deps chromium
 step "database"
 as_app npm run db:generate
 as_app npm run db:deploy
+# The service price list the AI analysis and pitch steps validate against.
+# Inserts only what is missing, so tuned prices survive every deploy; never
+# the demo businesses `db:seed` also adds.
+as_app npm run db:seed-services
 
 step "build"
 # Built into a staging directory and swapped in, never over the live one.

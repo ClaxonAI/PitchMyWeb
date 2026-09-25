@@ -17,6 +17,8 @@ export type PublicSite = {
   expired: boolean;
   expiresAt: string | null;
   hasVideo: boolean;
+  /** A laptop-size walkthrough exists too (recordings made before it did have only the phone one). */
+  hasLaptopVideo: boolean;
 };
 
 async function loadPublishedProject(db: PrismaClient, slug: string) {
@@ -41,7 +43,7 @@ export async function getPublicSite(db: PrismaClient, slug: string, now = new Da
     ? null
     : await db.demoRecording.findFirst({
         where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-        select: { id: true },
+        select: { id: true, desktopStorageKey: true },
       });
 
   return {
@@ -52,10 +54,14 @@ export async function getPublicSite(db: PrismaClient, slug: string, now = new Da
     expired,
     expiresAt: project.expiresAt?.toISOString() ?? null,
     hasVideo: Boolean(video),
+    hasLaptopVideo: Boolean(video?.desktopStorageKey),
   };
 }
 
-export async function getPublicVideoUrl(db: PrismaClient, slug: string, now = new Date()): Promise<string> {
+/** Which of a pitch's two walkthroughs: the phone one (the default) or the laptop one. */
+export type VideoView = "phone" | "laptop";
+
+export async function getPublicVideoUrl(db: PrismaClient, slug: string, now = new Date(), view: VideoView = "phone"): Promise<string> {
   const project = await loadPublishedProject(db, slug);
   if (project.expiresAt && project.expiresAt.getTime() <= now.getTime()) throw new NotFoundError("Video", slug);
   const recording = await db.demoRecording.findFirst({
@@ -63,9 +69,10 @@ export async function getPublicVideoUrl(db: PrismaClient, slug: string, now = ne
     // before the maintenance sweep has deleted the object.
     where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
     orderBy: { updatedAt: "desc" },
-    select: { storageKey: true },
+    select: { storageKey: true, desktopStorageKey: true },
   });
   const storage = getObjectStorage();
-  if (!recording?.storageKey || !storage) throw new NotFoundError("Video", slug);
-  return storage.signedGetUrl(recording.storageKey, RECORDING_URL_TTL_SECONDS);
+  const key = view === "laptop" ? recording?.desktopStorageKey : recording?.storageKey;
+  if (!key || !storage) throw new NotFoundError("Video", slug);
+  return storage.signedGetUrl(key, RECORDING_URL_TTL_SECONDS);
 }

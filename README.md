@@ -101,10 +101,11 @@ and what it costs.
 
 Link a number at `/whatsapp` after signing in, or right on the Discover page — every Auto campaign needs a linked
 number to start. For privacy the number is signed out (device unlinked, stored session deleted) as soon as the
-campaign has finished sending, unless the user ticks "keep me signed in for 3 days" when linking; see
+campaign has finished sending, so each campaign starts with a fresh link; see
 [Session lifetime](docs/whatsapp/architecture.md#session-lifetime).
 
-Demo videos stay downloadable for `VIDEO_RETENTION_DAYS` (7 by default) and are then deleted from object storage by
+Demo videos (a phone and a laptop recording per pitch) stay downloadable for `VIDEO_RETENTION_DAYS` (7 by default) and are
+then deleted from object storage by
 the `pipeline-maintenance` job.
 
 ## Status

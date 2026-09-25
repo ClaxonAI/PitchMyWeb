@@ -49,8 +49,8 @@ export function WhatsAppPanel({ initialAccounts }: { initialAccounts: WhatsAppAc
         <p className="eyebrow text-primary">WhatsApp</p>
         <h1 className="display mt-3 text-[34px] leading-[1.05] sm:text-[44px]">Pitch from your own number</h1>
         <p className="mt-4 text-[15px] leading-relaxed text-ink/60">
-          Pitches send from your number, with an opt-out list and sending limits applied automatically. For your privacy the
-          number is signed out as soon as each campaign finishes — unless you choose to stay signed in for 3 days.
+          Link WhatsApp for each campaign. Pitches send from your number, with an opt-out list and sending limits applied
+          automatically, and PitchMyWeb unlinks itself when the campaign has finished.
         </p>
       </header>
 
@@ -72,15 +72,13 @@ export function WhatsAppPanel({ initialAccounts }: { initialAccounts: WhatsAppAc
 
       <div className="mt-6 flex flex-col gap-6">
         {connected ? (
-          <ConnectedCard state={state} pending={pending} onDisconnect={link.disconnect} onStayLinkedChange={link.changeStayLinked} />
+          <ConnectedCard state={state} pending={pending} onDisconnect={link.disconnect} />
         ) : (
           <LinkPanel
             state={state}
             pending={pending}
             onConnect={link.connect}
             onPairingCode={link.requestPairingCode}
-            stayLinked={link.stayLinked}
-            onStayLinkedChange={link.changeStayLinked}
           />
         )}
 

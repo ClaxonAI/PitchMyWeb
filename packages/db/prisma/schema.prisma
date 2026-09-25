@@ -209,27 +209,27 @@ enum UserRole {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   // Null for Google-only accounts (they never set a password).
   passwordHash String?
   // Google subject (`sub`). Unique when present so the same Google account
   // cannot be linked to two PitchMyWeb users.
-  googleId     String?  @unique
+  googleId     String?   @unique
   // Phase 1 dashboard (apps/web profile page): display name, optional and
   // editable via PATCH /api/me. Nothing in the auth flow depends on it —
   // register/login only ever use email/passwordHash; Google fills it once.
   name         String?
   imageUrl     String?
-  role         UserRole @default(USER)
+  role         UserRole  @default(USER)
   // Set by an admin; login and requireCurrentUser both refuse a non-null value.
   suspendedAt  DateTime?
   lastLoginAt  DateTime?
   // Operator-assigned or checkout-claimed plan ("auto" | "direct"). A
   // non-null value counts as paid access even without a Razorpay Order row.
   planId       String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   campaigns         Campaign[]
   sessions          Session[]
@@ -277,15 +277,15 @@ model TrialDevice {
 }
 
 model Coupon {
-  id               String   @id @default(cuid())
-  code             String   @unique
-  discountPercent  Int
-  active           Boolean  @default(true)
-  maxRedemptions   Int?
-  redemptionCount  Int      @default(0)
-  expiresAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(cuid())
+  code            String    @unique
+  discountPercent Int
+  active          Boolean   @default(true)
+  maxRedemptions  Int?
+  redemptionCount Int       @default(0)
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([active, expiresAt])
   @@map("coupons")
@@ -329,13 +329,20 @@ model Campaign {
   selectionMode      SelectionMode      @default(MANUAL)
   targetCount        Int                @default(20)
   deliveryMode       DeliveryMode       @default(AUTO)
+  // The WhatsApp message every pitch in this campaign sends, written on the
+  // create form. {business_name} and {site_link} are filled per lead. Null
+  // falls back to the lead's own generated pitch.
+  messageTemplate    String?
+  // Pause sending: pitches keep building and recording, but hold before
+  // they are handed to WhatsApp until the campaign is resumed.
+  sendingPaused      Boolean            @default(false)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leads       Lead[]
-  executions  CampaignExecution[]
-  pipelines   LeadPipeline[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+  executions   CampaignExecution[]
+  pipelines    LeadPipeline[]
   pitchBatches PitchBatch[]
 
   @@index([userId])
@@ -425,7 +432,7 @@ model Business {
   // the two WhatsApp can reach (phone.ts::isPitchableType explains why the
   // ambiguous one counts). Null for rows ingested before this existed,
   // until the backfill script has run over them.
-  phoneType         String?
+  phoneType String?
 
   // Set when this business was merged into another (lib/business/merge.ts).
   // Never hard-deleted — Lead.business stays onDelete: Restrict — so a
@@ -869,16 +876,14 @@ model WhatsAppAccount {
   // CampaignExecution.errorMessage: never a raw Baileys error or stack.
   lastError       String?
   // Session lifetime (lib/whatsapp/session-policy.ts). A linked number is
-  // signed out as soon as the campaign that needed it has finished, unless
-  // the user ticked "keep me signed in for 3 days" when linking — then it
-  // stays linked until stayLinkedUntil. linkedAt is when this login began
+  // signed out as soon as the campaign that needed it has finished; every
+  // campaign asks the user to link again. linkedAt is when this login began
   // (the connect request), so "a campaign finished after this login" can be
   // told apart from one that finished before it; lastConnectedAt cannot do
   // that, because every reconnect moves it. logoutReason records why the
-  // system signed the number out ("campaign_finished" | "stay_linked_expired"
-  // | "unused"), so the dashboard can explain it; a new link clears it.
+  // system signed the number out ("campaign_finished" | "unused"), so the
+  // dashboard can explain it; a new link clears it.
   linkedAt        DateTime?
-  stayLinkedUntil DateTime?
   logoutReason    String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -940,32 +945,37 @@ model WhatsAppAuthKey {
 // policy gate) and is the only source of truth for recipient and body — the
 // BullMQ job carries just this id, so a message body never sits in Redis.
 model WhatsAppMessage {
-  id                String          @id @default(cuid())
-  userId            String
-  accountId         String
-  leadId            String?
-  pitchId           String?
+  id                       String          @id @default(cuid())
+  userId                   String
+  accountId                String
+  leadId                   String?
+  pitchId                  String?
   // Digits only, normalized by normalizePhoneForWhatsApp before insert.
-  phoneNumber       String
-  body              String
+  phoneNumber              String
+  body                     String
   // Optional attachment. The body is sent as its caption. The storage key
   // is an internal bucket path and is never returned by the API.
-  mediaKind         WaMediaKind?
-  mediaStorageKey   String?
-  mediaMimeType     String?
-  status            WaMessageStatus @default(QUEUED)
+  mediaKind                WaMediaKind?
+  mediaStorageKey          String?
+  mediaMimeType            String?
+  // A second attachment sent right after the first, in the same send job
+  // (the laptop walkthrough after the phone one). Receipts track the first.
+  secondaryMediaStorageKey String?
+  secondaryMediaMimeType   String?
+  secondaryCaption         String?
+  status                   WaMessageStatus @default(QUEUED)
   // The WhatsApp message id, used to match delivery/read receipts back to
   // this row.
-  providerMessageId String?
+  providerMessageId        String?
   // Sanitized reason for BLOCKED/FAILED (a policy reason code such as
   // "opted_out", or a mapped send failure) — never a raw provider error.
-  failureReason     String?
-  queuedAt          DateTime        @default(now())
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-  readAt            DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  failureReason            String?
+  queuedAt                 DateTime        @default(now())
+  sentAt                   DateTime?
+  deliveredAt              DateTime?
+  readAt                   DateTime?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
 
   user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   account WhatsAppAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -1032,6 +1042,9 @@ enum PitchBatchStatus {
 enum CreditOutcome {
   CONSUMED
   REFUNDED
+  // The number turned out not to be on WhatsApp, and the reserved credit was
+  // moved to a replacement lead (replacedById) instead of being refunded.
+  REPLACED
 }
 
 enum DeliveryMode {
@@ -1087,6 +1100,9 @@ model LeadPipeline {
   whatsappMessageId String?
   // Direct delivery: the prepared wa.me link.
   whatsappUrl       String?
+  // Set when this pipeline's lead could not be reached on WhatsApp and its
+  // credit went to another lead in the same campaign.
+  replacedById      String?
   attempts          Int            @default(0)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -1119,6 +1135,8 @@ model PitchBatch {
   sentCount      Int              @default(0)
   failedCount    Int              @default(0)
   refundedCount  Int              @default(0)
+  // Pitches whose number was not on WhatsApp and were handed to another lead.
+  replacedCount  Int              @default(0)
   mode           PitchBatchMode
   status         PitchBatchStatus @default(PROCESSING)
   createdAt      DateTime         @default(now())
@@ -1136,24 +1154,30 @@ model PitchBatch {
 // One Playwright recording of a published preview. Written by
 // apps/recorder-worker; the file itself lives in object storage.
 model DemoRecording {
-  id               String          @id @default(cuid())
-  websiteProjectId String
-  leadId           String
-  pipelineId       String?
-  status           RecordingStatus @default(QUEUED)
-  storageKey       String?
-  posterKey        String?
-  durationMs       Int?
-  sizeBytes        Int?
-  mimeType         String?
-  failureReason    String?
-  attempts         Int             @default(0)
-  // When the video stops being downloadable and its objects are deleted
-  // from storage (VIDEO_RETENTION_DAYS after it became READY, see
-  // @pitchmyweb/storage videoExpiry). Null until the recording is READY.
-  expiresAt        DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                String          @id @default(cuid())
+  websiteProjectId  String
+  leadId            String
+  pipelineId        String?
+  status            RecordingStatus @default(QUEUED)
+  storageKey        String?
+  posterKey         String?
+  durationMs        Int?
+  sizeBytes         Int?
+  mimeType          String?
+  // The same walkthrough recorded at laptop size. storageKey/posterKey above
+  // are the phone recording; a pitch sends both.
+  desktopStorageKey String?
+  desktopPosterKey  String?
+  desktopDurationMs Int?
+  desktopSizeBytes  Int?
+  failureReason     String?
+  attempts          Int             @default(0)
+  // When the videos stop being downloadable and their objects (both sizes)
+  // are deleted from storage (VIDEO_RETENTION_DAYS after it became READY,
+  // see @pitchmyweb/storage videoExpiry). Null until the recording is READY.
+  expiresAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   websiteProject WebsiteProject @relation(fields: [websiteProjectId], references: [id], onDelete: Cascade)
   lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)

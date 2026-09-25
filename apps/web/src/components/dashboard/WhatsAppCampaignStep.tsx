@@ -7,14 +7,14 @@ import { whatsappApi } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { LinkPanel } from "./LinkPanel";
 import { useWhatsAppLink } from "./useWhatsAppLink";
-import { isStayLinkedActive, logoutReasonText, sessionLifetimeText, STAY_LINKED_LABEL } from "./whatsapp-session-text";
+import { logoutReasonText, SESSION_LIFETIME_TEXT } from "./whatsapp-session-text";
 
 /**
  * The "link your WhatsApp" step in front of every campaign that sends from
- * the user's number. The number is signed out after each campaign unless the
- * user chose to stay signed in for 3 days — so a user inside that window only
- * sees a one-line "sending from +91…" confirmation here, and everyone else
- * links right on this screen instead of being sent to another page.
+ * the user's number. The number is signed out after each campaign, so every
+ * campaign starts here: a user who is still linked (a campaign in flight)
+ * sees a one-line "sending from +91…" confirmation, and everyone else links
+ * right on this screen instead of being sent to another page.
  */
 export function WhatsAppCampaignStep({ onReadyChange }: { onReadyChange?: (ready: boolean) => void }) {
   const link = useWhatsAppLink(null);
@@ -60,23 +60,13 @@ export function WhatsAppCampaignStep({ onReadyChange }: { onReadyChange?: (ready
                 <p className="text-sm font-medium text-dash-foreground">
                   Sending from {state.phoneNumber ? `+${state.phoneNumber}` : "your linked WhatsApp"}
                 </p>
-                <p className="text-xs text-dash-muted-foreground">{sessionLifetimeText(state.stayLinkedUntil)}</p>
+                <p className="text-xs text-dash-muted-foreground">{SESSION_LIFETIME_TEXT}</p>
               </div>
             </div>
             <Link href="/whatsapp" className="text-xs text-dash-muted-foreground underline underline-offset-2">
               Manage
             </Link>
           </div>
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm text-dash-foreground">
-            <input
-              type="checkbox"
-              checked={isStayLinkedActive(state.stayLinkedUntil)}
-              disabled={pending}
-              onChange={(event) => link.changeStayLinked(event.target.checked)}
-              className="size-4 shrink-0 accent-dash-primary"
-            />
-            {STAY_LINKED_LABEL}
-          </label>
           {error && <p className="text-sm text-dash-destructive">{error}</p>}
         </CardContent>
       </Card>
@@ -102,8 +92,6 @@ export function WhatsAppCampaignStep({ onReadyChange }: { onReadyChange?: (ready
           pending={pending}
           onConnect={link.connect}
           onPairingCode={link.requestPairingCode}
-          stayLinked={link.stayLinked}
-          onStayLinkedChange={link.changeStayLinked}
         />
       </CardContent>
     </Card>

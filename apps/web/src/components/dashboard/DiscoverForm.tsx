@@ -9,17 +9,20 @@ import { Search } from "lucide-react";
 import type { z } from "zod";
 import { campaignFormSchema } from "@/lib/schemas/campaign-create";
 import { ApiError, campaignsApi } from "@/lib/api-client";
+import { DEFAULT_MESSAGE_TEMPLATE, messageTemplateProblem } from "@/lib/message-template";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent } from "@/components/dashboard-ui/card";
 import { Input } from "@/components/dashboard-ui/input";
 import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
+import { MessageTemplateEditor } from "./MessageTemplateEditor";
 import { useSession } from "./SessionProvider";
 import { WhatsAppCampaignStep } from "./WhatsAppCampaignStep";
 
 export function DiscoverForm() {
   const router = useRouter();
   const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits } = useSession();
+  const [messageTemplate, setMessageTemplate] = useState(DEFAULT_MESSAGE_TEMPLATE);
   // How many leads to *find*, which costs no credits — so the balance no
   // longer caps this field. It only suggests a sensible default: there is
   // little point scraping far past what the account could ever pitch.
@@ -39,17 +42,24 @@ export function DiscoverForm() {
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof campaignFormSchema>, unknown, z.output<typeof campaignFormSchema>>({
     resolver: zodResolver(campaignFormSchema),
-    defaultValues: { market: allowedMarkets[0] ?? "india", websiteRequirement: "WITHOUT_WEBSITE", targetCount: defaultTargetCount },
+    defaultValues: { market: allowedMarkets[0] ?? "india", targetCount: defaultTargetCount },
   });
 
   async function onSubmit(values: z.output<typeof campaignFormSchema>) {
     setSubmitError(null);
+    const messageProblem = messageTemplateProblem(messageTemplate);
+    if (messageProblem) {
+      setSubmitError(`WhatsApp message: ${messageProblem}`);
+      return;
+    }
     try {
+      // Only businesses without a website are searched: that is who needs one.
       const campaign = await campaignsApi.create({
         ...values,
-        websiteRequirement: values.websiteRequirement ?? "WITHOUT_WEBSITE",
+        websiteRequirement: "WITHOUT_WEBSITE",
         selectionMode: "AUTO",
         deliveryMode: "AUTO",
+        messageTemplate: messageTemplate.trim(),
       });
       await campaignsApi.update(campaign.id, { status: "READY" });
       await campaignsApi.run(campaign.id);
@@ -61,9 +71,10 @@ export function DiscoverForm() {
       }
       if (error instanceof ApiError && error.code === "WHATSAPP_NOT_CONNECTED") {
         // Signed out between loading this page and pressing Find (another
-        // campaign finished, or the 3-day window closed): the step above
-        // picks that up on its next poll and shows the code again.
+        // campaign finished): the step above picks that up on its next poll
+        // and shows the code again.
         setWhatsappReady(false);
+        return;
       }
       setSubmitError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     }
@@ -115,6 +126,7 @@ export function DiscoverForm() {
     );
   }
 
+
   return (
     <div className="flex flex-col gap-6">
       <WhatsAppCampaignStep onReadyChange={setWhatsappReady} />
@@ -141,7 +153,7 @@ export function DiscoverForm() {
             </Button>
           </div>
           <p className="text-xs text-dash-muted-foreground">
-            Search fills the form from your sentence. Nothing is scraped until you press Find businesses. After that, leads without a website are selected and pitched from your linked WhatsApp automatically.
+            Search fills the form from your sentence. Nothing is scraped until you press Find businesses and pitch.
           </p>
           {parseHint && <p className="text-xs text-dash-muted-foreground">{parseHint}</p>}
         </CardContent>
@@ -178,15 +190,6 @@ export function DiscoverForm() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="websiteRequirement">Website</Label>
-              <Select id="websiteRequirement" {...register("websiteRequirement")}>
-                <option value="WITHOUT_WEBSITE">No website</option>
-                <option value="WITH_WEBSITE">Has a website</option>
-                <option value="ANY">Any</option>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="targetCount">How many leads</Label>
               <Input id="targetCount" type="number" min={1} max={MAX_TARGET_COUNT} {...register("targetCount")} />
               {errors.targetCount && <p className="text-xs text-dash-destructive">{errors.targetCount.message}</p>}
@@ -205,15 +208,21 @@ export function DiscoverForm() {
               <Input id="minReviews" type="number" min={0} {...register("minReviews")} />
             </div>
 
+            <div className="border-t border-dash-border pt-4 sm:col-span-2">
+              <MessageTemplateEditor value={messageTemplate} onChange={setMessageTemplate} />
+            </div>
+
             {submitError && <p className="text-sm text-dash-destructive sm:col-span-2">{submitError}</p>}
 
             <div className="sm:col-span-2">
               <Button type="submit" disabled={isSubmitting || !whatsappReady}>
-                {isSubmitting ? "Searching…" : "Find businesses"}
+                {isSubmitting ? "Starting…" : "Find businesses and pitch"}
               </Button>
-              {!whatsappReady && (
-                <p className="mt-2 text-xs text-dash-muted-foreground">Link your WhatsApp above first — the pitches are sent from your number.</p>
-              )}
+              <p className="mt-2 text-xs text-dash-muted-foreground">
+                {whatsappReady
+                  ? "We find businesses without a website, build each one a sample site, record it on a phone and a laptop, and send your message with both videos from your WhatsApp. You can pause sending at any time."
+                  : "Link your WhatsApp above first — the pitches are sent from your number."}
+              </p>
             </div>
           </form>
         </CardContent>

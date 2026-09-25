@@ -32,27 +32,14 @@ export const rawPhoneSchema = z.string().trim().min(6).max(32);
 export const accountCreateSchema = z.object({}).strict();
 
 /**
- * "Keep me signed in for 3 days" (lib/whatsapp/session-policy.ts). Omitted or
- * false: the number is signed out as soon as the campaign finishes.
+ * Connect takes no options: the number is always signed out once the
+ * campaign finishes (lib/whatsapp/session-policy.ts).
  */
-const stayLinkedSchema = z.boolean().optional();
-
-export const connectRequestSchema = z
-  .object({
-    stayLinked: stayLinkedSchema,
-  })
-  .strict();
-
-export const accountUpdateSchema = z
-  .object({
-    stayLinked: z.boolean(),
-  })
-  .strict();
+export const connectRequestSchema = z.object({}).strict();
 
 export const pairingCodeRequestSchema = z
   .object({
     phoneNumber: rawPhoneSchema,
-    stayLinked: stayLinkedSchema,
   })
   .strict();
 

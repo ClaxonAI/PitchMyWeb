@@ -4,7 +4,7 @@ import { getServicePriceRange } from "../services/pricing";
 import { aiPitchResponseSchema, type AiPitchResponse } from "../validation/pitch";
 import { buildPitchAiInput, buildPitchPrompt, buildPitchRepairPrompt, PITCH_PROMPT_VERSION, type PitchAiInput } from "./pitch-prompt";
 import { validateNoFabricatedPhoneNumber } from "./factual-safety";
-import type { OllamaClient } from "./ollama-client";
+import type { AiClient } from "./ai-client";
 import { AiPitchFailedError, ConflictError, NotFoundError } from "../errors";
 
 // POST /api/leads/:id/pitch domain service (backend_tasks.md section 31,
@@ -13,7 +13,7 @@ import { AiPitchFailedError, ConflictError, NotFoundError } from "../errors";
 //   load lead (ownership-checked) -> business -> website/demo if available
 //     -> Lead.recommendedService (already validated by Phase 5, authoritative
 //        — see below) -> configured pricing (lib/services/pricing.ts)
-//     -> build AI input -> call Ollama -> parse -> Zod validate
+//     -> build AI input -> call the model -> parse -> Zod validate
 //     -> business/factual validate -> [repair once if invalid] -> persist
 //     -> PITCH_GENERATED
 //
@@ -24,7 +24,7 @@ import { AiPitchFailedError, ConflictError, NotFoundError } from "../errors";
 // set exactly once, by Phase 5's applyLeadAnalysis, from an AI response
 // that was already Zod- and business-validated against configured Services
 // at that time. This function treats that persisted value as authoritative
-// and never re-decides it — the pitch-generation Ollama call is never asked
+// and never re-decides it — the pitch-generation model call is never asked
 // to choose or restate a recommendedService/deal range; its only output is
 // the outreach message text (see aiPitchResponseSchema). This avoids
 // creating a second, conflicting authority for the same decision.
@@ -42,27 +42,27 @@ export type GeneratePitchResult = {
 
 type AttemptOutcome = { success: true; data: AiPitchResponse; raw: string; latencyMs: number } | { success: false; reason: string; raw?: string; latencyMs: number };
 
-async function attemptOnce(ollama: OllamaClient, prompt: string, business: { phone: string | null }): Promise<AttemptOutcome> {
+async function attemptOnce(ai: AiClient, prompt: string, business: { phone: string | null }): Promise<AttemptOutcome> {
   let text: string;
   let latencyMs: number;
   try {
-    const result = await ollama.generate({ prompt });
+    const result = await ai.generate({ prompt });
     text = result.text;
     latencyMs = result.latencyMs;
   } catch (error) {
-    return { success: false, reason: error instanceof Error ? error.message : "Unknown Ollama request error", latencyMs: 0 };
+    return { success: false, reason: error instanceof Error ? error.message : "Unknown AI request error", latencyMs: 0 };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { success: false, reason: "Ollama response was not valid JSON", raw: text, latencyMs };
+    return { success: false, reason: "Model response was not valid JSON", raw: text, latencyMs };
   }
 
   const zodResult = aiPitchResponseSchema.safeParse(parsed);
   if (!zodResult.success) {
-    return { success: false, reason: `Ollama response failed schema validation: ${zodResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, raw: text, latencyMs };
+    return { success: false, reason: `Model response failed schema validation: ${zodResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`, raw: text, latencyMs };
   }
 
   // Factual safety (section 7): reuses the exact same heuristic
@@ -76,9 +76,9 @@ async function attemptOnce(ollama: OllamaClient, prompt: string, business: { pho
 }
 
 /**
- * Runs the pitch-generation pipeline for one lead. Ollama is injectable
- * (section 17 precedent from Phase 5: tests never depend on a real Ollama
- * server) — the real HttpOllamaClient in production, a fake in tests.
+ * Runs the pitch-generation pipeline for one lead. The AI client is injectable
+ * (section 17 precedent from Phase 5: tests never depend on a real model
+ * server) — the real OpenAiJsonClient in production, a fake in tests.
  *
  * Retry behavior mirrors lib/ai/lead-analysis.service.ts exactly: exactly
  * one repair attempt on any failure (malformed JSON, schema-invalid,
@@ -91,7 +91,7 @@ async function attemptOnce(ollama: OllamaClient, prompt: string, business: { pho
  * valid Pitch are left completely untouched, so a later retry remains
  * possible.
  */
-export async function generatePitch(db: PrismaClient, ollama: OllamaClient, input: GeneratePitchInput): Promise<GeneratePitchResult> {
+export async function generatePitch(db: PrismaClient, ai: AiClient, input: GeneratePitchInput): Promise<GeneratePitchResult> {
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
     include: {
@@ -135,14 +135,14 @@ export async function generatePitch(db: PrismaClient, ollama: OllamaClient, inpu
   });
   const initialPrompt = buildPitchPrompt(aiInput);
 
-  let outcome = await attemptOnce(ollama, initialPrompt, lead.business);
+  let outcome = await attemptOnce(ai, initialPrompt, lead.business);
   let repairUsed = false;
   let totalLatencyMs = outcome.latencyMs;
 
   if (!outcome.success) {
     repairUsed = true;
     const repairPrompt = buildPitchRepairPrompt(aiInput, outcome.raw ?? "(no response text)", outcome.reason);
-    const repaired = await attemptOnce(ollama, repairPrompt, lead.business);
+    const repaired = await attemptOnce(ai, repairPrompt, lead.business);
     totalLatencyMs += repaired.latencyMs;
     outcome = repaired;
   }
@@ -160,7 +160,7 @@ export async function generatePitch(db: PrismaClient, ollama: OllamaClient, inpu
     leadId: lead.id,
     content: outcome.data.message,
     promptVersion: PITCH_PROMPT_VERSION,
-    modelName: process.env.OLLAMA_MODEL ?? "unknown",
+    modelName: ai.model ?? "unknown",
   });
 
   return { pitch, repairUsed, latencyMs: totalLatencyMs };

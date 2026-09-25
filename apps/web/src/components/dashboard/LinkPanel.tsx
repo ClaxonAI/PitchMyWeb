@@ -6,7 +6,6 @@ import { Laptop, RefreshCw, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { SessionState } from "./useWhatsAppSession";
-import { STAY_LINKED_LABEL, stayLinkedHint } from "./whatsapp-session-text";
 
 // The real linking panel. It keeps the visual language of the marketing
 // mock (LinkedDevicesMock) on purpose — someone who saw the pricing page
@@ -21,16 +20,11 @@ export function LinkPanel({
   pending,
   onConnect,
   onPairingCode,
-  stayLinked,
-  onStayLinkedChange,
 }: {
   state: SessionState;
   pending: boolean;
   onConnect: () => void;
   onPairingCode: (phoneNumber: string) => void;
-  /** "Keep me signed in for 3 days"; unticked signs the number out after the campaign. */
-  stayLinked: boolean;
-  onStayLinkedChange: (value: boolean) => void;
 }) {
   const [tab, setTab] = useState<Tab>("qr");
   const [phone, setPhone] = useState("");
@@ -157,18 +151,9 @@ export function LinkPanel({
           </div>
         )}
 
-        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-2xl border border-ink/8 bg-mist-2 px-4 py-3">
-          <input
-            type="checkbox"
-            checked={stayLinked}
-            onChange={(event) => onStayLinkedChange(event.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-primary"
-          />
-          <span>
-            <span className="block text-[13px] font-semibold text-ink">{STAY_LINKED_LABEL}</span>
-            <span className="mt-0.5 block text-[12px] leading-snug text-ink/60">{stayLinkedHint(stayLinked)}</span>
-          </span>
-        </label>
+        <p className="mt-6 rounded-2xl border border-ink/8 bg-mist-2 px-4 py-3 text-[12px] leading-snug text-ink/60">
+          For your privacy we sign this number out as soon as the campaign has finished sending. You link it again for the next one.
+        </p>
 
         {state.error && (
           <p role="alert" className="mt-5 rounded-2xl border border-coral/30 bg-coral/8 px-4 py-3 text-[13px] text-[#c2412f]">

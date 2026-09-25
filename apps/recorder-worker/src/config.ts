@@ -32,7 +32,9 @@ const envSchema = z.object({
   RECORDER_NAVIGATION_TIMEOUT_MS: intFromEnv(45_000, 5_000, 180_000),
   RECORDER_TOUR_SECONDS: intFromEnv(22, 8, 60),
   // A recording stuck longer than this is failed by the API maintenance job.
-  RECORDER_JOB_TIMEOUT_MS: intFromEnv(240_000, 30_000, 900_000),
+  // Two recordings per job (phone and laptop), each ~25s of tour plus load
+  // and encode time.
+  RECORDER_JOB_TIMEOUT_MS: intFromEnv(420_000, 30_000, 900_000),
 
   WORKER_ID: z.string().min(1).default(`${os.hostname()}-${process.pid}`),
   LOG_LEVEL: z.enum(["silent", "fatal", "error", "warn", "info", "debug", "trace"]).default("info"),

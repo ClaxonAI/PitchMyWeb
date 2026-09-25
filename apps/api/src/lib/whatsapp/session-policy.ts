@@ -1,5 +1,7 @@
 import type { PrismaClient, WhatsAppStatus } from "@pitchmyweb/db";
-import { DomainError } from "../errors";
+import { WhatsAppNotConnectedError } from "../errors";
+
+export { WhatsAppNotConnectedError };
 import { emitEvent } from "../observability/events";
 import { ACTIVE_STAGES } from "../pipeline/pipeline.service";
 import { enqueueSessionCommand } from "./queue";
@@ -11,14 +13,10 @@ import { enqueueSessionCommand } from "./queue";
 // it: once nothing is left to send, the number is signed out — the worker
 // unlinks the device on WhatsApp and wipes the stored credentials, the same
 // path as the Disconnect button. The next campaign asks the user to link
-// again.
+// again. There is no "stay signed in" option: every campaign starts with a
+// fresh link.
 //
-// The one exception is an explicit opt-in: ticking "keep me signed in for 3
-// days" when linking keeps the number linked until stayLinkedUntil, so a user
-// running several campaigns back to back links once. When that window closes
-// the number is signed out the same way.
-//
-// Neither rule ever cuts off a campaign mid-send: a number is only signed out
+// This never cuts off a campaign mid-send: a number is only signed out
 // once the user has no campaign still discovering, building, recording or
 // sending, and no message still queued. Delivery receipts only arrive over a
 // live socket, so "still sending" includes waiting for them.
@@ -28,9 +26,7 @@ import { enqueueSessionCommand } from "./queue";
 // finishes, so the sign-out follows the campaign by seconds when the
 // dashboard is open).
 
-export const STAY_LINKED_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const STAY_LINKED_MS = STAY_LINKED_DAYS * DAY_MS;
 
 /**
  * A number linked "for this campaign" that never ends up sending anything
@@ -68,34 +64,28 @@ const SIGNED_IN_WHERE = { OR: [{ status: { in: SIGNED_IN_STATUSES } }, { status:
 /** Statuses a campaign may send from; RECONNECTING recovers on its own. */
 const SENDABLE_STATUSES: WhatsAppStatus[] = ["CONNECTED", "RECONNECTING"];
 
-export type SignOutReason = "campaign_finished" | "stay_linked_expired" | "unused";
+/**
+ * "stay_linked_expired" is only ever read back: the 3-day opt-in it came from
+ * has been removed, but accounts signed out under it still carry the reason.
+ */
+export type SignOutReason = "campaign_finished" | "unused";
 
 export type SessionDecision =
-  | { action: "keep"; reason: "sending" | "stay_linked" | "waiting_for_campaign" }
+  | { action: "keep"; reason: "sending" | "waiting_for_campaign" }
   | { action: "sign_out"; reason: SignOutReason };
-
-export function stayLinkedUntilFor(stayLinked: boolean, now = new Date()): Date | null {
-  return stayLinked ? new Date(now.getTime() + STAY_LINKED_MS) : null;
-}
 
 /**
  * The whole policy, as a pure function of what the sweep observed. Active
- * sending wins over everything; then the opt-in window; then "a campaign
- * finished since this login"; then the unused-link timeout.
+ * sending wins over everything; then "a campaign finished since this login";
+ * then the unused-link timeout.
  */
 export function decideSession(input: {
   now: Date;
   linkedAt: Date | null;
-  stayLinkedUntil: Date | null;
   activeSending: boolean;
   campaignFinishedSinceLink: boolean;
 }): SessionDecision {
   if (input.activeSending) return { action: "keep", reason: "sending" };
-  if (input.stayLinkedUntil) {
-    return input.stayLinkedUntil.getTime() > input.now.getTime()
-      ? { action: "keep", reason: "stay_linked" }
-      : { action: "sign_out", reason: "stay_linked_expired" };
-  }
   if (input.campaignFinishedSinceLink) return { action: "sign_out", reason: "campaign_finished" };
   // No linkedAt means the number was linked before this policy existed and
   // was never backfilled; it gets no grace beyond the timeout either way.
@@ -142,18 +132,17 @@ async function campaignFinishedSince(db: PrismaClient, userId: string, since: Da
   return finished > 0;
 }
 
-type PolicyAccount = { id: string; userId: string; linkedAt: Date | null; stayLinkedUntil: Date | null };
+type PolicyAccount = { id: string; userId: string; linkedAt: Date | null };
 
 export type SessionPolicyDeps = { enqueueSessionCommand: typeof enqueueSessionCommand };
 const defaultDeps: SessionPolicyDeps = { enqueueSessionCommand };
 
-const POLICY_FIELDS = { id: true, userId: true, linkedAt: true, stayLinkedUntil: true } as const;
+const POLICY_FIELDS = { id: true, userId: true, linkedAt: true } as const;
 
 async function applyPolicy(db: PrismaClient, account: PolicyAccount, now: Date, deps: SessionPolicyDeps): Promise<SessionDecision> {
   const decision = decideSession({
     now,
     linkedAt: account.linkedAt,
-    stayLinkedUntil: account.stayLinkedUntil,
     activeSending: await hasActiveCampaignSending(db, account.userId, now),
     campaignFinishedSinceLink: await campaignFinishedSince(db, account.userId, account.linkedAt),
   });
@@ -218,16 +207,10 @@ export async function settleWhatsAppSession(db: PrismaClient, userId: string, no
   }
 }
 
-export class WhatsAppNotConnectedError extends DomainError {
-  constructor() {
-    super("Link your WhatsApp before starting this campaign. Pitches are sent from your own number.", "WHATSAPP_NOT_CONNECTED", 409);
-  }
-}
-
 /**
  * Campaigns that deliver through WhatsApp need a linked number before they
  * start: the policy above signs the number out after every campaign, so each
- * one is preceded by a link (or covered by the 3-day opt-in).
+ * one is preceded by a link.
  */
 export async function assertWhatsAppReady(db: PrismaClient, userId: string, campaign: { deliveryMode: "AUTO" | "DIRECT" }): Promise<void> {
   // Direct campaigns hand the user wa.me links to send themselves.

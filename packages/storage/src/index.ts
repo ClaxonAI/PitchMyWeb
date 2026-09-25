@@ -167,4 +167,7 @@ export function videoExpiry(readyAt = new Date(), env: Env = process.env): Date 
 export const storageKeys = {
   recording: (campaignId: string, recordingId: string) => `recordings/${campaignId}/${recordingId}.mp4`,
   poster: (campaignId: string, recordingId: string) => `recordings/${campaignId}/${recordingId}.jpg`,
+  /** The laptop-size walkthrough recorded alongside the phone one. */
+  recordingDesktop: (campaignId: string, recordingId: string) => `recordings/${campaignId}/${recordingId}-laptop.mp4`,
+  posterDesktop: (campaignId: string, recordingId: string) => `recordings/${campaignId}/${recordingId}-laptop.jpg`,
 };

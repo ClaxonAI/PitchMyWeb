@@ -39,11 +39,19 @@ export type CampaignLeadRow = {
   hasValidPhone: boolean;
   pitch: string | null;
   /**
-   * videoReady: the demo video can be watched/downloaded right now.
+   * videoReady: the phone demo video can be watched/downloaded right now.
+   * laptopVideoReady: the laptop-size one is too (older recordings only have the phone one).
    * videoExpiresAt: when that stops (VIDEO_RETENTION_DAYS after recording).
    * videoExpired: there was a video, and its download window has closed.
    */
-  pipeline: (Pick<LeadPipeline, "id" | "stage" | "failureReason"> & { videoReady: boolean; videoExpiresAt: Date | null; videoExpired: boolean }) | null;
+  pipeline:
+    | (Pick<LeadPipeline, "id" | "stage" | "failureReason" | "replacedById" | "creditOutcome" | "updatedAt"> & {
+        videoReady: boolean;
+        laptopVideoReady: boolean;
+        videoExpiresAt: Date | null;
+        videoExpired: boolean;
+      })
+    | null;
   selectable: boolean;
   /**
    * Why this lead is not selectable, for the dashboard to show instead of
@@ -94,15 +102,20 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = 
 
   const recordingIds = leads.flatMap((lead) => (lead.pipelines[0]?.recordingId ? [lead.pipelines[0].recordingId] : []));
   const recordings = recordingIds.length
-    ? await db.demoRecording.findMany({ where: { id: { in: recordingIds } }, select: { id: true, status: true, storageKey: true, expiresAt: true, failureReason: true } })
+    ? await db.demoRecording.findMany({
+        where: { id: { in: recordingIds } },
+        select: { id: true, status: true, storageKey: true, desktopStorageKey: true, expiresAt: true, failureReason: true },
+      })
     : [];
   const recordingById = new Map(recordings.map((recording) => [recording.id, recording]));
   const videoFor = (recordingId: string | null) => {
     const recording = recordingId ? recordingById.get(recordingId) : undefined;
-    if (!recording) return { videoReady: false, videoExpiresAt: null, videoExpired: false };
+    if (!recording) return { videoReady: false, laptopVideoReady: false, videoExpiresAt: null, videoExpired: false };
     const expired = Boolean(recording.expiresAt && recording.expiresAt.getTime() <= now.getTime()) || recording.failureReason === "expired";
+    const ready = !expired && recording.status === "READY" && recording.storageKey !== null;
     return {
-      videoReady: !expired && recording.status === "READY" && recording.storageKey !== null,
+      videoReady: ready,
+      laptopVideoReady: ready && recording.desktopStorageKey !== null,
       videoExpiresAt: recording.expiresAt,
       videoExpired: expired,
     };
@@ -134,7 +147,17 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = 
       },
       hasValidPhone,
       pitch: lead.pitches[0]?.content ?? null,
-      pipeline: pipeline ? { id: pipeline.id, stage: pipeline.stage, failureReason: pipeline.failureReason, ...videoFor(pipeline.recordingId) } : null,
+      pipeline: pipeline
+        ? {
+            id: pipeline.id,
+            stage: pipeline.stage,
+            failureReason: pipeline.failureReason,
+            replacedById: pipeline.replacedById,
+            creditOutcome: pipeline.creditOutcome,
+            updatedAt: pipeline.updatedAt,
+            ...videoFor(pipeline.recordingId),
+          }
+        : null,
       selectable: !pipeline && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
       blockedReason: blockedReasonFor({ pipeline, hasValidPhone, status: lead.status }),
     };

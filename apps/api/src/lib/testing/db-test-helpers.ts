@@ -61,6 +61,17 @@ export async function createTestUser(prefix: string, options?: { role?: UserRole
   return { id: user.id, email: user.email, role: user.role };
 }
 
+/**
+ * Gives a test user a linked, connected WhatsApp account — campaigns cannot be
+ * created, run or pitched without one (lib/whatsapp/account.service.ts).
+ */
+export async function connectTestWhatsApp(userId: string): Promise<{ id: string }> {
+  return prisma.whatsAppAccount.create({
+    data: { userId, status: "CONNECTED", phoneNumber: "919800000000", lastConnectedAt: new Date() },
+    select: { id: true },
+  });
+}
+
 /** Deletes a test user; cascades away every Campaign/Lead/Session/Activity/... it owns. */
 export async function deleteTestUser(userId: string): Promise<void> {
   await prisma.user.deleteMany({ where: { id: userId } });

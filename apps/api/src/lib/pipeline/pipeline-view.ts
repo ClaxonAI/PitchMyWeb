@@ -130,6 +130,7 @@ export async function listCampaignBatches(db: PrismaClient, userId: string, camp
       sentCount: batch.sentCount,
       failedCount: batch.failedCount,
       refundedCount: batch.refundedCount,
+      replacedCount: batch.replacedCount,
       processingCount: Math.max(0, batch.reservedCount - batch.sentCount - batch.failedCount),
       createdAt: batch.createdAt,
       completedAt: batch.completedAt,
@@ -222,7 +223,7 @@ export async function getPipelineVideoUrl(
   db: PrismaClient,
   userId: string,
   pipelineId: string,
-  options: { download?: boolean; now?: Date } = {},
+  options: { download?: boolean; view?: "phone" | "laptop"; now?: Date } = {},
 ): Promise<string> {
   const pipeline = await db.leadPipeline.findUnique({
     where: { id: pipelineId },
@@ -236,11 +237,13 @@ export async function getPipelineVideoUrl(
   // the minutes between its deadline and the sweep that deletes it.
   if (recording && (isVideoExpired(recording, options.now) || recording.failureReason === "expired")) throw new VideoExpiredError();
   const storage = getObjectStorage();
-  if (!recording || recording.status !== "READY" || !recording.storageKey || !storage) {
+  const laptop = options.view === "laptop";
+  const key = laptop ? recording?.desktopStorageKey : recording?.storageKey;
+  if (!recording || recording.status !== "READY" || !key || !storage) {
     throw new NotFoundError("Recording", pipelineId);
   }
-  const downloadFilename = options.download ? `${downloadBaseName(pipeline.lead.business.name)}-website-demo.mp4` : undefined;
-  return storage.signedGetUrl(recording.storageKey, RECORDING_URL_TTL_SECONDS, { downloadFilename });
+  const downloadFilename = options.download ? `${downloadBaseName(pipeline.lead.business.name)}-website-demo${laptop ? "-laptop" : "-phone"}.mp4` : undefined;
+  return storage.signedGetUrl(key, RECORDING_URL_TTL_SECONDS, { downloadFilename });
 }
 
 /** Business name reduced to something safe to use as a file name. */

@@ -54,11 +54,18 @@ function BatchProgress({ batch }: { batch: PitchBatch }) {
           pitches, so they never take an -s. */}
       <p className="text-sm text-dash-muted-foreground">
         {batch.sentCount} sent · {batch.failedCount} failed · {batch.processingCount} still working
+        {batch.replacedCount > 0 && ` · ${batch.replacedCount} replaced`}
       </p>
       {batch.reservedCount < batch.requestedCount && (
         <p className="text-xs text-dash-muted-foreground">
           You asked for {batch.requestedCount}. Only {batch.reservedCount} could be pitched — the rest had no number WhatsApp can reach, or were already
           pitched. You were only charged for {batch.reservedCount}.
+        </p>
+      )}
+      {batch.replacedCount > 0 && (
+        <p className="text-xs text-dash-muted-foreground">
+          {plural(batch.replacedCount, "number")} {batch.replacedCount === 1 ? "wasn't" : "weren't"} on WhatsApp, so {batch.replacedCount === 1 ? "that pitch went" : "those pitches went"} to
+          the next lead in this campaign instead — same credit, no refund needed.
         </p>
       )}
       {batch.refundedCount > 0 && (

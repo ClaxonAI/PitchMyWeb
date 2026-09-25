@@ -1,8 +1,8 @@
 import { PaymentConfigurationError, PaymentGatewayError } from "../errors";
 
 // Razorpay Standard Checkout, called directly over its REST API (no SDK
-// dependency) — the same hand-rolled-fetch-client shape already used for
-// Ollama (lib/ai/ollama-client.ts) and object storage, rather than adding a
+// dependency) — the same injectable-client shape already used for the AI
+// model (lib/ai/ai-client.ts) and object storage, rather than adding a
 // vendor SDK for what is, server-side, one POST call. `RazorpayClient` is
 // the abstraction lib/checkout/checkout.service.ts depends on: production
 // wiring uses HttpRazorpayClient, tests inject a fake (section 17's
