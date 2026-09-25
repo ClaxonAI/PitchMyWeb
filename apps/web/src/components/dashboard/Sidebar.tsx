@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/lib/stores/ui-store";
-import { NAV_ITEMS } from "./nav-items";
+import { isNavItemActive, NAV_ITEMS } from "./nav-items";
 import { ADMIN_NAV_ITEMS } from "@/components/admin/nav-items";
 import { Badge } from "@/components/dashboard-ui/badge";
 
@@ -16,7 +16,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
       {items.map((item) => {
-        const active = item.href === "/admin" || item.href === "/dashboard" ? pathname === item.href : pathname === item.href || pathname?.startsWith(`${item.href}/`);
+        const active = isNavItemActive(item, pathname);
         const stub = "stub" in item && Boolean(item.stub);
         return (
           <Link

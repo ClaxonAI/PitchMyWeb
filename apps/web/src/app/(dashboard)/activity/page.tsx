@@ -8,6 +8,7 @@ import { Card } from "@/components/dashboard-ui/card";
 import { EmptyState } from "@/components/dashboard-ui/empty-state";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { statusLabel } from "@/components/dashboard/StatusBadge";
+import { WorkTabs } from "@/components/dashboard/WorkTabs";
 
 export const metadata: Metadata = { title: "Activity" };
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export default async function ActivityPage() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <WorkTabs />
       <PageHeader title="Activity" description="Everything that's happened across your leads, most recent first." />
 
       {activities.length === 0 ? (

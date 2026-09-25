@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { Paginated, WebsiteProject } from "@/lib/api-client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { WorkTabs } from "@/components/dashboard/WorkTabs";
 
 export const metadata: Metadata = { title: "Websites" };
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function WebsitesPage() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <WorkTabs />
       <div>
         <h1 className="display text-2xl text-dash-foreground">Websites</h1>
         <p className="mt-1 text-sm text-dash-muted-foreground">Every demo site generated for a lead.</p>
