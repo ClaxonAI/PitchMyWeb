@@ -122,6 +122,52 @@ the bare path `parameter/pitchmyweb/prod`, which the wildcard does not cover.
 With only the wildcard the call fails as AccessDenied naming a resource that
 looks like it should already be granted.
 
+### Payments (Razorpay)
+
+The API reads `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` at runtime (order
+creation and signature verification); without both, checkout answers
+`PaymentConfigurationError`. The browser never needs them at build time: the
+key id reaches Razorpay Checkout in the create-order response. Get both from
+Razorpay Dashboard → Account & Settings → API Keys (`rzp_live_…` for
+production, `rzp_test_…` to try the flow with test cards).
+
+From any machine with the AWS CLI and access to the account (the secret is
+read without echo, so it never lands in shell history or `ps`):
+
+```bash
+read -r  -p "Razorpay Key ID: "     RZP_KEY_ID
+read -rs -p "Razorpay Key Secret: " RZP_KEY_SECRET; echo
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RAZORPAY_KEY_ID \
+  --type SecureString --value "$RZP_KEY_ID" --overwrite
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RAZORPAY_KEY_SECRET \
+  --type SecureString --value "$RZP_KEY_SECRET" --overwrite
+unset RZP_KEY_ID RZP_KEY_SECRET
+```
+
+Then reload secrets on the box and restart the API (or simply redeploy, which
+does both):
+
+```bash
+aws ssm send-command --region ap-south-1 --instance-ids <ec2_instance_id> \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["cd /home/ubuntu/PitchMyWeb && sudo APP_USER=ubuntu bash infrastructure/aws/load-secrets.sh && sudo -u ubuntu env PM2_HOME=/home/ubuntu/.pm2 HOME=/home/ubuntu bash -c \"set -a; . /etc/pitchmyweb/env; set +a; pm2 restart pmw-api --update-env\""]'
+```
+
+`<ec2_instance_id>` is the `ec2_instance_id` Terraform output. `APP_USER=ubuntu`
+matters: load-secrets.sh writes the file `chmod 600` owned by that user, and
+its default (`pitchmyweb`) is not the user pm2 runs as on this box. Check with a
+test-mode purchase on /pricing; the credits appear in the wallet and
+`npm run credits:check -w apps/api -- <email>` shows the PURCHASE row.
+
+### Credits ledger
+
+Every pitch credit movement is a row in `pitch_credit_ledger`, and every
+wallet must equal the sum of its rows. `pipeline-maintenance` checks this on
+each pass and raises a `credits.ledger_mismatch` alert for any wallet that
+disagrees; `npm run credits:check -w apps/api [-- email]` prints the same
+report (movements by type, the wallet, its latest history) and exits 1 on a
+mismatch.
+
 ### Lead discovery (apps/discovery-worker)
 
 ```
