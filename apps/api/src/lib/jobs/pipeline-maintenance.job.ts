@@ -8,6 +8,7 @@ import {
   NON_RETRYABLE_REASONS,
   onRecordingFinished,
   requestRecording,
+  releaseHeldPipelines,
   retryPipeline,
   syncDeliveries,
 } from "../pipeline/pipeline.service";
@@ -36,6 +37,7 @@ export type PipelineMaintenanceResult = {
   pipelinesRequeued: number;
   pipelinesResumed: number;
   pipelinesAbandoned: number;
+  pipelinesReleased: number;
   batchesRecovered: number;
   durationMs: number;
 };
@@ -48,6 +50,7 @@ export type PipelineMaintenanceResult = {
  * the normal failure path. Either way the credit stops being stranded.
  */
 export const STALE_SELECTED_MS = 10 * 60 * 1000;
+export const STALE_HELD_MS = 10 * 60 * 1000;
 
 async function recoverStalePipelines(db: PrismaClient, now: Date): Promise<{ resumed: number; abandoned: number }> {
   const stale = await db.leadPipeline.findMany({
@@ -177,6 +180,10 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
   // a process died. Pipelines first (they may still be resumable), then the
   // batches whose reservation never got as far as creating one.
   const { resumed: pipelinesResumed, abandoned: pipelinesAbandoned } = await recoverStalePipelines(db, now);
+  // A pitch waits at VIDEO_UPLOADED only while its campaign is paused. One
+  // sitting there in a campaign that is not paused lost its process between
+  // the recording finishing and the send being queued: send it now.
+  const pipelinesReleased = await releaseHeldPipelines(db, { olderThan: new Date(now.getTime() - STALE_HELD_MS) });
   const batchesRecovered = await recoverStaleBatches(db, now);
 
   let recordingsDeleted = 0;
@@ -184,16 +191,18 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
   if (storage) {
     const expired = await db.demoRecording.findMany({
       where: { storageKey: { not: null }, websiteProject: { expiresAt: { lte: now } } },
-      select: { id: true, storageKey: true, posterKey: true },
+      select: { id: true, storageKey: true, posterKey: true, desktopStorageKey: true, desktopPosterKey: true },
       take: EXPIRE_BATCH,
     });
     for (const recording of expired) {
       try {
         await storage.delete(recording.storageKey!);
         if (recording.posterKey) await storage.delete(recording.posterKey);
+        if (recording.desktopStorageKey) await storage.delete(recording.desktopStorageKey);
+        if (recording.desktopPosterKey) await storage.delete(recording.desktopPosterKey);
         await db.demoRecording.update({
           where: { id: recording.id },
-          data: { storageKey: null, posterKey: null, status: "FAILED", failureReason: "expired" },
+          data: { storageKey: null, posterKey: null, desktopStorageKey: null, desktopPosterKey: null, status: "FAILED", failureReason: "expired" },
         });
         recordingsDeleted += 1;
       } catch (error) {
@@ -207,6 +216,7 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
     pipelinesRequeued,
     pipelinesResumed,
     pipelinesAbandoned,
+    pipelinesReleased,
     batchesRecovered,
     recordingsReconciled,
     recordingsTimedOut,

@@ -15,7 +15,8 @@ type RouteParams = { params: Promise<{ slug: string }> };
 export async function handleGetPublicVideo(db: PrismaClient, request: NextRequest, params: { slug: string }): Promise<NextResponse> {
   await rateLimit(`public-video:${clientIp(request)}`, 120, 60 * 1000);
   const slug = slugParamSchema.parse(params.slug);
-  const url = await getPublicVideoUrl(db, slug);
+  const view = new URL(request.url).searchParams.get("view") === "laptop" ? "laptop" : "phone";
+  const url = await getPublicVideoUrl(db, slug, new Date(), view);
   const response = NextResponse.redirect(url, 302);
   response.headers.set("Cache-Control", "no-store");
   response.headers.set("X-Robots-Tag", "noindex, nofollow");

@@ -38,7 +38,13 @@ export type CampaignLeadRow = {
   business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
-  pipeline: (Pick<LeadPipeline, "id" | "stage" | "failureReason"> & { videoReady: boolean }) | null;
+  pipeline:
+    | (Pick<LeadPipeline, "id" | "stage" | "failureReason" | "replacedById" | "creditOutcome" | "updatedAt"> & {
+        videoReady: boolean;
+        /** The laptop-size walkthrough is ready too (older recordings only have the phone one). */
+        laptopVideoReady: boolean;
+      })
+    | null;
   selectable: boolean;
   /**
    * Why this lead is not selectable, for the dashboard to show instead of
@@ -89,9 +95,10 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
 
   const recordingIds = leads.flatMap((lead) => (lead.pipelines[0]?.recordingId ? [lead.pipelines[0].recordingId] : []));
   const readyRecordings = recordingIds.length
-    ? await db.demoRecording.findMany({ where: { id: { in: recordingIds }, status: "READY", storageKey: { not: null } }, select: { id: true } })
+    ? await db.demoRecording.findMany({ where: { id: { in: recordingIds }, status: "READY", storageKey: { not: null } }, select: { id: true, desktopStorageKey: true } })
     : [];
   const readyIds = new Set(readyRecordings.map((recording) => recording.id));
+  const laptopReadyIds = new Set(readyRecordings.filter((recording) => recording.desktopStorageKey).map((recording) => recording.id));
 
   return leads.map((lead) => {
     const { score, estimated } = effectiveScore(lead);
@@ -119,7 +126,18 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
       },
       hasValidPhone,
       pitch: lead.pitches[0]?.content ?? null,
-      pipeline: pipeline ? { id: pipeline.id, stage: pipeline.stage, failureReason: pipeline.failureReason, videoReady: pipeline.recordingId ? readyIds.has(pipeline.recordingId) : false } : null,
+      pipeline: pipeline
+        ? {
+            id: pipeline.id,
+            stage: pipeline.stage,
+            failureReason: pipeline.failureReason,
+            replacedById: pipeline.replacedById,
+            creditOutcome: pipeline.creditOutcome,
+            updatedAt: pipeline.updatedAt,
+            videoReady: pipeline.recordingId ? readyIds.has(pipeline.recordingId) : false,
+            laptopVideoReady: pipeline.recordingId ? laptopReadyIds.has(pipeline.recordingId) : false,
+          }
+        : null,
       selectable: !pipeline && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
       blockedReason: blockedReasonFor({ pipeline, hasValidPhone, status: lead.status }),
     };

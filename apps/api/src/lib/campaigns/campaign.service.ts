@@ -103,6 +103,7 @@ export async function createCampaign(db: PrismaClient, userId: string, rawInput:
       selectionMode: input.selectionMode,
       targetCount: input.targetCount,
       deliveryMode: input.deliveryMode,
+      messageTemplate: input.messageTemplate,
       status: "DRAFT",
     },
   });
@@ -131,6 +132,17 @@ export async function updateCampaign(db: PrismaClient, userId: string, campaignI
   const data = fields.targetCount != null && fields.leadLimit == null ? { ...fields, leadLimit: leadLimitForTarget(fields.targetCount) } : fields;
 
   return db.campaign.update({ where: { id: campaign.id }, data });
+}
+
+/**
+ * Replaces the WhatsApp message a campaign sends, at any status: pitches that
+ * have not been handed to WhatsApp yet pick up the new text (it is read at
+ * send time, pipeline.service.ts::currentPitch); ones already sent keep what
+ * they sent. null reverts to each lead's own generated pitch.
+ */
+export async function updateCampaignMessage(db: PrismaClient, userId: string, campaignId: string, messageTemplate: string | null): Promise<Campaign> {
+  const campaign = await loadOwnedCampaign(db, campaignId, userId);
+  return db.campaign.update({ where: { id: campaign.id }, data: { messageTemplate } });
 }
 
 export async function markCampaignReady(db: PrismaClient, userId: string, campaignId: string): Promise<Campaign> {

@@ -1,4 +1,4 @@
-import type { LeadPipeline, PipelineStage, Prisma, PrismaClient } from "@pitchmyweb/db";
+import type { LeadPipeline, Pitch, PipelineStage, Prisma, PrismaClient } from "@pitchmyweb/db";
 import { buildPreviewContent } from "@pitchmyweb/templates";
 import { ConflictError, DomainError, NotFoundError, ValidationError } from "../errors";
 import { isLeadTransitionAllowed, transitionLeadStatus } from "../leads/lifecycle";
@@ -8,7 +8,8 @@ import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
-import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
+import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, LAPTOP_VIDEO_CAPTION, previewExpiry, videoPageUrl } from "./links";
+import { CAMPAIGN_TEMPLATE_PROMPT_VERSION, renderMessageTemplate } from "./message-template";
 import { enqueueRecording } from "./recording-queue";
 
 // The delivery pipeline (docs/pipeline.md). One LeadPipeline row per selected
@@ -52,6 +53,14 @@ export const NON_RETRYABLE_REASONS = [
   // possibly-duplicate send.
   "not_delivered",
 ];
+
+// Failures that mean this lead cannot be reached on WhatsApp at all: its
+// number is not registered (the worker's checkNumber), or it never had one
+// WhatsApp could use. The customer paid for a pitch, not for this particular
+// business, so the reserved credit moves to the next eligible lead in the
+// same campaign instead of being refunded — and is refunded only when the
+// campaign has no eligible lead left to give it to.
+export const REPLACEABLE_REASONS = ["invalid_number", "no_valid_phone"];
 
 export type PipelineDeps = {
   enqueueRecording: (job: { recordingId: string }) => Promise<void>;
@@ -125,7 +134,7 @@ async function resolvePipelineCredit(
   tx: Prisma.TransactionClient,
   pipeline: { id: string; batchId: string | null },
   userId: string,
-  outcome: "CONSUMED" | "REFUNDED",
+  outcome: "CONSUMED" | "REFUNDED" | "REPLACED",
 ): Promise<void> {
   if (!pipeline.batchId) return;
   const claimed = await tx.leadPipeline.updateMany({
@@ -133,6 +142,14 @@ async function resolvePipelineCredit(
     data: { creditOutcome: outcome, creditResolvedAt: new Date() },
   });
   if (claimed.count !== 1) return;
+
+  if (outcome === "REPLACED") {
+    // The credit stays reserved and now belongs to the replacement pipeline
+    // (same batch), which will consume or refund it when it resolves. So the
+    // batch is not one step closer to completion here.
+    await tx.pitchBatch.updateMany({ where: { id: pipeline.batchId, status: "PROCESSING" }, data: { replacedCount: { increment: 1 } } });
+    return;
+  }
 
   if (outcome === "CONSUMED") {
     await consumeReservedCredit(tx, { userId, batchId: pipeline.batchId, pipelineId: pipeline.id });
@@ -167,13 +184,14 @@ async function failPipeline(
   pipeline: Pick<LeadPipeline, "id" | "campaignId" | "leadId">,
   failureStage: PipelineStage,
   error: unknown,
+  deps: PipelineDeps = defaultDeps,
 ): Promise<void> {
   const reason = reasonFor(error);
   if (!(error instanceof PipelineStepError) && !(error instanceof DomainError)) {
     console.error(`Pipeline ${pipeline.id} failed at ${failureStage}:`, error);
   }
 
-  await db.$transaction(async (tx) => {
+  const replacementId = await db.$transaction(async (tx) => {
     // Read the *fresh* attempts count from this very write, not from the
     // `pipeline` parameter a caller may have loaded earlier: buildAndPublish
     // increments attempts via its own setStage call before it can fail, so
@@ -183,27 +201,74 @@ async function failPipeline(
     const updated = await tx.leadPipeline.update({
       where: { id: pipeline.id },
       data: { stage: "FAILED", failureStage, failureReason: reason },
-      select: { attempts: true, batchId: true, campaign: { select: { userId: true } } },
+      select: { attempts: true, batchId: true, creditOutcome: true, campaign: { select: { userId: true } } },
     });
-    const isFinal = updated.attempts >= AUTO_RETRY_MAX_ATTEMPTS || NON_RETRYABLE_REASONS.includes(reason);
-    if (isFinal) {
-      await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, updated.campaign.userId, "REFUNDED");
+    const isFinal = updated.attempts >= AUTO_RETRY_MAX_ATTEMPTS || NON_RETRYABLE_REASONS.includes(reason) || REPLACEABLE_REASONS.includes(reason);
+    if (!isFinal) return null;
+
+    if (REPLACEABLE_REASONS.includes(reason) && updated.batchId && updated.creditOutcome === null) {
+      const replacement = await claimReplacementLead(tx, { campaignId: pipeline.campaignId, batchId: updated.batchId });
+      if (replacement) {
+        await tx.leadPipeline.update({ where: { id: pipeline.id }, data: { replacedById: replacement.id } });
+        await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, updated.campaign.userId, "REPLACED");
+        return replacement.id;
+      }
     }
+    await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, updated.campaign.userId, "REFUNDED");
+    return null;
   });
 
   const alert = failureStage === "DELIVERY_QUEUED" || failureStage === "VIDEO_UPLOADED";
   emitEvent(
     alert ? "delivery.failed" : "pipeline.failed",
-    { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId, failureStage, reason },
-    { level: "error", alert },
+    { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId, failureStage, reason, replacementPipelineId: replacementId },
+    { level: "error", alert: alert && !replacementId },
   );
+
+  // Outside the transaction: building and publishing a site is real work
+  // that must not run while holding the row locks above.
+  if (replacementId) {
+    emitEvent("pipeline.replaced", { pipelineId: pipeline.id, replacementPipelineId: replacementId, campaignId: pipeline.campaignId, reason });
+    await runFromBuild(db, replacementId, deps);
+  }
+}
+
+/**
+ * Picks the next lead in the campaign that could still be pitched — has a
+ * number WhatsApp can reach, is not already in a pipeline, and is in a
+ * pitchable status — in the order discovery found them, and creates its
+ * pipeline in the same batch. Returns null when there is none. The
+ * @@unique([campaignId, leadId]) constraint makes a concurrent claim of the
+ * same lead fail rather than double-assign it; the next candidate is tried.
+ */
+async function claimReplacementLead(
+  tx: Prisma.TransactionClient,
+  input: { campaignId: string; batchId: string },
+): Promise<{ id: string } | null> {
+  const candidates = await tx.lead.findMany({
+    where: { campaignId: input.campaignId, status: { in: ["NEW", "ANALYZED"] }, pipelines: { none: { campaignId: input.campaignId } } },
+    include: { business: true },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+  for (const lead of candidates) {
+    if (!isPitchableBusiness(lead.business)) continue;
+    const created = await tx.leadPipeline.createMany({
+      data: [{ campaignId: input.campaignId, leadId: lead.id, batchId: input.batchId }],
+      skipDuplicates: true,
+    });
+    if (created.count === 1) {
+      return tx.leadPipeline.findUniqueOrThrow({ where: { campaignId_leadId: { campaignId: input.campaignId, leadId: lead.id } }, select: { id: true } });
+    }
+  }
+  return null;
 }
 
 async function loadPipeline(db: PrismaClient, pipelineId: string) {
   const pipeline = await db.leadPipeline.findUnique({
     where: { id: pipelineId },
     include: {
-      campaign: { select: { id: true, userId: true, deliveryMode: true } },
+      campaign: { select: { id: true, userId: true, deliveryMode: true, messageTemplate: true, sendingPaused: true } },
       lead: {
         include: {
           business: true,
@@ -280,7 +345,7 @@ export async function startPipelines(db: PrismaClient, input: StartPipelinesInpu
 }
 
 async function runFromBuild(db: PrismaClient, pipelineId: string, deps: PipelineDeps): Promise<void> {
-  const published = await buildAndPublish(db, pipelineId);
+  const published = await buildAndPublish(db, pipelineId, deps);
   if (published) await requestRecording(db, pipelineId, deps);
 }
 
@@ -288,13 +353,26 @@ async function runFromBuild(db: PrismaClient, pipelineId: string, deps: Pipeline
 // Build + publish
 // ---------------------------------------------------------------------------
 
-async function ensurePitch(db: PrismaClient, pipeline: LoadedPipeline): Promise<void> {
-  if (pipeline.lead.pitches.length > 0) return;
-  await db.pitch.create({
+/**
+ * The pitch this lead is sent: the campaign's own message when the user wrote
+ * one (filled in for this business), otherwise the lead's generated pitch,
+ * otherwise a plain template. Resolved at send time rather than at selection,
+ * so editing the campaign's message reaches every pitch not yet handed to
+ * WhatsApp. A new Pitch row is written only when the text actually changes,
+ * so the record always matches what was sent.
+ */
+async function currentPitch(db: PrismaClient, pipeline: LoadedPipeline): Promise<Pitch> {
+  const latest = pipeline.lead.pitches[0];
+  const template = pipeline.campaign.messageTemplate;
+  if (!template && latest) return latest;
+
+  const content = template ? renderMessageTemplate(template, pipeline.lead.business.name) : fallbackPitch(pipeline.lead.business.name);
+  if (latest && latest.content === content) return latest;
+  return db.pitch.create({
     data: {
       leadId: pipeline.leadId,
-      content: fallbackPitch(pipeline.lead.business.name),
-      promptVersion: FALLBACK_PITCH_PROMPT_VERSION,
+      content,
+      promptVersion: template ? CAMPAIGN_TEMPLATE_PROMPT_VERSION : FALLBACK_PITCH_PROMPT_VERSION,
       modelName: "template",
       status: "GENERATED",
     },
@@ -302,7 +380,7 @@ async function ensurePitch(db: PrismaClient, pipeline: LoadedPipeline): Promise<
 }
 
 /** Returns true when the preview is live. Failures are recorded on the pipeline. */
-export async function buildAndPublish(db: PrismaClient, pipelineId: string): Promise<boolean> {
+export async function buildAndPublish(db: PrismaClient, pipelineId: string, deps: PipelineDeps = defaultDeps): Promise<boolean> {
   const pipeline = await loadPipeline(db, pipelineId);
   try {
     await setStage(db, pipeline, "BUILDING_SITE", { incrementAttempts: true });
@@ -321,7 +399,7 @@ export async function buildAndPublish(db: PrismaClient, pipelineId: string): Pro
     if (pipeline.lead.status === "NEW") {
       await transitionLeadStatus(db, { leadId: pipeline.leadId, nextStatus: "ANALYZED", metadata: { source: "discovery_selection" } });
     }
-    await ensurePitch(db, pipeline);
+    await currentPitch(db, pipeline);
 
     const content = buildPreviewContent(pipeline.lead.business, {
       summary: pipeline.lead.summary,
@@ -333,7 +411,7 @@ export async function buildAndPublish(db: PrismaClient, pipelineId: string): Pro
     await setStage(db, pipeline, "SITE_PUBLISHED", { websiteProjectId: project.id });
     return true;
   } catch (error) {
-    await failPipeline(db, pipeline, "BUILDING_SITE", error);
+    await failPipeline(db, pipeline, "BUILDING_SITE", error, deps);
     return false;
   }
 }
@@ -353,7 +431,7 @@ export async function requestRecording(db: PrismaClient, pipelineId: string, dep
     await deps.enqueueRecording({ recordingId: recording.id });
     return true;
   } catch (error) {
-    await failPipeline(db, pipeline, "RECORDING", error);
+    await failPipeline(db, pipeline, "RECORDING", error, deps);
     return false;
   }
 }
@@ -365,7 +443,7 @@ export type RecordingFinishedResult = { pipelineId: string | null; stage: Pipeli
  * recording READY or FAILED. Idempotent: a repeated call finds the pipeline
  * already past RECORDING and does nothing.
  */
-export async function onRecordingFinished(db: PrismaClient, recordingId: string): Promise<RecordingFinishedResult> {
+export async function onRecordingFinished(db: PrismaClient, recordingId: string, deps: PipelineDeps = defaultDeps): Promise<RecordingFinishedResult> {
   const recording = await db.demoRecording.findUnique({ where: { id: recordingId } });
   if (!recording) throw new NotFoundError("DemoRecording", recordingId);
   if (!recording.pipelineId) return { pipelineId: null, stage: null };
@@ -381,11 +459,11 @@ export async function onRecordingFinished(db: PrismaClient, recordingId: string)
       data: { stage: "VIDEO_UPLOADED" },
     });
     if (claimed.count === 0) return { pipelineId: pipeline.id, stage: pipeline.stage };
-    emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "READY", durationMs: recording.durationMs, sizeBytes: recording.sizeBytes });
-    await prepareDelivery(db, pipeline.id);
+    emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "READY", durationMs: recording.durationMs, sizeBytes: recording.sizeBytes, laptopVideo: Boolean(recording.desktopStorageKey) });
+    await prepareDelivery(db, pipeline.id, deps);
   } else if (recording.status === "FAILED") {
     emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "FAILED" }, { level: "warn" });
-    await failPipeline(db, pipeline, "RECORDING", new PipelineStepError(recording.failureReason ?? "recording_failed"));
+    await failPipeline(db, pipeline, "RECORDING", new PipelineStepError(recording.failureReason ?? "recording_failed"), deps);
   }
 
   const after = await db.leadPipeline.findUnique({ where: { id: pipeline.id }, select: { stage: true } });
@@ -396,7 +474,7 @@ export async function onRecordingFinished(db: PrismaClient, recordingId: string)
 // Delivery
 // ---------------------------------------------------------------------------
 
-export async function prepareDelivery(db: PrismaClient, pipelineId: string): Promise<void> {
+export async function prepareDelivery(db: PrismaClient, pipelineId: string, deps: PipelineDeps = defaultDeps): Promise<void> {
   const pipeline = await loadPipeline(db, pipelineId);
   try {
     const [project, recording] = await Promise.all([
@@ -407,8 +485,16 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
     if (!recording || recording.status !== "READY" || !recording.storageKey) {
       throw new PipelineStepError("no_recording", "The walkthrough video is not ready");
     }
-    const pitch = pipeline.lead.pitches[0];
-    if (!pitch) throw new PipelineStepError("no_pitch", "The lead has no pitch");
+    // Paused: everything up to here (site, both videos) is ready, and the
+    // pitch waits at VIDEO_UPLOADED with its credit still reserved until the
+    // campaign is resumed. Nothing is failed and nothing is refunded.
+    if (pipeline.campaign.sendingPaused) {
+      if (pipeline.stage !== "VIDEO_UPLOADED") await setStage(db, pipeline, "VIDEO_UPLOADED");
+      emitEvent("pipeline.held", { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId });
+      return;
+    }
+
+    const pitch = await currentPitch(db, pipeline);
 
     if (pipeline.campaign.deliveryMode === "DIRECT") {
       const body = directMessage(pitch.content, project.publishedUrl, videoPageUrl(project.slug));
@@ -455,11 +541,18 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string): Pro
         leadId: pipeline.leadId,
         body: fillSiteLink(pitch.content, project.publishedUrl),
       },
-      { media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" } },
+      {
+        media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" },
+        // The laptop-size walkthrough goes right after the phone one, in the
+        // same send. Recordings made before laptop videos existed have none.
+        ...(recording.desktopStorageKey
+          ? { secondaryMedia: { kind: "VIDEO" as const, storageKey: recording.desktopStorageKey, mimeType: "video/mp4", caption: LAPTOP_VIDEO_CAPTION } }
+          : {}),
+      },
     );
     await setStage(db, pipeline, "DELIVERY_QUEUED", { whatsappMessageId: message.id });
   } catch (error) {
-    await failPipeline(db, pipeline, "DELIVERY_QUEUED", error);
+    await failPipeline(db, pipeline, "DELIVERY_QUEUED", error, deps);
   }
 }
 
@@ -500,7 +593,7 @@ export const DELIVERY_RECEIPT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
  * it, so the WhatsApp layer stays unaware of pipelines. Runs on every
  * dashboard poll and from the scheduled job.
  */
-export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: string; now?: Date } = {}): Promise<number> {
+export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: string; now?: Date } = {}, deps: PipelineDeps = defaultDeps): Promise<number> {
   const now = filter.now ?? new Date();
   const pending = await db.leadPipeline.findMany({
     where: { stage: "DELIVERY_QUEUED", whatsappMessageId: { not: null }, ...(filter.campaignId ? { campaignId: filter.campaignId } : {}) },
@@ -535,10 +628,10 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
       }
     } else if (DEAD_STATUSES.has(message.status)) {
       changed += 1;
-      await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError(message.failureReason ?? message.status.toLowerCase()));
+      await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError(message.failureReason ?? message.status.toLowerCase()), deps);
     } else if (message.status === "SENT" && message.sentAt && now.getTime() - message.sentAt.getTime() > DELIVERY_RECEIPT_TIMEOUT_MS) {
       changed += 1;
-      await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError("not_delivered"));
+      await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError("not_delivered"), deps);
     }
   }
   return changed;
@@ -597,7 +690,7 @@ export async function retryPipeline(db: PrismaClient, userId: string, pipelineId
     case "VIDEO_UPLOADED":
     case "DELIVERY_QUEUED": {
       const recording = pipeline.recordingId ? await db.demoRecording.findUnique({ where: { id: pipeline.recordingId } }) : null;
-      if (recording?.status === "READY") await prepareDelivery(db, pipeline.id);
+      if (recording?.status === "READY") await prepareDelivery(db, pipeline.id, deps);
       else await requestRecording(db, pipeline.id, deps);
       break;
     }
@@ -608,27 +701,76 @@ export async function retryPipeline(db: PrismaClient, userId: string, pipelineId
 }
 
 /**
- * Stops this campaign's queued WhatsApp sends. Messages already being sent
- * are left alone (the worker has claimed them). Affected pipelines become
- * FAILED with reason "paused" and can be retried later.
+ * Pauses sending for a campaign. From here on every pitch that reaches the
+ * send step waits at VIDEO_UPLOADED (prepareDelivery), so pitches still
+ * building their site or recording are paused too, not only ones already
+ * queued. Queued sends that WhatsApp has not picked up are cancelled and put
+ * back to waiting. Nothing is failed and no credit moves: resume picks up
+ * exactly where this left off. A message the worker is already sending is
+ * left alone — it cannot be recalled.
  */
-export async function pauseCampaignSending(db: PrismaClient, userId: string, campaignId: string): Promise<{ cancelled: number }> {
+export async function pauseCampaignSending(db: PrismaClient, userId: string, campaignId: string): Promise<{ paused: true; held: number }> {
   const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { userId: true } });
   if (!campaign || campaign.userId !== userId) throw new NotFoundError("Campaign", campaignId);
+  await db.campaign.update({ where: { id: campaignId }, data: { sendingPaused: true } });
 
   const queued = await db.leadPipeline.findMany({
     where: { campaignId, stage: "DELIVERY_QUEUED", whatsappMessageId: { not: null } },
   });
-  let cancelled = 0;
   for (const pipeline of queued) {
-    const result = await db.whatsAppMessage.updateMany({
+    const cancelled = await db.whatsAppMessage.updateMany({
       where: { id: pipeline.whatsappMessageId!, status: "QUEUED" },
       data: { status: "CANCELLED", failureReason: "paused" },
     });
-    if (result.count === 1) {
-      cancelled += 1;
-      await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError("paused"));
+    if (cancelled.count === 1) {
+      await db.leadPipeline.updateMany({
+        where: { id: pipeline.id, stage: "DELIVERY_QUEUED", whatsappMessageId: pipeline.whatsappMessageId },
+        data: { stage: "VIDEO_UPLOADED", whatsappMessageId: null },
+      });
+      emitEvent("pipeline.held", { pipelineId: pipeline.id, campaignId, leadId: pipeline.leadId });
     }
   }
-  return { cancelled };
+  const held = await db.leadPipeline.count({ where: { campaignId, stage: "VIDEO_UPLOADED" } });
+  emitEvent("campaign.sending_paused", { campaignId, held });
+  return { paused: true, held };
+}
+
+/** Resumes a paused campaign and sends every pitch that was waiting. */
+export async function resumeCampaignSending(
+  db: PrismaClient,
+  userId: string,
+  campaignId: string,
+  deps: PipelineDeps = defaultDeps,
+): Promise<{ paused: false; released: number }> {
+  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { userId: true } });
+  if (!campaign || campaign.userId !== userId) throw new NotFoundError("Campaign", campaignId);
+  await db.campaign.update({ where: { id: campaignId }, data: { sendingPaused: false } });
+  const released = await releaseHeldPipelines(db, { campaignId }, deps);
+  emitEvent("campaign.sending_resumed", { campaignId, released });
+  return { paused: false, released };
+}
+
+/**
+ * Hands every pitch waiting at VIDEO_UPLOADED in a non-paused campaign to
+ * delivery. Used by resume, and by the maintenance job as the safety net for
+ * a pitch whose process died between its recording finishing and its send
+ * being queued (`olderThan` keeps it off pitches that are mid-step).
+ */
+export async function releaseHeldPipelines(
+  db: PrismaClient,
+  filter: { campaignId?: string; olderThan?: Date },
+  deps: PipelineDeps = defaultDeps,
+): Promise<number> {
+  const held = await db.leadPipeline.findMany({
+    where: {
+      stage: "VIDEO_UPLOADED",
+      campaign: { sendingPaused: false },
+      ...(filter.campaignId ? { campaignId: filter.campaignId } : {}),
+      ...(filter.olderThan ? { updatedAt: { lte: filter.olderThan } } : {}),
+    },
+    select: { id: true },
+    take: 500,
+  });
+  for (const pipeline of held) await prepareDelivery(db, pipeline.id, deps);
+  return held.length;
 }

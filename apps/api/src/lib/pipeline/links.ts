@@ -65,3 +65,9 @@ export function fallbackPitch(businessName: string): string {
 }
 
 export const FALLBACK_PITCH_PROMPT_VERSION = "template-fallback-v1";
+
+/**
+ * Caption on the second video of an Auto pitch. The first (the phone
+ * walkthrough) carries the pitch itself; this one only says what it is.
+ */
+export const LAPTOP_VIDEO_CAPTION = "And here is the same site on a laptop screen.";

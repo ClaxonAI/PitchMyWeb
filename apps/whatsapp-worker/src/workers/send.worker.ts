@@ -117,10 +117,13 @@ export function createSendWorker(
       try {
         // Text, or video with the body as caption. The attachment is read
         // inside deliverMessage, i.e. only after the claim above.
-        const { providerMessageId } = await deliverMessage(provider, media, message, {
+        const { providerMessageId, secondary } = await deliverMessage(provider, media, message, {
           textMs: config.WA_SEND_TIMEOUT_MS,
           mediaMs: config.WA_SEND_MEDIA_TIMEOUT_MS,
         });
+        if (secondary && !secondary.sent) {
+          logger.warn({ messageId, reason: secondary.reason }, "pitch sent, but the second video failed");
+        }
         const sentAt = new Date();
         await db.whatsAppMessage.update({
           where: { id: messageId },

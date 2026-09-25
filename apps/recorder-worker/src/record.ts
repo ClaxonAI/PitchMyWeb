@@ -3,19 +3,51 @@ import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser } from "playwright";
 
-// Records a scripted walkthrough of a preview page as a portrait phone video.
+// Records a scripted walkthrough of a preview page, as a portrait phone video
+// and as a laptop-screen video: every pitch sends both, so the owner sees the
+// site the way their customers will on either.
 //
 // The tour: hold on the hero, then glide through each [data-section] with an
 // eased scroll, pausing briefly at each section so its reveal animation
 // plays on camera, and finish on the closing call-to-action.
 
-export const VIEWPORT = { width: 390, height: 844 } as const;
-const DEVICE_SCALE = 2;
-const HEADER_OFFSET = 72;
+export type RecordingDevice = "phone" | "laptop";
+
+type DeviceProfile = {
+  viewport: { width: number; height: number };
+  deviceScaleFactor: number;
+  isMobile: boolean;
+  userAgent: string;
+  /** Height of the sticky header, so a section is not scrolled under it. */
+  headerOffset: number;
+};
+
+export const DEVICES: Record<RecordingDevice, DeviceProfile> = {
+  phone: {
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 PitchMyWebRecorder",
+    headerOffset: 72,
+  },
+  // A common laptop CSS viewport (13-14" at default scaling).
+  laptop: {
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    isMobile: false,
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 PitchMyWebRecorder",
+    headerOffset: 88,
+  },
+};
+
+/** The phone viewport, kept under its old name for existing callers. */
+export const VIEWPORT = DEVICES.phone.viewport;
 
 export type RecordOptions = {
   tourSeconds: number;
   navigationTimeoutMs: number;
+  device?: RecordingDevice;
 };
 
 export type RawRecording = {
@@ -49,20 +81,20 @@ export async function closeBrowser(): Promise<void> {
 }
 
 export async function recordTour(url: string, options: RecordOptions): Promise<RawRecording> {
+  const device = DEVICES[options.device ?? "phone"];
   const workDir = await mkdtemp(path.join(os.tmpdir(), "pmw-rec-"));
   const browser = await getBrowser();
   const contextStartedAt = Date.now();
   const context = await browser.newContext({
-    viewport: VIEWPORT,
-    deviceScaleFactor: DEVICE_SCALE,
-    isMobile: true,
-    hasTouch: true,
+    viewport: device.viewport,
+    deviceScaleFactor: device.deviceScaleFactor,
+    isMobile: device.isMobile,
+    hasTouch: device.isMobile,
     locale: "en-IN",
     colorScheme: "light",
     reducedMotion: "no-preference",
-    userAgent:
-      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 PitchMyWebRecorder",
-    recordVideo: { dir: workDir, size: VIEWPORT },
+    userAgent: device.userAgent,
+    recordVideo: { dir: workDir, size: device.viewport },
   });
 
   // tsx/esbuild (keepNames) wraps functions in a `__name(...)` helper that
@@ -137,7 +169,7 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
         }
         await sleep(endHold);
       },
-      { tourMs: options.tourSeconds * 1000, headerOffset: HEADER_OFFSET },
+      { tourMs: options.tourSeconds * 1000, headerOffset: device.headerOffset },
     );
   } catch (error) {
     await context.close().catch(() => undefined);

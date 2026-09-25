@@ -13,6 +13,8 @@ const publicSiteSchema = z.object({
   expired: z.boolean(),
   expiresAt: z.string().nullable(),
   hasVideo: z.boolean(),
+  // Optional so a sites deploy that lands before the API one still parses.
+  hasLaptopVideo: z.boolean().optional().default(false),
 });
 
 export type PublicSite = z.infer<typeof publicSiteSchema>;
@@ -30,9 +32,9 @@ export async function fetchSite(slug: string): Promise<PublicSite | null> {
 }
 
 /** A fresh signed URL for the preview's walkthrough video, or null. */
-export async function fetchVideoUrl(slug: string): Promise<string | null> {
+export async function fetchVideoUrl(slug: string, view: "phone" | "laptop" = "phone"): Promise<string | null> {
   if (!SLUG_PATTERN.test(slug)) return null;
-  const response = await fetch(`${API_URL}/api/public/sites/${slug}/video`, { redirect: "manual", cache: "no-store" });
+  const response = await fetch(`${API_URL}/api/public/sites/${slug}/video${view === "laptop" ? "?view=laptop" : ""}`, { redirect: "manual", cache: "no-store" });
   if (response.status !== 302 && response.status !== 307) return null;
   const location = response.headers.get("location");
   return location && /^https?:\/\//.test(location) ? location : null;

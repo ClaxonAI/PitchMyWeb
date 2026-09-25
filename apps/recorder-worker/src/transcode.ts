@@ -8,7 +8,9 @@ import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 // H.264 (yuv420p, even dimensions), faststart, no audio track, small.
 
 export const MAX_MP4_BYTES = 8 * 1024 * 1024;
-const OUTPUT_WIDTH = 720;
+/** Phone recordings are scaled to this width; laptop ones keep their 1280. */
+export const PHONE_OUTPUT_WIDTH = 720;
+export const LAPTOP_OUTPUT_WIDTH = 1280;
 
 export class TranscodeError extends Error {
   constructor(message: string) {
@@ -34,7 +36,7 @@ function run(binary: string, args: string[]): Promise<string> {
   });
 }
 
-async function encode(input: string, output: string, trimSeconds: number, crf: number): Promise<void> {
+async function encode(input: string, output: string, trimSeconds: number, crf: number, width: number): Promise<void> {
   await run(ffmpegInstaller.path, [
     "-y",
     "-ss",
@@ -42,7 +44,7 @@ async function encode(input: string, output: string, trimSeconds: number, crf: n
     "-i",
     input,
     "-vf",
-    `scale=${OUTPUT_WIDTH}:-2:flags=lanczos,fps=30,format=yuv420p`,
+    `scale=${width}:-2:flags=lanczos,fps=30,format=yuv420p`,
     "-c:v",
     "libx264",
     "-preset",
@@ -89,18 +91,25 @@ export async function probe(file: string): Promise<{ durationMs: number; width: 
   };
 }
 
-export async function transcodeToMp4(webmPath: string, workDir: string, trimSeconds: number): Promise<EncodedVideo> {
-  const mp4Path = path.join(workDir, "walkthrough.mp4");
-  const posterPath = path.join(workDir, "poster.jpg");
+export async function transcodeToMp4(
+  webmPath: string,
+  workDir: string,
+  trimSeconds: number,
+  options: { width?: number; name?: string } = {},
+): Promise<EncodedVideo> {
+  const width = options.width ?? PHONE_OUTPUT_WIDTH;
+  const name = options.name ?? "walkthrough";
+  const mp4Path = path.join(workDir, `${name}.mp4`);
+  const posterPath = path.join(workDir, `${name}.jpg`);
 
   // Try a quality setting first, then a smaller one if the file is too big.
   for (const crf of [26, 31, 35]) {
-    await encode(webmPath, mp4Path, trimSeconds, crf);
+    await encode(webmPath, mp4Path, trimSeconds, crf, width);
     if ((await stat(mp4Path)).size <= MAX_MP4_BYTES) break;
     if (crf === 35) throw new TranscodeError("Encoded video is larger than the WhatsApp budget");
   }
 
-  await run(ffmpegInstaller.path, ["-y", "-ss", "1.2", "-i", mp4Path, "-frames:v", "1", "-vf", "scale=540:-2", "-q:v", "4", posterPath]);
+  await run(ffmpegInstaller.path, ["-y", "-ss", "1.2", "-i", mp4Path, "-frames:v", "1", "-vf", `scale=${width > PHONE_OUTPUT_WIDTH ? 960 : 540}:-2`, "-q:v", "4", posterPath]);
 
   const info = await probe(mp4Path);
   return {

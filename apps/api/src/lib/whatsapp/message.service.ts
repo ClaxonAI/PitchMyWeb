@@ -148,6 +148,13 @@ export type MessageMedia = {
 export type EnqueueMessageOptions = {
   /** Attach a stored file; the body becomes its caption. Server-side callers only. */
   media?: MessageMedia;
+  /**
+   * A second file sent right after the first, in the same send (the laptop
+   * walkthrough after the phone one). One message row, one policy check, one
+   * rate-limit slot: sending it as its own message would be refused as a
+   * recent duplicate to the same number.
+   */
+  secondaryMedia?: MessageMedia & { caption: string };
 };
 
 export async function enqueueMessage(
@@ -184,6 +191,13 @@ export async function enqueueMessage(
       body: draft.body,
       ...(options.media
         ? { mediaKind: options.media.kind, mediaStorageKey: options.media.storageKey, mediaMimeType: options.media.mimeType }
+        : {}),
+      ...(options.media && options.secondaryMedia
+        ? {
+            secondaryMediaStorageKey: options.secondaryMedia.storageKey,
+            secondaryMediaMimeType: options.secondaryMedia.mimeType,
+            secondaryCaption: options.secondaryMedia.caption,
+          }
         : {}),
       status: "QUEUED",
     },

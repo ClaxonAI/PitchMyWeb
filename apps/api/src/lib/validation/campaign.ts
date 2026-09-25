@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema, websiteRequirementSchema } from "./common";
+import { messageTemplateSchema } from "../pipeline/message-template";
 
 // Shared field shapes with NO defaults applied — the base that both the
 // create and update schemas derive from. Keeping defaults out of this base
@@ -26,6 +27,9 @@ const campaignFieldsSchema = z.object({
   selectionMode: z.enum(["MANUAL", "AUTO"]),
   targetCount: z.number().int().min(1, "targetCount must be at least 1").max(200, "targetCount must be at most 200"),
   deliveryMode: z.enum(["AUTO", "DIRECT"]),
+  // The WhatsApp message this campaign sends (pipeline/message-template.ts).
+  // Optional: without one each lead keeps its own generated pitch.
+  messageTemplate: messageTemplateSchema,
 });
 
 /**
@@ -61,6 +65,7 @@ export const campaignCreateSchema = campaignFieldsSchema.extend({
   selectionMode: campaignFieldsSchema.shape.selectionMode.default("MANUAL"),
   targetCount: campaignFieldsSchema.shape.targetCount.default(20),
   deliveryMode: campaignFieldsSchema.shape.deliveryMode.default("AUTO"),
+  messageTemplate: campaignFieldsSchema.shape.messageTemplate.optional(),
 });
 
 export type CampaignCreateParsed = z.infer<typeof campaignCreateSchema>;
