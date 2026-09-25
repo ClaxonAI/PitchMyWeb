@@ -5,7 +5,8 @@ import { getWebsiteProjectForUser, sitesPublicUrl } from "./website.service";
 
 // Download a published sample site as a ZIP: index.html plus the CSS, fonts
 // and images it uses, with every reference rewritten to a relative path, so
-// it opens straight from the unzipped folder or uploads to any static host.
+// it opens straight from the unzipped folder or uploads to any static host;
+// and the site's content/design JSON under site-data/ for editing.
 //
 // The page is fetched from apps/sites exactly as a visitor sees it, then
 // made static:
@@ -161,10 +162,22 @@ export async function exportPublishedSite(
     "Open index.html in a browser, or upload this whole folder to any static host",
     "(Netlify, Vercel, GitHub Pages, cPanel, S3). Keep the assets folder next to index.html.",
     "",
+    "The site's own content and design are in site-data/ as JSON (business name,",
+    "services, contact details, theme), for editing or rebuilding it elsewhere.",
+    "",
     `Live preview: ${publicBase}/s/${project.slug}`,
     "",
   ].join("\n");
 
-  const zip = zipSync({ "index.html": strToU8(html), "README.txt": strToU8(readme), ...bag.files }, { level: 6 });
+  // The generation data, so the site can be edited or rebuilt, not only
+  // hosted as is.
+  const json = (value: unknown) => strToU8(`${JSON.stringify(value ?? {}, null, 2)}\n`);
+  const siteData = {
+    "site-data/content.json": json(project.contentJSON),
+    "site-data/design.json": json(project.designJSON),
+    "site-data/manifest.json": json({ template: project.template, theme: project.theme, slug: project.slug, versionCount: project.versions.length }),
+  };
+
+  const zip = zipSync({ "index.html": strToU8(html), "README.txt": strToU8(readme), ...siteData, ...bag.files }, { level: 6 });
   return { filename: `${project.slug}.zip`, zip };
 }

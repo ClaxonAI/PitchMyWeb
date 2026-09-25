@@ -43,7 +43,7 @@ export default async function ActivityPage() {
             description="Every lead created, demo built and pitch sent is logged here as it happens."
             action={
               <Button asChild>
-                <Link href="/discover">Find businesses</Link>
+                <Link href="/campaigns/new">Find businesses</Link>
               </Button>
             }
           />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send } from "lucide-react";
+import { LoaderCircle, Send } from "lucide-react";
 import { ApiError, campaignsApi, type DeliveryMode, type PitchBatch } from "@/lib/api-client";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
@@ -156,7 +156,10 @@ export function PitchBatchPanel({
       {needsWhatsApp && (max > 0 || working) && <WhatsAppCampaignStep onReadyChange={setWhatsappReady} />}
       <Card>
         <CardHeader>
-          <CardTitle>Pitch these leads</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+          Pitch these leads
+          {working && <LoaderCircle className="size-4 animate-spin text-dash-primary" aria-label="Pitches are being created" />}
+        </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 p-0">
           <div className="flex flex-col gap-3 p-4 pb-0">

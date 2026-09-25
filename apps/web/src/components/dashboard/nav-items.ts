@@ -13,9 +13,10 @@ export type NavItem = { href: string; label: string; icon: LucideIcon; stub?: bo
 // (/dashboard/whatsapp -> /whatsapp) rather than mixing conventions.
 //
 // Four modules. Everything else is a tab inside one of them:
-//   Campaigns — the campaign list, New campaign (/discover), leads,
+//   Campaigns — the campaign list, New campaign (/campaigns/new), leads,
 //               pitches and activity.
-//   Settings  — general settings, profile and the linked WhatsApp.
+//   Settings  — profile, appearance and password; the linked WhatsApp;
+//               billing.
 // Every page keeps its URL.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

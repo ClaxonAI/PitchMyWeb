@@ -92,7 +92,7 @@ export function DashboardStartCard() {
 
         <div className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/discover">
+            <Link href="/campaigns/new">
               <Search />
               Find businesses
             </Link>

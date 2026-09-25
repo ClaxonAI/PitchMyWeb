@@ -304,6 +304,10 @@ describe("handleLogout", () => {
     const logoutRequest = new NextRequest("http://localhost/api/auth/logout", { method: "POST", headers: { cookie: `${SESSION_COOKIE_NAME}=${token}` } });
     const logoutResponse = await handleLogout(prisma, logoutRequest);
     expect(logoutResponse.status).toBe(200);
+    expect(logoutResponse.cookies.get(SESSION_COOKIE_NAME)?.value).toBe("");
+    expect(logoutResponse.cookies.get(SESSION_COOKIE_NAME)?.maxAge).toBe(0);
+    expect(logoutResponse.cookies.get("pmw_signed_in")?.value).toBe("");
+    expect(logoutResponse.cookies.get("pmw_signed_in")?.maxAge).toBe(0);
 
     const { verifySessionToken } = await import("../../../lib/auth/session");
     const resolved = await verifySessionToken(prisma, token);

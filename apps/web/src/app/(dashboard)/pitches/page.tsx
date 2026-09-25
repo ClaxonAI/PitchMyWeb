@@ -44,7 +44,7 @@ export default async function PitchesPage() {
             description="Each lead gets a pitch written for it once a search finishes and its demo site is built."
             action={
               <Button asChild>
-                <Link href="/discover">Find businesses</Link>
+                <Link href="/campaigns/new">Find businesses</Link>
               </Button>
             }
           />

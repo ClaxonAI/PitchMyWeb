@@ -54,7 +54,7 @@ async function projectFor(status: "PUBLISHED" | "DRAFT", expiresAt: Date | null 
   const lead = await prisma.lead.create({ data: { campaignId: campaign.id, businessId: business.id } });
   const slug = `smile-dental-${Math.random().toString(36).slice(2, 8)}`;
   const project = await prisma.websiteProject.create({
-    data: { leadId: lead.id, template: "dental-clinic", contentJSON: {}, slug, status, expiresAt, publishedUrl: `https://preview.example.test/s/${slug}` },
+    data: { leadId: lead.id, template: "dental-clinic", contentJSON: { businessName: "Smile Dental" }, slug, status, expiresAt, publishedUrl: `https://preview.example.test/s/${slug}` },
   });
   return { user, project, slug };
 }
@@ -68,7 +68,18 @@ describe("exportPublishedSite", () => {
     expect(filename).toBe(`${slug}.zip`);
     const files = unzipSync(zip);
     expect(Object.keys(files).sort()).toEqual(
-      ["README.txt", "assets/app.css", "assets/favicon.ico", "assets/hero.webp", "assets/hero_2x.webp", "assets/inter.woff2", "index.html"].sort(),
+      [
+        "README.txt",
+        "assets/app.css",
+        "assets/favicon.ico",
+        "assets/hero.webp",
+        "assets/hero_2x.webp",
+        "assets/inter.woff2",
+        "index.html",
+        "site-data/content.json",
+        "site-data/design.json",
+        "site-data/manifest.json",
+      ].sort(),
     );
 
     const html = strFromU8(files["index.html"]!);
@@ -86,6 +97,9 @@ describe("exportPublishedSite", () => {
     // The stylesheet points at the font next to it.
     expect(strFromU8(files["assets/app.css"]!)).toContain('url("inter.woff2")');
     expect(strFromU8(files["assets/inter.woff2"]!)).toBe("FONT");
+    // The editable generation data rides along.
+    expect(JSON.parse(strFromU8(files["site-data/content.json"]!))).toEqual({ businessName: "Smile Dental" });
+    expect(JSON.parse(strFromU8(files["site-data/manifest.json"]!))).toMatchObject({ template: "dental-clinic", slug });
   });
 
   it("refuses a draft, an expired preview, and someone else's website", async () => {
