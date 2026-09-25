@@ -144,6 +144,25 @@ export class ObjectStorage {
   }
 }
 
+/**
+ * How long a demo video stays downloadable after it is recorded. After this
+ * the pipeline-maintenance job deletes its objects, so storage only ever
+ * holds about a week of videos. Read by the recorder (which stamps
+ * DemoRecording.expiresAt) and the API (which enforces it), so both use the
+ * same VIDEO_RETENTION_DAYS.
+ */
+export const DEFAULT_VIDEO_RETENTION_DAYS = 7;
+
+export function videoRetentionDays(env: Env = process.env): number {
+  const parsed = Number(env.VIDEO_RETENTION_DAYS);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 90 ? parsed : DEFAULT_VIDEO_RETENTION_DAYS;
+}
+
+/** When a video recorded at `readyAt` stops being downloadable. */
+export function videoExpiry(readyAt = new Date(), env: Env = process.env): Date {
+  return new Date(readyAt.getTime() + videoRetentionDays(env) * 24 * 60 * 60 * 1000);
+}
+
 /** Object keys, defined in one place so the recorder and the API agree. */
 export const storageKeys = {
   recording: (campaignId: string, recordingId: string) => `recordings/${campaignId}/${recordingId}.mp4`,

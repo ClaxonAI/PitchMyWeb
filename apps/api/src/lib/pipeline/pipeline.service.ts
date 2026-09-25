@@ -7,6 +7,7 @@ import { generateWhatsAppAction } from "../leads/whatsapp.service";
 import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
+import { settleWhatsAppSession } from "../whatsapp/session-policy";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
 import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
 import { enqueueRecording } from "./recording-queue";
@@ -173,7 +174,7 @@ async function failPipeline(
     console.error(`Pipeline ${pipeline.id} failed at ${failureStage}:`, error);
   }
 
-  await db.$transaction(async (tx) => {
+  const resolved = await db.$transaction(async (tx) => {
     // Read the *fresh* attempts count from this very write, not from the
     // `pipeline` parameter a caller may have loaded earlier: buildAndPublish
     // increments attempts via its own setStage call before it can fail, so
@@ -189,7 +190,11 @@ async function failPipeline(
     if (isFinal) {
       await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, updated.campaign.userId, "REFUNDED");
     }
+    return isFinal ? updated.campaign.userId : null;
   });
+  // A pitch that has finally failed may have been the campaign's last one
+  // in flight: if so, the linked number is signed out now.
+  if (resolved) await settleWhatsAppSession(db, resolved);
 
   const alert = failureStage === "DELIVERY_QUEUED" || failureStage === "VIDEO_UPLOADED";
   emitEvent(
@@ -516,6 +521,7 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
   const byId = new Map(messages.map((m) => [m.id, m]));
 
   let changed = 0;
+  const deliveredFor = new Set<string>();
   for (const pipeline of pending) {
     const message = byId.get(pipeline.whatsappMessageId!);
     if (!message) continue;
@@ -530,6 +536,7 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
       });
       if (claimed.count === 1) {
         changed += 1;
+        deliveredFor.add(pipeline.campaign.userId);
         await markLeadPitched(db, pipeline.leadId, { source: "whatsapp_auto", messageId: message.id });
         emitEvent("pipeline.sent", { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId, mode: "AUTO" });
       }
@@ -541,6 +548,9 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
       await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError("not_delivered"));
     }
   }
+  // The last delivery receipt of a campaign is when its sending is over: sign
+  // the number out now rather than on the next scheduled sweep.
+  for (const userId of deliveredFor) await settleWhatsAppSession(db, userId, now);
   return changed;
 }
 

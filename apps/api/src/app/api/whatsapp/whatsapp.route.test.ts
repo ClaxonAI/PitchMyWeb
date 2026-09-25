@@ -7,7 +7,7 @@ import { SESSION_COOKIE_NAME, createSession } from "../../../lib/auth/session";
 import { NotFoundError, UnauthenticatedError } from "../../../lib/errors";
 import { sendQueue, sessionQueue } from "../../../lib/whatsapp/queue";
 import { handleCreateWhatsAppAccount, handleListWhatsAppAccounts } from "./accounts/route";
-import { handleGetWhatsAppAccount } from "./accounts/[id]/route";
+import { handleGetWhatsAppAccount, handlePatchWhatsAppAccount } from "./accounts/[id]/route";
 import { handleConnectWhatsAppAccount } from "./accounts/[id]/connect/route";
 import { handleGetWhatsAppStatus } from "./accounts/[id]/status/route";
 import { handleCreateWhatsAppMessage, handleListWhatsAppMessages } from "./messages/route";
@@ -198,6 +198,60 @@ describe("POST /api/whatsapp/accounts/:id/connect", () => {
 
     const jobs = await sessionQueue().getJobs(["waiting", "delayed", "prioritized", "active"]);
     expect(jobs.some((job) => job.data.accountId === accountId && job.data.type === "connect")).toBe(true);
+  });
+
+  it("starts a login that ends with the campaign unless the user asks to stay signed in", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("connect-per-campaign");
+    await prisma.whatsAppAccount.update({ where: { id: accountId }, data: { logoutReason: "campaign_finished" } });
+    const before = Date.now();
+    await handleConnectWhatsAppAccount(prisma, req(`http://localhost/api/whatsapp/accounts/${accountId}/connect`, { method: "POST", cookieHeader }), {
+      id: accountId,
+    });
+
+    const stored = await prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(stored.linkedAt!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(stored.stayLinkedUntil).toBeNull();
+    // The previous sign-out's reason belongs to the previous login.
+    expect(stored.logoutReason).toBeNull();
+  });
+
+  it("keeps the number signed in for 3 days when the box is ticked", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("connect-stay-linked");
+    const response = await handleConnectWhatsAppAccount(
+      prisma,
+      req(`http://localhost/api/whatsapp/accounts/${accountId}/connect`, { method: "POST", body: { stayLinked: true }, cookieHeader }),
+      { id: accountId },
+    );
+    const body = await response.json();
+
+    const stored = await prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(stored.stayLinkedUntil!.getTime() - stored.linkedAt!.getTime()).toBe(3 * 24 * 60 * 60 * 1000);
+    expect(body.stayLinkedUntil).toBe(stored.stayLinkedUntil!.toISOString());
+  });
+
+  it("lets the user change their mind about staying signed in, and only for their own account", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("stay-linked-toggle");
+    const patch = (body: unknown, cookie = cookieHeader) =>
+      handlePatchWhatsAppAccount(prisma, req(`http://localhost/api/whatsapp/accounts/${accountId}`, { method: "PATCH", body, cookieHeader: cookie }), { id: accountId });
+
+    const on = await (await patch({ stayLinked: true })).json();
+    expect(new Date(on.stayLinkedUntil).getTime() - Date.now()).toBeGreaterThan(3 * 24 * 60 * 60 * 1000 - 60_000);
+    const off = await (await patch({ stayLinked: false })).json();
+    expect(off.stayLinkedUntil).toBeNull();
+
+    const { cookieHeader: otherCookie } = await authedUser("stay-linked-other");
+    await expect(patch({ stayLinked: true }, otherCookie)).rejects.toThrow(NotFoundError);
+  });
+
+  it("rejects unknown fields in the body", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("connect-strict");
+    await expect(
+      handleConnectWhatsAppAccount(
+        prisma,
+        req(`http://localhost/api/whatsapp/accounts/${accountId}/connect`, { method: "POST", body: { stayLinkedDays: 30 }, cookieHeader }),
+        { id: accountId },
+      ),
+    ).rejects.toThrow();
   });
 });
 

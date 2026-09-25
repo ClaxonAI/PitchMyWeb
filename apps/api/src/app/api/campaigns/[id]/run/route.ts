@@ -10,6 +10,7 @@ import { assertCampaignRunAllowed } from "../../../../../lib/campaigns/run-guard
 import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { runCampaign } from "../../../../../lib/campaigns/run.service";
 import { campaignRunRequestSchema } from "../../../../../lib/validation/campaign";
+import { assertWhatsAppReady } from "../../../../../lib/whatsapp/session-policy";
 import { cuidSchema } from "../../../../../lib/validation/common";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -30,6 +31,10 @@ export async function handleRunCampaign(db: PrismaClient, request: NextRequest, 
   await assertCanStartDiscovery(db, user.id);
   const campaign = await loadOwnedCampaign(db, id, user.id);
   await assertMarketAllowed(db, user.id, campaign.market);
+  // An Auto campaign pitches from the user's WhatsApp as soon as discovery
+  // finishes, and the number is signed out after every campaign unless the
+  // user chose to stay linked — so each run starts with a linked number.
+  await assertWhatsAppReady(db, user.id, campaign);
   const result = await runCampaign(db, user.id, id, { idempotencyKey: body.idempotencyKey });
   // An async provider (osm) returns with the run still in progress: 202
   // Accepted, and the client polls GET /api/campaigns/:id for the outcome.

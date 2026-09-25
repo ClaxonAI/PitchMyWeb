@@ -26,7 +26,8 @@ export type OperationalEvent =
   | "recording.finished"
   | "delivery.failed"
   | "preview.cleanup"
-  | "website_verification.batch_enqueued";
+  | "website_verification.batch_enqueued"
+  | "whatsapp.signed_out";
 
 export type EventLevel = "info" | "warn" | "error";
 

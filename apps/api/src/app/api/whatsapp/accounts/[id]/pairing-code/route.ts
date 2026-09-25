@@ -20,7 +20,7 @@ export async function handleRequestPairingCode(db: PrismaClient, request: NextRe
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
   const body = await parseJsonBody(request, pairingCodeRequestSchema);
-  const account = await requestPairingCode(db, user.id, id, body.phoneNumber);
+  const account = await requestPairingCode(db, user.id, id, body.phoneNumber, { stayLinked: body.stayLinked });
   return jsonOk(account, 202);
 }
 

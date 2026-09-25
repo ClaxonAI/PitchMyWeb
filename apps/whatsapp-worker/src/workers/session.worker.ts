@@ -27,7 +27,7 @@ export function createSessionWorker(connection: Redis, sessions: SessionManager,
           await sessions.requestPairingCode(command.accountId, command.phoneNumber!);
           return;
         case "disconnect":
-          await sessions.disconnect(command.accountId);
+          await sessions.disconnect(command.accountId, { expectedLinkedAt: command.expectedLinkedAt });
           return;
       }
     },

@@ -3,6 +3,7 @@
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { SessionState } from "./useWhatsAppSession";
+import { isStayLinkedActive, sessionLifetimeText, STAY_LINKED_LABEL } from "./whatsapp-session-text";
 
 function formatLastSeen(value: string | null): string {
   if (!value) return "just now";
@@ -17,11 +18,14 @@ export function ConnectedCard({
   state,
   pending,
   onDisconnect,
+  onStayLinkedChange,
 }: {
   state: SessionState;
   pending: boolean;
   onDisconnect: () => void;
+  onStayLinkedChange: (value: boolean) => void;
 }) {
+  const stayLinked = isStayLinkedActive(state.stayLinkedUntil);
   return (
     <div className="rounded-card border border-whatsapp/25 bg-whatsapp/6 p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -41,10 +45,23 @@ export function ConnectedCard({
         </Button>
       </div>
 
-      <p className="mt-4 border-t border-whatsapp/20 pt-4 text-[12px] leading-relaxed text-ink/60">
-        Disconnecting unlinks this device in WhatsApp, deletes the stored credentials, and cancels anything still queued.
-        Your message history stays.
-      </p>
+      <div className="mt-4 flex flex-col gap-3 border-t border-whatsapp/20 pt-4">
+        <p className="text-[13px] text-ink">{sessionLifetimeText(state.stayLinkedUntil)}</p>
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+          <input
+            type="checkbox"
+            checked={stayLinked}
+            disabled={pending}
+            onChange={(event) => onStayLinkedChange(event.target.checked)}
+            className="size-4 shrink-0 accent-primary"
+          />
+          {STAY_LINKED_LABEL}
+        </label>
+        <p className="text-[12px] leading-relaxed text-ink/60">
+          Signing out — by you or automatically — unlinks this device in WhatsApp, deletes the stored credentials, and cancels anything still
+          queued. Your message history stays.
+        </p>
+      </div>
     </div>
   );
 }

@@ -3,14 +3,18 @@ import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser } from "playwright";
 
-// Records a scripted walkthrough of a preview page as a portrait phone video.
+// Records a scripted walkthrough of a preview page as a landscape laptop
+// video: the desktop layout at 1280x720, the view a business owner is shown
+// the site in. No phone recording is made.
 //
 // The tour: hold on the hero, then glide through each [data-section] with an
 // eased scroll, pausing briefly at each section so its reveal animation
 // plays on camera, and finish on the closing call-to-action.
 
-export const VIEWPORT = { width: 390, height: 844 } as const;
-const DEVICE_SCALE = 2;
+export const VIEWPORT = { width: 1280, height: 720 } as const;
+// The video is captured at VIEWPORT size whatever the scale, so 1 renders
+// exactly the pixels that end up in the file.
+const DEVICE_SCALE = 1;
 const HEADER_OFFSET = 72;
 
 export type RecordOptions = {
@@ -55,13 +59,13 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: DEVICE_SCALE,
-    isMobile: true,
-    hasTouch: true,
+    isMobile: false,
+    hasTouch: false,
     locale: "en-IN",
     colorScheme: "light",
     reducedMotion: "no-preference",
     userAgent:
-      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 PitchMyWebRecorder",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 PitchMyWebRecorder",
     recordVideo: { dir: workDir, size: VIEWPORT },
   });
 

@@ -1,5 +1,5 @@
 import type { PipelineStage, PrismaClient } from "@pitchmyweb/db";
-import { NotFoundError } from "../errors";
+import { DomainError, NotFoundError } from "../errors";
 import { loadOwnedCampaign } from "../campaigns/campaign.service";
 import { getObjectStorage, RECORDING_URL_TTL_SECONDS } from "../storage";
 import { syncDeliveries } from "./pipeline.service";
@@ -169,7 +169,7 @@ export async function listCampaignPipelines(db: PrismaClient, userId: string, ca
     }),
     db.demoRecording.findMany({
       where: { id: { in: recordingIds } },
-      select: { id: true, status: true, durationMs: true, sizeBytes: true, failureReason: true, updatedAt: true },
+      select: { id: true, status: true, durationMs: true, sizeBytes: true, failureReason: true, expiresAt: true, updatedAt: true },
     }),
     db.whatsAppMessage.findMany({
       where: { id: { in: messageIds } },
@@ -205,8 +205,25 @@ export async function listCampaignPipelines(db: PrismaClient, userId: string, ca
   };
 }
 
+/** The video existed but its download window closed and it was (or is about to be) deleted. */
+export class VideoExpiredError extends DomainError {
+  constructor() {
+    super("This demo video has expired. Videos can be downloaded for a limited time after they are recorded.", "VIDEO_EXPIRED", 410);
+  }
+}
+
+/** True once a recording's download window has closed. */
+export function isVideoExpired(recording: { expiresAt: Date | null }, now = new Date()): boolean {
+  return Boolean(recording.expiresAt && recording.expiresAt.getTime() <= now.getTime());
+}
+
 /** Signed URL for the pipeline's latest ready recording (dashboard player). */
-export async function getPipelineVideoUrl(db: PrismaClient, userId: string, pipelineId: string, options: { download?: boolean } = {}): Promise<string> {
+export async function getPipelineVideoUrl(
+  db: PrismaClient,
+  userId: string,
+  pipelineId: string,
+  options: { download?: boolean; now?: Date } = {},
+): Promise<string> {
   const pipeline = await db.leadPipeline.findUnique({
     where: { id: pipelineId },
     select: { recordingId: true, campaign: { select: { userId: true } }, lead: { select: { business: { select: { name: true } } } } },
@@ -215,6 +232,9 @@ export async function getPipelineVideoUrl(db: PrismaClient, userId: string, pipe
     throw new NotFoundError("Recording", pipelineId);
   }
   const recording = await db.demoRecording.findUnique({ where: { id: pipeline.recordingId } });
+  // Checked before the storage lookup: an expired video is refused even in
+  // the minutes between its deadline and the sweep that deletes it.
+  if (recording && (isVideoExpired(recording, options.now) || recording.failureReason === "expired")) throw new VideoExpiredError();
   const storage = getObjectStorage();
   if (!recording || recording.status !== "READY" || !recording.storageKey || !storage) {
     throw new NotFoundError("Recording", pipelineId);
