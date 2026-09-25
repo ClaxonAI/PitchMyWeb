@@ -42,7 +42,7 @@ export async function getPublicSite(db: PrismaClient, slug: string, now = new Da
   const video = expired
     ? null
     : await db.demoRecording.findFirst({
-        where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null } },
+        where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
         select: { id: true, desktopStorageKey: true },
       });
 
@@ -65,7 +65,9 @@ export async function getPublicVideoUrl(db: PrismaClient, slug: string, now = ne
   const project = await loadPublishedProject(db, slug);
   if (project.expiresAt && project.expiresAt.getTime() <= now.getTime()) throw new NotFoundError("Video", slug);
   const recording = await db.demoRecording.findFirst({
-    where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null } },
+    // A video past its download window is gone for recipients too, even
+    // before the maintenance sweep has deleted the object.
+    where: { websiteProjectId: project.id, status: "READY", storageKey: { not: null }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
     orderBy: { updatedAt: "desc" },
     select: { storageKey: true, desktopStorageKey: true },
   });

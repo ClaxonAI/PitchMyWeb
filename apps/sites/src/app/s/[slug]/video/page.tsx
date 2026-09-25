@@ -53,7 +53,7 @@ export default async function VideoPage({ params }: PageProps) {
           <div className="mt-8 grid w-full grid-cols-1 items-start gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
             <figure className="flex flex-col gap-3">
               <div className="overflow-hidden rounded-2xl border border-line bg-ink shadow-float">
-                <video src={laptopUrl} controls playsInline preload="metadata" className="aspect-[16/10] w-full bg-ink object-contain" />
+                <video src={laptopUrl} controls playsInline preload="metadata" className="aspect-video w-full bg-ink object-contain" />
               </div>
               <figcaption className="text-[13px] text-muted">On a laptop</figcaption>
             </figure>

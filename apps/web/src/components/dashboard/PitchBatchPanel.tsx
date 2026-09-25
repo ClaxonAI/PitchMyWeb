@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send } from "lucide-react";
-import { ApiError, campaignsApi, type PitchBatch } from "@/lib/api-client";
+import { ApiError, campaignsApi, type DeliveryMode, type PitchBatch } from "@/lib/api-client";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { Input } from "@/components/dashboard-ui/input";
 import { Label } from "@/components/dashboard-ui/label";
 import { StatusBadge } from "./StatusBadge";
 import { useSession } from "./SessionProvider";
+import { WhatsAppCampaignStep } from "./WhatsAppCampaignStep";
 
 const POLL_MS = 5000;
 
@@ -85,11 +86,14 @@ function BatchProgress({ batch }: { batch: PitchBatch }) {
  */
 export function PitchBatchPanel({
   campaignId,
+  deliveryMode,
   eligibleCount,
   remainingSlots,
   initialBatches,
 }: {
   campaignId: string;
+  /** AUTO pitches from the user's WhatsApp, so it needs a linked number first. */
+  deliveryMode: DeliveryMode;
   eligibleCount: number;
   remainingSlots: number;
   initialBatches: PitchBatch[];
@@ -103,6 +107,8 @@ export function PitchBatchPanel({
   const max = Math.max(0, Math.min(eligibleCount, availableCredits, remainingSlots));
   const [count, setCount] = useState(max);
   const working = batches.some((batch) => batch.status === "PROCESSING");
+  const needsWhatsApp = deliveryMode === "AUTO";
+  const [whatsappReady, setWhatsappReady] = useState(false);
 
   // Keep the field honest when the page refreshes with new numbers (a lead
   // resolved, credits moved) rather than leaving a stale count the API would
@@ -136,6 +142,7 @@ export function PitchBatchPanel({
       if (result) setBatches(result.items);
       router.refresh();
     } catch (caught) {
+      if (caught instanceof ApiError && caught.code === "WHATSAPP_NOT_CONNECTED") setWhatsappReady(false);
       setError(caught instanceof ApiError ? caught.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
@@ -143,65 +150,70 @@ export function PitchBatchPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pitch these leads</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 p-0">
-        <div className="flex flex-col gap-3 p-4 pb-0">
-          {max === 0 ? (
-            <p className="text-sm text-dash-muted-foreground">
-              {availableCredits === 0 ? (
-                <>
-                  You have no pitch credits left.{" "}
-                  <Link href="/pricing" className="underline underline-offset-2">
-                    Buy a credit pack
-                  </Link>{" "}
-                  to pitch more of these leads.
-                </>
-              ) : eligibleCount === 0 ? (
-                "Every lead here has either been pitched already or has no number WhatsApp can reach."
-              ) : (
-                `This campaign has reached the ${remainingSlots === 0 ? "number of leads it was set up for" : "end of its slots"}.`
-              )}
-            </p>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="pitch-count">How many do you want to pitch?</Label>
-                  <Input
-                    id="pitch-count"
-                    type="number"
-                    min={1}
-                    max={max}
-                    value={count}
-                    onChange={(event) => setCount(Math.max(1, Math.min(max, Number(event.target.value) || 1)))}
-                    className="w-28"
-                  />
-                </div>
-                <Button disabled={submitting} onClick={() => void onPitch()}>
-                  <Send className="h-4 w-4" />
-                  {submitting ? "Starting…" : `Pitch ${count}`}
-                </Button>
-              </div>
-              <p className="text-xs text-dash-muted-foreground">
-                {plural(eligibleCount, "lead")} can be pitched, and you have {plural(availableCredits, "credit")}. One credit per pitch, taken only when
-                the message actually sends — a pitch that fails gives its credit back on its own.
+    <div className="flex flex-col gap-4">
+      {/* Shown while there is something to pitch or a batch still sending:
+          a linked number is either needed now or in use right now. */}
+      {needsWhatsApp && (max > 0 || working) && <WhatsAppCampaignStep onReadyChange={setWhatsappReady} />}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pitch these leads</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 p-0">
+          <div className="flex flex-col gap-3 p-4 pb-0">
+            {max === 0 ? (
+              <p className="text-sm text-dash-muted-foreground">
+                {availableCredits === 0 ? (
+                  <>
+                    You have no pitch credits left.{" "}
+                    <Link href="/pricing" className="underline underline-offset-2">
+                      Buy a credit pack
+                    </Link>{" "}
+                    to pitch more of these leads.
+                  </>
+                ) : eligibleCount === 0 ? (
+                  "Every lead here has either been pitched already or has no number WhatsApp can reach."
+                ) : (
+                  `This campaign has reached the ${remainingSlots === 0 ? "number of leads it was set up for" : "end of its slots"}.`
+                )}
               </p>
-            </>
-          )}
-          {error && <p className="text-sm text-dash-destructive">{error}</p>}
-        </div>
-
-        {batches.length > 0 && (
-          <div className="flex flex-col">
-            {batches.map((batch) => (
-              <BatchProgress key={batch.id} batch={batch} />
-            ))}
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pitch-count">How many do you want to pitch?</Label>
+                    <Input
+                      id="pitch-count"
+                      type="number"
+                      min={1}
+                      max={max}
+                      value={count}
+                      onChange={(event) => setCount(Math.max(1, Math.min(max, Number(event.target.value) || 1)))}
+                      className="w-28"
+                    />
+                  </div>
+                  <Button disabled={submitting || (needsWhatsApp && !whatsappReady)} onClick={() => void onPitch()}>
+                    <Send className="h-4 w-4" />
+                    {submitting ? "Starting…" : `Pitch ${count}`}
+                  </Button>
+                </div>
+                <p className="text-xs text-dash-muted-foreground">
+                  {plural(eligibleCount, "lead")} can be pitched, and you have {plural(availableCredits, "credit")}. One credit per pitch, taken only when
+                  the message actually sends — a pitch that fails gives its credit back on its own.
+                </p>
+              </>
+            )}
+            {error && <p className="text-sm text-dash-destructive">{error}</p>}
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {batches.length > 0 && (
+            <div className="flex flex-col">
+              {batches.map((batch) => (
+                <BatchProgress key={batch.id} batch={batch} />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

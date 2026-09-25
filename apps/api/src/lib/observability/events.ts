@@ -26,12 +26,12 @@ export type OperationalEvent =
   | "pipeline.held"
   | "campaign.sending_paused"
   | "campaign.sending_resumed"
-  | "whatsapp.released_after_campaign"
   | "pipeline.sent"
   | "recording.finished"
   | "delivery.failed"
   | "preview.cleanup"
-  | "website_verification.batch_enqueued";
+  | "website_verification.batch_enqueued"
+  | "whatsapp.signed_out";
 
 export type EventLevel = "info" | "warn" | "error";
 

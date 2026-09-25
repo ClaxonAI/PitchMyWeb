@@ -151,6 +151,10 @@ export function LinkPanel({
           </div>
         )}
 
+        <p className="mt-6 rounded-2xl border border-ink/8 bg-mist-2 px-4 py-3 text-[12px] leading-snug text-ink/60">
+          For your privacy we sign this number out as soon as the campaign has finished sending. You link it again for the next one.
+        </p>
+
         {state.error && (
           <p role="alert" className="mt-5 rounded-2xl border border-coral/30 bg-coral/8 px-4 py-3 text-[13px] text-[#c2412f]">
             {state.error}

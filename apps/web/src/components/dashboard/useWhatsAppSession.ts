@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { whatsappApi, type WaStatus } from "@/lib/api-client";
+import { whatsappApi, type WaStatus, type WhatsAppLogoutReason } from "@/lib/api-client";
 
 // Live session state for one account.
 //
@@ -25,6 +25,8 @@ export type SessionState = {
   phoneNumber: string | null;
   lastSeenAt: string | null;
   error: string | null;
+  /** Why the system signed the number out, when it did. */
+  logoutReason: WhatsAppLogoutReason | null;
   /** Whether the event stream is currently connected. */
   live: boolean;
 };
@@ -36,6 +38,7 @@ const INITIAL: SessionState = {
   phoneNumber: null,
   lastSeenAt: null,
   error: null,
+  logoutReason: null,
   live: false,
 };
 
@@ -47,11 +50,17 @@ type WaEvent =
   | { type: "LOGGED_OUT" }
   | { type: "ERROR"; message: string };
 
-export function useWhatsAppSession(accountId: string | null, initialStatus?: WaStatus, initialPhone?: string | null) {
+export function useWhatsAppSession(
+  accountId: string | null,
+  initialStatus?: WaStatus,
+  initialPhone?: string | null,
+  initialSession: { logoutReason?: WhatsAppLogoutReason | null } = {},
+) {
   const [state, setState] = useState<SessionState>({
     ...INITIAL,
     status: initialStatus ?? INITIAL.status,
     phoneNumber: initialPhone ?? null,
+    logoutReason: initialSession.logoutReason ?? null,
   });
   // Kept in a ref so the polling effect does not have to re-subscribe every
   // time the status changes.
@@ -136,6 +145,7 @@ export function useWhatsAppSession(accountId: string | null, initialStatus?: WaS
           phoneNumber: status.phoneNumber ?? current.phoneNumber,
           lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
           error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,
+          logoutReason: status.logoutReason,
         }));
       } catch {
         // Transient: the next tick tries again.
@@ -152,5 +162,26 @@ export function useWhatsAppSession(accountId: string | null, initialStatus?: WaS
 
   const reset = useCallback(() => setState({ ...INITIAL }), []);
 
-  return { state, reset } as const;
+  /**
+   * Applies an account the API just returned, without waiting for the next
+   * poll. `seed` also takes its status and number — for an account loaded
+   * after mount, where the state still holds the placeholder DISCONNECTED;
+   * never after a command, whose response can be older than an event the
+   * stream already delivered.
+   */
+  const applyAccount = useCallback(
+    (
+      account: { status: WaStatus; phoneNumber: string | null; logoutReason: WhatsAppLogoutReason | null },
+      options: { seed?: boolean } = {},
+    ) => {
+      setState((current) => ({
+        ...current,
+        ...(options.seed ? { status: account.status, phoneNumber: account.phoneNumber ?? current.phoneNumber } : {}),
+        logoutReason: account.logoutReason,
+      }));
+    },
+    [],
+  );
+
+  return { state, reset, applyAccount } as const;
 }

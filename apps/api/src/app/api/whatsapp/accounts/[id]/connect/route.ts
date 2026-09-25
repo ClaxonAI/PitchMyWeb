@@ -6,7 +6,8 @@ import { requireCurrentUser } from "../../../../../../lib/auth/current-user";
 import { parseOptionalJsonBody } from "../../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../../lib/api/response";
 import { requestConnect } from "../../../../../../lib/whatsapp/account.service";
-import { cuidSchema, emptyBodySchema } from "../../../../../../lib/validation/common";
+import { cuidSchema } from "../../../../../../lib/validation/common";
+import { connectRequestSchema } from "../../../../../../lib/validation/whatsapp";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -15,10 +16,13 @@ type RouteParams = { params: Promise<{ id: string }> };
 // Returns as soon as the command is queued — linking takes as long as the
 // user takes to reach for their phone, so the QR itself arrives over the
 // event stream (GET .../events) rather than in this response.
+//
+// The number is signed out again once the campaign finishes
+// (lib/whatsapp/session-policy.ts); there is no option to stay signed in.
 export async function handleConnectWhatsAppAccount(db: PrismaClient, request: NextRequest, params: { id: string }): Promise<NextResponse> {
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
-  await parseOptionalJsonBody(request, emptyBodySchema);
+  await parseOptionalJsonBody(request, connectRequestSchema);
   const account = await requestConnect(db, user.id, id);
   return jsonOk(account, 202);
 }

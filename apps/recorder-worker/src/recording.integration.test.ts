@@ -56,7 +56,7 @@ describe("recordTour + transcodeToMp4", () => {
       const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds, { width: LAPTOP_OUTPUT_WIDTH, name: "laptop" });
       expect(video.codec).toBe("h264");
       expect(video.width).toBe(1280);
-      expect(video.height).toBe(800);
+      expect(video.height).toBe(720);
       expect(video.durationMs).toBeGreaterThan(8_000);
       expect(video.mp4.byteLength).toBeLessThanOrEqual(MAX_MP4_BYTES);
       expect(video.mp4.indexOf("moov")).toBeLessThan(video.mp4.indexOf("mdat"));
@@ -73,6 +73,7 @@ describe("recordTour + transcodeToMp4", () => {
       expect(raw.tourSeconds).toBeGreaterThanOrEqual(9);
       const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds);
       expect(video.codec).toBe("h264");
+      // The default device is the phone: 720-wide portrait.
       expect(video.width).toBe(720);
       expect(video.height).toBeGreaterThan(video.width);
       expect(video.width % 2).toBe(0);
@@ -151,6 +152,10 @@ describe("processRecording", () => {
       [row.desktopStorageKey, "video/mp4"],
       [row.desktopPosterKey, "image/jpeg"],
     ]);
+    // Downloadable for the default 7 days, then cleaned out of storage.
+    const days = (row.expiresAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThanOrEqual(7);
     expect(notify).toHaveBeenCalledWith(recording.id);
 
     // A duplicate job is a no-op that re-sends the callback.

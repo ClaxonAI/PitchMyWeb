@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import type { PrismaClient } from "@pitchmyweb/db";
-import { storageKeys } from "@pitchmyweb/storage";
+import { storageKeys, videoExpiry } from "@pitchmyweb/storage";
 import { RecordingError, recordTour } from "./record.js";
 import { LAPTOP_OUTPUT_WIDTH, PHONE_OUTPUT_WIDTH, TranscodeError, transcodeToMp4 } from "./transcode.js";
 import { assertPreviewUrl, UrlNotAllowedError } from "./url-guard.js";
@@ -114,6 +114,9 @@ export async function processRecording(
         desktopDurationMs: laptop.durationMs,
         desktopSizeBytes: laptop.mp4.byteLength,
         failureReason: null,
+        // Downloadable for VIDEO_RETENTION_DAYS; the API's maintenance job
+        // deletes the objects after this.
+        expiresAt: videoExpiry(),
       },
     });
     deps.log(

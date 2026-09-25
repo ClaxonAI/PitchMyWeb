@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MessageCircle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import type { z } from "zod";
 import { campaignFormSchema } from "@/lib/schemas/campaign-create";
-import { ApiError, campaignsApi, whatsappApi } from "@/lib/api-client";
+import { ApiError, campaignsApi } from "@/lib/api-client";
 import { DEFAULT_MESSAGE_TEMPLATE, messageTemplateProblem } from "@/lib/message-template";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent } from "@/components/dashboard-ui/card";
@@ -17,20 +17,11 @@ import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
 import { MessageTemplateEditor } from "./MessageTemplateEditor";
 import { useSession } from "./SessionProvider";
+import { WhatsAppCampaignStep } from "./WhatsAppCampaignStep";
 
 export function DiscoverForm() {
   const router = useRouter();
-  const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits, whatsappConnected: connectedAtLoad } = useSession();
-  // Pitches go out from the user's own WhatsApp, so a campaign cannot start
-  // without it. Re-checked on mount: the session the layout loaded can be
-  // older than a link the user just finished on the WhatsApp page.
-  const [whatsappConnected, setWhatsappConnected] = useState(connectedAtLoad);
-  useEffect(() => {
-    whatsappApi
-      .listAccounts()
-      .then(({ items }) => setWhatsappConnected(items.some((account) => account.status === "CONNECTED")))
-      .catch(() => undefined);
-  }, []);
+  const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits } = useSession();
   const [messageTemplate, setMessageTemplate] = useState(DEFAULT_MESSAGE_TEMPLATE);
   // How many leads to *find*, which costs no credits — so the balance no
   // longer caps this field. It only suggests a sensible default: there is
@@ -41,6 +32,9 @@ export function DiscoverForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [parseHint, setParseHint] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  // Campaigns started here pitch from the user's WhatsApp as soon as
+  // discovery finishes, so a linked number is part of starting one.
+  const [whatsappReady, setWhatsappReady] = useState(false);
   const {
     register,
     handleSubmit,
@@ -76,7 +70,10 @@ export function DiscoverForm() {
         return;
       }
       if (error instanceof ApiError && error.code === "WHATSAPP_NOT_CONNECTED") {
-        setWhatsappConnected(false);
+        // Signed out between loading this page and pressing Find (another
+        // campaign finished): the step above picks that up on its next poll
+        // and shows the code again.
+        setWhatsappReady(false);
         return;
       }
       setSubmitError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
@@ -129,32 +126,10 @@ export function DiscoverForm() {
     );
   }
 
-  if (!whatsappConnected) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-start gap-4 p-6">
-          <span className="grid size-11 place-items-center rounded-full bg-dash-success/15 text-dash-success">
-            <MessageCircle className="size-5" />
-          </span>
-          <div className="flex flex-col gap-1.5">
-            <h2 className="text-lg font-semibold text-dash-foreground">Connect your WhatsApp first</h2>
-            <p className="max-w-prose text-sm text-dash-muted-foreground">
-              Every pitch — the message and both demo videos — is sent from your own WhatsApp number, so each campaign starts by linking it. It takes
-              about a minute: scan a QR code from WhatsApp → Linked devices. When the campaign has finished, PitchMyWeb unlinks itself again.
-            </p>
-          </div>
-          <Button asChild>
-            <Link href="/whatsapp">
-              <MessageCircle /> Connect WhatsApp
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-6">
+      <WhatsAppCampaignStep onReadyChange={setWhatsappReady} />
       <p className="text-sm text-dash-muted-foreground">
         {availableCredits} pitch {availableCredits === 1 ? "credit" : "credits"} available. Searching costs nothing — you choose how many of the leads to
         pitch once you can see them.
@@ -240,12 +215,13 @@ export function DiscoverForm() {
             {submitError && <p className="text-sm text-dash-destructive sm:col-span-2">{submitError}</p>}
 
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || !whatsappReady}>
                 {isSubmitting ? "Starting…" : "Find businesses and pitch"}
               </Button>
               <p className="mt-2 text-xs text-dash-muted-foreground">
-                We find businesses without a website, build each one a sample site, record it on a phone and a laptop, and send your message with both
-                videos from your WhatsApp. You can pause sending at any time.
+                {whatsappReady
+                  ? "We find businesses without a website, build each one a sample site, record it on a phone and a laptop, and send your message with both videos from your WhatsApp. You can pause sending at any time."
+                  : "Link your WhatsApp above first — the pitches are sent from your number."}
               </p>
             </div>
           </form>

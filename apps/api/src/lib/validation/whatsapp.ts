@@ -31,6 +31,12 @@ export const rawPhoneSchema = z.string().trim().min(6).max(32);
 
 export const accountCreateSchema = z.object({}).strict();
 
+/**
+ * Connect takes no options: the number is always signed out once the
+ * campaign finishes (lib/whatsapp/session-policy.ts).
+ */
+export const connectRequestSchema = z.object({}).strict();
+
 export const pairingCodeRequestSchema = z
   .object({
     phoneNumber: rawPhoneSchema,

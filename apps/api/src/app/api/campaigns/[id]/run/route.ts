@@ -7,10 +7,10 @@ import { parseOptionalJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { assertCanStartDiscovery, assertMarketAllowed } from "../../../../../lib/checkout/paid-access";
 import { assertCampaignRunAllowed } from "../../../../../lib/campaigns/run-guards";
-import { assertWhatsAppConnected } from "../../../../../lib/whatsapp/account.service";
 import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
 import { runCampaign } from "../../../../../lib/campaigns/run.service";
 import { campaignRunRequestSchema } from "../../../../../lib/validation/campaign";
+import { assertWhatsAppReady } from "../../../../../lib/whatsapp/session-policy";
 import { cuidSchema } from "../../../../../lib/validation/common";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -28,10 +28,13 @@ export async function handleRunCampaign(db: PrismaClient, request: NextRequest, 
   const id = cuidSchema.parse(params.id);
   const body = await parseOptionalJsonBody(request, campaignRunRequestSchema);
   await assertCampaignRunAllowed(db, { userId: user.id, campaignId: id, idempotencyKey: body.idempotencyKey });
-  await assertWhatsAppConnected(db, user.id);
   await assertCanStartDiscovery(db, user.id);
   const campaign = await loadOwnedCampaign(db, id, user.id);
   await assertMarketAllowed(db, user.id, campaign.market);
+  // An Auto campaign pitches from the user's WhatsApp as soon as discovery
+  // finishes, and the number is signed out after every campaign — so each
+  // run starts with a linked number.
+  await assertWhatsAppReady(db, user.id, campaign);
   const result = await runCampaign(db, user.id, id, { idempotencyKey: body.idempotencyKey });
   // An async provider (osm) returns with the run still in progress: 202
   // Accepted, and the client polls GET /api/campaigns/:id for the outcome.

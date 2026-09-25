@@ -5,7 +5,8 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 
 // WebM from Playwright -> MP4 that WhatsApp plays inline on every phone:
-// H.264 (yuv420p, even dimensions), faststart, no audio track, small.
+// H.264 (yuv420p, even dimensions), faststart, no audio track, small. The
+// laptop recording comes out 720p landscape, the phone one 720-wide portrait.
 
 export const MAX_MP4_BYTES = 8 * 1024 * 1024;
 /** Phone recordings are scaled to this width; laptop ones keep their 1280. */

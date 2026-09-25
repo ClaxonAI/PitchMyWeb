@@ -6,6 +6,8 @@ import { requireCurrentUser } from "../../../../../lib/auth/current-user";
 import { parseOptionalJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { resumeCampaignSending } from "../../../../../lib/pipeline/pipeline.service";
+import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
+import { assertWhatsAppReady } from "../../../../../lib/whatsapp/session-policy";
 import { cuidSchema, emptyBodySchema } from "../../../../../lib/validation/common";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -16,6 +18,10 @@ export async function handleResumeSending(db: PrismaClient, request: NextRequest
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
   await parseOptionalJsonBody(request, emptyBodySchema);
+  // A pause long enough for the session policy to count the held pitches as
+  // dead signs the number out; resuming then needs a fresh link, or every
+  // held pitch would be queued for a socket that is gone.
+  await assertWhatsAppReady(db, user.id, await loadOwnedCampaign(db, id, user.id));
   return jsonOk(await resumeCampaignSending(db, user.id, id));
 }
 

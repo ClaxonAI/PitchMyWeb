@@ -6,7 +6,6 @@ import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service"
 import { calculateOpportunityScore } from "../scoring/scoring";
 import { releasePitchCredits, reservePitchCredits } from "../checkout/wallet.service";
 import { loadOwnedCampaign } from "./campaign.service";
-import { releaseWhatsAppIfCampaignFinished } from "../whatsapp/release.service";
 
 // Choosing which discovered leads get a site, a video and a pitch.
 //
@@ -39,11 +38,18 @@ export type CampaignLeadRow = {
   business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
+  /**
+   * videoReady: the phone demo video can be watched/downloaded right now.
+   * laptopVideoReady: the laptop-size one is too (older recordings only have the phone one).
+   * videoExpiresAt: when that stops (VIDEO_RETENTION_DAYS after recording).
+   * videoExpired: there was a video, and its download window has closed.
+   */
   pipeline:
     | (Pick<LeadPipeline, "id" | "stage" | "failureReason" | "replacedById" | "creditOutcome" | "updatedAt"> & {
         videoReady: boolean;
-        /** The laptop-size walkthrough is ready too (older recordings only have the phone one). */
         laptopVideoReady: boolean;
+        videoExpiresAt: Date | null;
+        videoExpired: boolean;
       })
     | null;
   selectable: boolean;
@@ -82,7 +88,7 @@ function effectiveScore(lead: Lead & { business: Business }): { score: number; e
   return { score: total, estimated: true };
 }
 
-async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promise<CampaignLeadRow[]> {
+async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = new Date()): Promise<CampaignLeadRow[]> {
   const leads = await db.lead.findMany({
     where: { campaignId },
     include: {
@@ -95,11 +101,25 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
   });
 
   const recordingIds = leads.flatMap((lead) => (lead.pipelines[0]?.recordingId ? [lead.pipelines[0].recordingId] : []));
-  const readyRecordings = recordingIds.length
-    ? await db.demoRecording.findMany({ where: { id: { in: recordingIds }, status: "READY", storageKey: { not: null } }, select: { id: true, desktopStorageKey: true } })
+  const recordings = recordingIds.length
+    ? await db.demoRecording.findMany({
+        where: { id: { in: recordingIds } },
+        select: { id: true, status: true, storageKey: true, desktopStorageKey: true, expiresAt: true, failureReason: true },
+      })
     : [];
-  const readyIds = new Set(readyRecordings.map((recording) => recording.id));
-  const laptopReadyIds = new Set(readyRecordings.filter((recording) => recording.desktopStorageKey).map((recording) => recording.id));
+  const recordingById = new Map(recordings.map((recording) => [recording.id, recording]));
+  const videoFor = (recordingId: string | null) => {
+    const recording = recordingId ? recordingById.get(recordingId) : undefined;
+    if (!recording) return { videoReady: false, laptopVideoReady: false, videoExpiresAt: null, videoExpired: false };
+    const expired = Boolean(recording.expiresAt && recording.expiresAt.getTime() <= now.getTime()) || recording.failureReason === "expired";
+    const ready = !expired && recording.status === "READY" && recording.storageKey !== null;
+    return {
+      videoReady: ready,
+      laptopVideoReady: ready && recording.desktopStorageKey !== null,
+      videoExpiresAt: recording.expiresAt,
+      videoExpired: expired,
+    };
+  };
 
   return leads.map((lead) => {
     const { score, estimated } = effectiveScore(lead);
@@ -135,8 +155,7 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string): Promi
             replacedById: pipeline.replacedById,
             creditOutcome: pipeline.creditOutcome,
             updatedAt: pipeline.updatedAt,
-            videoReady: pipeline.recordingId ? readyIds.has(pipeline.recordingId) : false,
-            laptopVideoReady: pipeline.recordingId ? laptopReadyIds.has(pipeline.recordingId) : false,
+            ...videoFor(pipeline.recordingId),
           }
         : null,
       selectable: !pipeline && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
@@ -369,9 +388,7 @@ export async function onDiscoveryCompleted(db: PrismaClient, campaignId: string,
   try {
     const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true } });
     if (campaign?.selectionMode !== "AUTO") return;
-    const { started } = await autoSelectLeads(db, campaignId, {}, deps);
-    // Nothing to pitch: the campaign is already finished.
-    if (started.length === 0) await releaseWhatsAppIfCampaignFinished(db, campaignId);
+    await autoSelectLeads(db, campaignId, {}, deps);
   } catch (error) {
     console.error(`Auto-selection failed for campaign ${campaignId}:`, error);
     emitEvent("selection.failed", { campaignId, mode: "auto" }, { level: "error", alert: true });

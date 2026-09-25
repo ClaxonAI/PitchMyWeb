@@ -199,6 +199,36 @@ describe("SessionManager", () => {
     expect(await statusOf(fixture.accountId)).toBe("DISCONNECTED");
   });
 
+  it("an automatic sign-out for the current login unlinks and wipes credentials", async () => {
+    const { fixture, provider, manager } = await setup("auto-signout");
+    const linkedAt = new Date("2026-09-20T10:00:00.000Z");
+    await db.whatsAppAccount.update({ where: { id: fixture.accountId }, data: { linkedAt } });
+    await manager.connect(fixture.accountId);
+    const repo = new PostgresAuthStateRepository(db, config.authEncryptionKey, 1);
+    await repo.set(fixture.accountId, "creds", "default", { v: 1 });
+
+    await manager.disconnect(fixture.accountId, { expectedLinkedAt: linkedAt.toISOString() });
+
+    expect(provider.disconnectCalls).toContainEqual({ accountId: fixture.accountId, logout: true });
+    expect(await db.whatsAppAuthKey.count({ where: { accountId: fixture.accountId } })).toBe(0);
+    expect(await statusOf(fixture.accountId)).toBe("DISCONNECTED");
+  });
+
+  it("skips an automatic sign-out decided for an earlier login", async () => {
+    const { fixture, provider, manager } = await setup("stale-signout");
+    // The user linked again after the sign-out was queued.
+    await db.whatsAppAccount.update({ where: { id: fixture.accountId }, data: { linkedAt: new Date("2026-09-21T10:00:00.000Z") } });
+    await manager.connect(fixture.accountId);
+    const repo = new PostgresAuthStateRepository(db, config.authEncryptionKey, 1);
+    await repo.set(fixture.accountId, "creds", "default", { v: 1 });
+
+    await manager.disconnect(fixture.accountId, { expectedLinkedAt: "2026-09-20T10:00:00.000Z" });
+
+    expect(provider.disconnectCalls).toHaveLength(0);
+    expect(await db.whatsAppAuthKey.count({ where: { accountId: fixture.accountId } })).toBe(1);
+    expect(await statusOf(fixture.accountId)).toBe("CONNECTING");
+  });
+
   it("a logout wipes credentials and asks for a relink", async () => {
     const { fixture, provider, manager } = await setup("logged-out");
     await manager.connect(fixture.accountId);

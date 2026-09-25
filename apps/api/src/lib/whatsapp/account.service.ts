@@ -1,5 +1,5 @@
 import type { PrismaClient, WhatsAppAccount } from "@pitchmyweb/db";
-import { ConflictError, NotFoundError, ValidationError, WhatsAppNotConnectedError } from "../errors";
+import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { enqueueSessionCommand } from "./queue";
 
@@ -20,7 +20,17 @@ const MAX_ACCOUNTS_PER_USER = 1;
  */
 export type PublicAccount = Pick<
   WhatsAppAccount,
-  "id" | "phoneNumber" | "displayName" | "status" | "lastConnectedAt" | "lastSeenAt" | "lastError" | "createdAt" | "updatedAt"
+  | "id"
+  | "phoneNumber"
+  | "displayName"
+  | "status"
+  | "lastConnectedAt"
+  | "lastSeenAt"
+  | "lastError"
+  | "linkedAt"
+  | "logoutReason"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 const PUBLIC_FIELDS = {
@@ -31,9 +41,20 @@ const PUBLIC_FIELDS = {
   lastConnectedAt: true,
   lastSeenAt: true,
   lastError: true,
+  linkedAt: true,
+  logoutReason: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/**
+ * Every link attempt starts a new login for the session policy
+ * (session-policy.ts): its own start time and no leftover reason from the
+ * previous sign-out.
+ */
+function newLogin(now = new Date()) {
+  return { linkedAt: now, logoutReason: null };
+}
 
 export async function listAccounts(db: PrismaClient, userId: string): Promise<PublicAccount[]> {
   return db.whatsAppAccount.findMany({
@@ -72,7 +93,7 @@ export async function requestConnect(db: PrismaClient, userId: string, accountId
   await getAccount(db, userId, accountId);
   const account = await db.whatsAppAccount.update({
     where: { id: accountId },
-    data: { status: "CONNECTING", lastError: null },
+    data: { status: "CONNECTING", lastError: null, ...newLogin() },
     select: PUBLIC_FIELDS,
   });
   await enqueueSessionCommand({ type: "connect", accountId });
@@ -85,7 +106,12 @@ export async function requestConnect(db: PrismaClient, userId: string, accountId
  * helper the wa.me link builder uses, so "not a plausible phone number" is
  * decided in exactly one place in this codebase.
  */
-export async function requestPairingCode(db: PrismaClient, userId: string, accountId: string, rawPhone: string): Promise<PublicAccount> {
+export async function requestPairingCode(
+  db: PrismaClient,
+  userId: string,
+  accountId: string,
+  rawPhone: string,
+): Promise<PublicAccount> {
   await getAccount(db, userId, accountId);
   const phoneNumber = normalizePhoneForWhatsApp(rawPhone);
   if (!phoneNumber) {
@@ -93,7 +119,7 @@ export async function requestPairingCode(db: PrismaClient, userId: string, accou
   }
   const account = await db.whatsAppAccount.update({
     where: { id: accountId },
-    data: { status: "CONNECTING", lastError: null },
+    data: { status: "CONNECTING", lastError: null, ...newLogin() },
     select: PUBLIC_FIELDS,
   });
   await enqueueSessionCommand({ type: "pairing-code", accountId, phoneNumber });
@@ -123,18 +149,9 @@ export async function deleteAccount(db: PrismaClient, userId: string, accountId:
   await db.whatsAppAccount.delete({ where: { id: accountId } });
 }
 
-/** True when the user has a WhatsApp account that is linked and connected right now. */
+/** True when the user has a linked WhatsApp a campaign can send from (session-policy SENDABLE_STATUSES). */
 export async function hasConnectedWhatsApp(db: PrismaClient, userId: string): Promise<boolean> {
-  const count = await db.whatsAppAccount.count({ where: { userId, status: "CONNECTED" } });
+  const count = await db.whatsAppAccount.count({ where: { userId, status: { in: ["CONNECTED", "RECONNECTING"] } } });
   return count > 0;
 }
 
-/**
- * Campaigns pitch from the user's own number, so a campaign cannot be
- * created, run or asked to pitch more leads without one connected. Checked
- * up front rather than discovered at send time, when the user has already
- * waited through discovery, site building and recording for nothing.
- */
-export async function assertWhatsAppConnected(db: PrismaClient, userId: string): Promise<void> {
-  if (!(await hasConnectedWhatsApp(db, userId))) throw new WhatsAppNotConnectedError();
-}

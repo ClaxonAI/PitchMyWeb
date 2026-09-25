@@ -28,6 +28,8 @@ export default function PrivacyPage() {
             body: [
               "Your account details (name, email), your purchase history, and the settings you choose for each batch.",
               "If you use Auto, we keep the session needed to send pitches from your linked WhatsApp. We don't read your other chats.",
+              "That session lasts only as long as your campaign: once its pitches have gone out we sign your number out and delete the stored session.",
+              "The demo videos we record for your leads can be watched and downloaded for 7 days, then are deleted from our storage.",
             ],
           },
           {

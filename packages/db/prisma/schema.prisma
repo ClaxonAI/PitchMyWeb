@@ -336,10 +336,6 @@ model Campaign {
   // Pause sending: pitches keep building and recording, but hold before
   // they are handed to WhatsApp until the campaign is resumed.
   sendingPaused      Boolean            @default(false)
-  // When every pitch in this campaign had a final outcome and PitchMyWeb
-  // unlinked the user's WhatsApp (release.service.ts). Each campaign asks the
-  // user to link again; nothing stays linked between campaigns.
-  whatsappReleasedAt DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -879,6 +875,16 @@ model WhatsAppAccount {
   // Sanitized, user-facing text only, same convention as
   // CampaignExecution.errorMessage: never a raw Baileys error or stack.
   lastError       String?
+  // Session lifetime (lib/whatsapp/session-policy.ts). A linked number is
+  // signed out as soon as the campaign that needed it has finished; every
+  // campaign asks the user to link again. linkedAt is when this login began
+  // (the connect request), so "a campaign finished after this login" can be
+  // told apart from one that finished before it; lastConnectedAt cannot do
+  // that, because every reconnect moves it. logoutReason records why the
+  // system signed the number out ("campaign_finished" | "unused"), so the
+  // dashboard can explain it; a new link clears it.
+  linkedAt        DateTime?
+  logoutReason    String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -889,7 +895,8 @@ model WhatsAppAccount {
   @@index([userId])
   // The worker restoreAll() sweep on boot scans for CONNECTED/RECONNECTING
   // accounts across every user — the one query in this system that is not
-  // scoped to a single user, so it needs its own index.
+  // scoped to a single user, so it needs its own index. The session-policy
+  // sweep uses the same shape of query.
   @@index([status])
   @@map("whatsapp_accounts")
 }
@@ -1165,6 +1172,10 @@ model DemoRecording {
   desktopSizeBytes  Int?
   failureReason     String?
   attempts          Int             @default(0)
+  // When the videos stop being downloadable and their objects (both sizes)
+  // are deleted from storage (VIDEO_RETENTION_DAYS after it became READY,
+  // see @pitchmyweb/storage videoExpiry). Null until the recording is READY.
+  expiresAt         DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -1173,6 +1184,8 @@ model DemoRecording {
 
   @@index([websiteProjectId, status])
   @@index([status, createdAt])
+  // The storage cleanup sweep: "READY recordings whose expiresAt has passed".
+  @@index([expiresAt])
   @@map("demo_recordings")
 }
 

@@ -186,6 +186,14 @@ while every worker crash-loops. `bootstrap.sh` fetches the regional bundle.
 **`STORAGE_ENDPOINT` needs its scheme.** Without `https://` the S3 client
 rejects it as `Invalid URL` and the recorder cannot start.
 
+**Demo videos are kept for `VIDEO_RETENTION_DAYS` (default 7).** The recorder
+stamps each recording's deadline, the dashboard and the public video page stop
+serving it after that, and `pipeline-maintenance` deletes the objects. The
+bucket is versioned, so a delete alone only adds a delete marker;
+`aws_s3_bucket_lifecycle_configuration.storage` in `infrastructure/aws` is what
+removes the old versions (a day later) and expires anything the job missed.
+Keep its `recording_retention_days` equal to `VIDEO_RETENTION_DAYS`.
+
 Static `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` are **not** set here. They
 exist for MinIO and R2; on EC2 the instance role already grants S3, and
 `packages/storage` omits the credentials option when they are absent so the

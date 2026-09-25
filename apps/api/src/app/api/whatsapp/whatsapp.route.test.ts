@@ -199,6 +199,31 @@ describe("POST /api/whatsapp/accounts/:id/connect", () => {
     const jobs = await sessionQueue().getJobs(["waiting", "delayed", "prioritized", "active"]);
     expect(jobs.some((job) => job.data.accountId === accountId && job.data.type === "connect")).toBe(true);
   });
+
+  it("starts a login that ends with the campaign", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("connect-per-campaign");
+    await prisma.whatsAppAccount.update({ where: { id: accountId }, data: { logoutReason: "campaign_finished" } });
+    const before = Date.now();
+    await handleConnectWhatsAppAccount(prisma, req(`http://localhost/api/whatsapp/accounts/${accountId}/connect`, { method: "POST", cookieHeader }), {
+      id: accountId,
+    });
+
+    const stored = await prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: accountId } });
+    expect(stored.linkedAt!.getTime()).toBeGreaterThanOrEqual(before);
+    // The previous sign-out's reason belongs to the previous login.
+    expect(stored.logoutReason).toBeNull();
+  });
+
+  it("rejects unknown fields in the body, including the removed stay-signed-in option", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("connect-strict");
+    await expect(
+      handleConnectWhatsAppAccount(
+        prisma,
+        req(`http://localhost/api/whatsapp/accounts/${accountId}/connect`, { method: "POST", body: { stayLinked: true }, cookieHeader }),
+        { id: accountId },
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 describe("POST /api/whatsapp/messages", () => {

@@ -31,9 +31,10 @@ export const DEVICES: Record<RecordingDevice, DeviceProfile> = {
       "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 PitchMyWebRecorder",
     headerOffset: 72,
   },
-  // A common laptop CSS viewport (13-14" at default scaling).
+  // The desktop layout at 720p landscape: what a business owner sees on a
+  // laptop, and a 16:9 frame every player shows without letterboxing.
   laptop: {
-    viewport: { width: 1280, height: 800 },
+    viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 1,
     isMobile: false,
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 PitchMyWebRecorder",

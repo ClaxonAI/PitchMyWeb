@@ -92,9 +92,16 @@ export type WhatsAppAccount = {
   lastConnectedAt: string | null;
   lastSeenAt: string | null;
   lastError: string | null;
+  /** When this login began (the link request). */
+  linkedAt: string | null;
+  /** Why the system signed the number out, if it did. Cleared by the next link. */
+  logoutReason: WhatsAppLogoutReason | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/** "stay_linked_expired" only on accounts signed out under the removed 3-day option. */
+export type WhatsAppLogoutReason = "campaign_finished" | "stay_linked_expired" | "unused";
 
 export type WhatsAppMessage = {
   id: string;
@@ -128,10 +135,18 @@ export const whatsappApi = {
   listAccounts: () => api.get<{ items: WhatsAppAccount[] }>("/api/whatsapp/accounts"),
   createAccount: () => api.post<WhatsAppAccount>("/api/whatsapp/accounts", {}),
   connect: (id: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/connect`, {}),
-  pairingCode: (id: string, phoneNumber: string) =>
-    api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/pairing-code`, { phoneNumber }),
+  pairingCode: (id: string, phoneNumber: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/pairing-code`, { phoneNumber }),
   disconnect: (id: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/disconnect`, {}),
-  status: (id: string) => api.get<{ accountId: string; status: WaStatus; phoneNumber: string | null; lastSeenAt: string | null; lastError: string | null; qrDataUrl: string | null }>(`/api/whatsapp/accounts/${id}/status`),
+  status: (id: string) =>
+    api.get<{
+      accountId: string;
+      status: WaStatus;
+      phoneNumber: string | null;
+      lastSeenAt: string | null;
+      lastError: string | null;
+      logoutReason: WhatsAppLogoutReason | null;
+      qrDataUrl: string | null;
+    }>(`/api/whatsapp/accounts/${id}/status`),
   previewMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
     api.post<MessagePreview>("/api/whatsapp/messages/preview", input),
   sendMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
@@ -220,8 +235,6 @@ export type Campaign = {
   messageTemplate: string | null;
   /** Sending is paused: pitches finish building and recording, then wait. */
   sendingPaused: boolean;
-  /** Every pitch finished and PitchMyWeb unlinked WhatsApp; the next campaign links it again. */
-  whatsappReleasedAt: string | null;
   createdAt: string;
   updatedAt: string;
   market: "india" | "foreign";
@@ -308,6 +321,11 @@ export type CampaignLeadRow = {
   business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
+  /**
+   * videoReady: the phone demo video can be watched/downloaded now;
+   * laptopVideoReady: the laptop one too. videoExpiresAt: when that stops (it
+   * is then deleted from storage). videoExpired: it did.
+   */
   pipeline: {
     id: string;
     stage: PipelineStage;
@@ -318,6 +336,8 @@ export type CampaignLeadRow = {
     updatedAt: string;
     videoReady: boolean;
     laptopVideoReady: boolean;
+    videoExpiresAt: string | null;
+    videoExpired: boolean;
   } | null;
   selectable: boolean;
   blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;

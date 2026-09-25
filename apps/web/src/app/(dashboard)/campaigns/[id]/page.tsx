@@ -44,6 +44,11 @@ const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>,
   not_pitchable_status: "Already pitched",
 };
 
+/** "until 2 Oct" — short, since it sits under two icon buttons in a table cell. */
+function formatVideoDeadline(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 /** A pitch that failed, and what happened to the credit it was holding. */
 function FailedPipeline({ pipeline }: { pipeline: NonNullable<CampaignLeadRow["pipeline"]> }) {
   const reason = pipeline.failureReason === "invalid_number" ? "Not on WhatsApp" : pipeline.failureReason === "no_valid_phone" ? "No WhatsApp number" : null;
@@ -95,6 +100,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const eligibleCount = leadRows.filter((row) => row.selectable).length;
   const remainingSlots = Math.max(0, (leadsResult?.targetCount ?? campaign.targetCount) - (leadsResult?.selectedCount ?? counts.selected));
   const discovering = campaign.status === "RUNNING" || execution?.status === "RUNNING";
+  // Every pitch has its outcome (sent, refunded or replaced): nothing is left
+  // to send, so the session policy signs the user's WhatsApp out and the
+  // next campaign links it again.
+  const pitched = leadRows.filter((row) => row.pipeline);
+  const campaignFinished =
+    campaign.deliveryMode === "AUTO" &&
+    campaign.status === "COMPLETED" &&
+    pitched.length > 0 &&
+    pitched.every((row) => row.pipeline!.stage === "SENT" || (row.pipeline!.stage === "FAILED" && row.pipeline!.creditOutcome !== null));
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -134,11 +148,11 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {campaign.whatsappReleasedAt && (
+      {campaignFinished && (
         <div className="flex flex-col gap-3 rounded-dash-lg border border-dash-success/30 bg-dash-success/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-dash-foreground">
-            <span className="font-medium">Campaign finished.</span> PitchMyWeb unlinked your WhatsApp now that every pitch has an outcome — link it
-            again when you start your next campaign.
+            <span className="font-medium">Campaign finished.</span> Every pitch has an outcome, so PitchMyWeb signs your WhatsApp out — you&apos;ll link
+            it again when you start your next campaign.
           </p>
           <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
             <Link href="/discover">Start a new campaign</Link>
@@ -153,6 +167,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       {(leadRows.length > 0 || (batchesResult?.items.length ?? 0) > 0) && (
         <PitchBatchPanel
           campaignId={id}
+          deliveryMode={campaign.deliveryMode}
           eligibleCount={eligibleCount}
           remainingSlots={remainingSlots}
           initialBatches={batchesResult?.items ?? []}
@@ -241,6 +256,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                               <span className="sr-only">Download</span>
                             </a>
                           </Button>
+                          {row.pipeline.videoExpiresAt && (
+                            <span className="text-xs text-dash-muted-foreground" title="Videos are deleted after this date to keep storage small">
+                              until {formatVideoDeadline(row.pipeline.videoExpiresAt)}
+                            </span>
+                          )}
+                        </span>
+                      ) : row.pipeline?.videoExpired ? (
+                        <span className="text-sm text-dash-muted-foreground" title="Demo videos can be downloaded for 7 days after they are recorded">
+                          Expired
                         </span>
                       ) : (
                         <span className="text-dash-muted-foreground">—</span>
