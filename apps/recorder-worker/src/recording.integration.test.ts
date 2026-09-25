@@ -50,14 +50,15 @@ afterAll(async () => {
 });
 
 describe("recordTour + transcodeToMp4", () => {
-  it("produces a portrait H.264 MP4 within the WhatsApp budget, plus a poster", async () => {
+  it("produces a landscape laptop-view H.264 MP4 within the WhatsApp budget, plus a poster", async () => {
     const raw = await recordTour(`${origin}/s/fixture-clinic`, { tourSeconds: 10, navigationTimeoutMs: 20_000 });
     try {
       expect(raw.tourSeconds).toBeGreaterThanOrEqual(9);
       const video = await transcodeToMp4(raw.webmPath, raw.workDir, raw.leadInSeconds);
       expect(video.codec).toBe("h264");
-      expect(video.width).toBe(720);
-      expect(video.height).toBeGreaterThan(video.width);
+      // 720p landscape: the desktop layout, never a phone-shaped video.
+      expect(video.width).toBe(1280);
+      expect(video.height).toBe(720);
       expect(video.width % 2).toBe(0);
       expect(video.height % 2).toBe(0);
       expect(video.durationMs).toBeGreaterThan(8_000);

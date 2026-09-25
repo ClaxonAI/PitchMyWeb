@@ -5,10 +5,12 @@ import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffprobeInstaller from "@ffprobe-installer/ffprobe";
 
 // WebM from Playwright -> MP4 that WhatsApp plays inline on every phone:
-// H.264 (yuv420p, even dimensions), faststart, no audio track, small.
+// H.264 (yuv420p, even dimensions), faststart, no audio track, small. The
+// recording is the laptop view, so the output is 720p landscape.
 
 export const MAX_MP4_BYTES = 8 * 1024 * 1024;
-const OUTPUT_WIDTH = 720;
+const OUTPUT_WIDTH = 1280;
+const POSTER_WIDTH = 960;
 
 export class TranscodeError extends Error {
   constructor(message: string) {
@@ -100,7 +102,7 @@ export async function transcodeToMp4(webmPath: string, workDir: string, trimSeco
     if (crf === 35) throw new TranscodeError("Encoded video is larger than the WhatsApp budget");
   }
 
-  await run(ffmpegInstaller.path, ["-y", "-ss", "1.2", "-i", mp4Path, "-frames:v", "1", "-vf", "scale=540:-2", "-q:v", "4", posterPath]);
+  await run(ffmpegInstaller.path, ["-y", "-ss", "1.2", "-i", mp4Path, "-frames:v", "1", "-vf", `scale=${POSTER_WIDTH}:-2`, "-q:v", "4", posterPath]);
 
   const info = await probe(mp4Path);
   return {

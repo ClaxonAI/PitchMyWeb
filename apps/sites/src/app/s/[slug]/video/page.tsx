@@ -36,18 +36,19 @@ export default async function VideoPage({ params }: PageProps) {
 
   return (
     <main data-theme={site.content.theme} className="min-h-dvh bg-page px-5 py-10 text-ink sm:py-16">
-      <div className="mx-auto flex max-w-md flex-col items-center text-center">
+      <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
         <span className="grid size-11 place-items-center rounded-full bg-brand text-white">
           <BrandMark mark={chrome.mark} className="size-5" />
         </span>
         <p className="kicker mt-6 text-brand">Website walkthrough</p>
         <h1 className="display mt-3 text-[38px] leading-[1.05]">A new website for {site.content.businessName}</h1>
 
-        <div className="mt-8 w-full overflow-hidden rounded-[2rem] border border-line bg-ink shadow-float">
+        {/* The walkthrough is recorded in the laptop view (16:9). */}
+        <div className="mt-8 w-full overflow-hidden rounded-[1.5rem] border border-line bg-ink shadow-float">
           {videoUrl ? (
-            <video src={videoUrl} controls playsInline preload="metadata" className="aspect-[9/19] w-full bg-ink object-contain" />
+            <video src={videoUrl} controls playsInline preload="metadata" className="aspect-video w-full bg-ink object-contain" />
           ) : (
-            <div className="grid aspect-[9/16] place-items-center p-8 text-[15px] text-white/70">The video is still being prepared. Try again in a few minutes.</div>
+            <div className="grid aspect-video place-items-center p-8 text-[15px] text-white/70">The video is still being prepared. Try again in a few minutes.</div>
           )}
         </div>
 
