@@ -1,24 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search } from "lucide-react";
+import { MessageCircle, Search } from "lucide-react";
 import type { z } from "zod";
 import { campaignFormSchema } from "@/lib/schemas/campaign-create";
-import { ApiError, campaignsApi } from "@/lib/api-client";
+import { ApiError, campaignsApi, whatsappApi } from "@/lib/api-client";
+import { DEFAULT_MESSAGE_TEMPLATE, messageTemplateProblem } from "@/lib/message-template";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent } from "@/components/dashboard-ui/card";
 import { Input } from "@/components/dashboard-ui/input";
 import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
+import { MessageTemplateEditor } from "./MessageTemplateEditor";
 import { useSession } from "./SessionProvider";
 
 export function DiscoverForm() {
   const router = useRouter();
-  const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits } = useSession();
+  const { canDiscover, hasPaidAccess, allowedMarkets, availableCredits, reservedCredits, whatsappConnected: connectedAtLoad } = useSession();
+  // Pitches go out from the user's own WhatsApp, so a campaign cannot start
+  // without it. Re-checked on mount: the session the layout loaded can be
+  // older than a link the user just finished on the WhatsApp page.
+  const [whatsappConnected, setWhatsappConnected] = useState(connectedAtLoad);
+  useEffect(() => {
+    whatsappApi
+      .listAccounts()
+      .then(({ items }) => setWhatsappConnected(items.some((account) => account.status === "CONNECTED")))
+      .catch(() => undefined);
+  }, []);
+  const [messageTemplate, setMessageTemplate] = useState(DEFAULT_MESSAGE_TEMPLATE);
   // How many leads to *find*, which costs no credits — so the balance no
   // longer caps this field. It only suggests a sensible default: there is
   // little point scraping far past what the account could ever pitch.
@@ -35,17 +48,24 @@ export function DiscoverForm() {
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof campaignFormSchema>, unknown, z.output<typeof campaignFormSchema>>({
     resolver: zodResolver(campaignFormSchema),
-    defaultValues: { market: allowedMarkets[0] ?? "india", websiteRequirement: "WITHOUT_WEBSITE", targetCount: defaultTargetCount },
+    defaultValues: { market: allowedMarkets[0] ?? "india", targetCount: defaultTargetCount },
   });
 
   async function onSubmit(values: z.output<typeof campaignFormSchema>) {
     setSubmitError(null);
+    const messageProblem = messageTemplateProblem(messageTemplate);
+    if (messageProblem) {
+      setSubmitError(`WhatsApp message: ${messageProblem}`);
+      return;
+    }
     try {
+      // Only businesses without a website are searched: that is who needs one.
       const campaign = await campaignsApi.create({
         ...values,
-        websiteRequirement: values.websiteRequirement ?? "WITHOUT_WEBSITE",
+        websiteRequirement: "WITHOUT_WEBSITE",
         selectionMode: "AUTO",
         deliveryMode: "AUTO",
+        messageTemplate: messageTemplate.trim(),
       });
       await campaignsApi.update(campaign.id, { status: "READY" });
       await campaignsApi.run(campaign.id);
@@ -53,6 +73,10 @@ export function DiscoverForm() {
     } catch (error) {
       if (error instanceof ApiError && error.code === "PAYMENT_REQUIRED") {
         router.push("/pricing");
+        return;
+      }
+      if (error instanceof ApiError && error.code === "WHATSAPP_NOT_CONNECTED") {
+        setWhatsappConnected(false);
         return;
       }
       setSubmitError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
@@ -105,6 +129,30 @@ export function DiscoverForm() {
     );
   }
 
+  if (!whatsappConnected) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-start gap-4 p-6">
+          <span className="grid size-11 place-items-center rounded-full bg-dash-success/15 text-dash-success">
+            <MessageCircle className="size-5" />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <h2 className="text-lg font-semibold text-dash-foreground">Connect your WhatsApp first</h2>
+            <p className="max-w-prose text-sm text-dash-muted-foreground">
+              Every pitch — the message and both demo videos — is sent from your own WhatsApp number, so a campaign can only start once it is linked. It
+              takes about a minute: scan a QR code from WhatsApp → Linked devices.
+            </p>
+          </div>
+          <Button asChild>
+            <Link href="/whatsapp">
+              <MessageCircle /> Connect WhatsApp
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-dash-muted-foreground">
@@ -130,7 +178,7 @@ export function DiscoverForm() {
             </Button>
           </div>
           <p className="text-xs text-dash-muted-foreground">
-            Search fills the form from your sentence. Nothing is scraped until you press Find businesses. After that, leads without a website are selected and WhatsApp messages go out automatically if your number is linked.
+            Search fills the form from your sentence. Nothing is scraped until you press Find businesses and pitch.
           </p>
           {parseHint && <p className="text-xs text-dash-muted-foreground">{parseHint}</p>}
         </CardContent>
@@ -167,15 +215,6 @@ export function DiscoverForm() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="websiteRequirement">Website</Label>
-              <Select id="websiteRequirement" {...register("websiteRequirement")}>
-                <option value="WITHOUT_WEBSITE">No website</option>
-                <option value="WITH_WEBSITE">Has a website</option>
-                <option value="ANY">Any</option>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="targetCount">How many leads</Label>
               <Input id="targetCount" type="number" min={1} max={MAX_TARGET_COUNT} {...register("targetCount")} />
               {errors.targetCount && <p className="text-xs text-dash-destructive">{errors.targetCount.message}</p>}
@@ -194,17 +233,19 @@ export function DiscoverForm() {
               <Input id="minReviews" type="number" min={0} {...register("minReviews")} />
             </div>
 
+            <div className="border-t border-dash-border pt-4 sm:col-span-2">
+              <MessageTemplateEditor value={messageTemplate} onChange={setMessageTemplate} />
+            </div>
+
             {submitError && <p className="text-sm text-dash-destructive sm:col-span-2">{submitError}</p>}
 
             <div className="sm:col-span-2">
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Searching…" : "Find businesses"}
+                {isSubmitting ? "Starting…" : "Find businesses and pitch"}
               </Button>
               <p className="mt-2 text-xs text-dash-muted-foreground">
-                Link WhatsApp first if you want those pitches sent without another click.{" "}
-                <Link href="/whatsapp" className="underline underline-offset-2">
-                  Open WhatsApp
-                </Link>
+                We find businesses without a website, build each one a sample site, record it on a phone and a laptop, and send your message with both
+                videos from your WhatsApp. You can pause sending at any time.
               </p>
             </div>
           </form>

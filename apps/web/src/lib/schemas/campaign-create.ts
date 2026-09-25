@@ -15,7 +15,6 @@ export const campaignFormSchema = z.object({
   radius: z.coerce.number().positive().optional(),
   minRating: z.coerce.number().min(0).max(5).optional(),
   minReviews: z.coerce.number().int().min(0).optional(),
-  websiteRequirement: z.enum(["ANY", "WITH_WEBSITE", "WITHOUT_WEBSITE"]),
   targetCount: z.coerce.number().int().min(1).max(200),
 });
 

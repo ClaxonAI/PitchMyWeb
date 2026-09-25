@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { Activity, Building2, Download, ListChecks, Play, Search, Send } from "lucide-react";
+import { Activity, Building2, Download, Laptop, ListChecks, Search, Send, Smartphone } from "lucide-react";
 import type { CampaignLeadRow, CampaignOverview, PitchBatch } from "@/lib/api-client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/dashboard-ui/button";
@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/dashboard-ui/empty-state";
 import { StatTile } from "@/components/dashboard-ui/stat-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/dashboard-ui/table";
 import { CampaignActions } from "@/components/dashboard/CampaignActions";
+import { CampaignLiveProgress } from "@/components/dashboard/CampaignLiveProgress";
+import { CampaignMessageCard } from "@/components/dashboard/CampaignMessageCard";
 import { DiscoveryProgress } from "@/components/dashboard/DiscoveryProgress";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { PitchBatchPanel } from "@/components/dashboard/PitchBatchPanel";
@@ -42,7 +44,30 @@ const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>,
   not_pitchable_status: "Already pitched",
 };
 
-function BlockedReason({ reason }: { reason: CampaignLeadRow["blockedReason"] }) {
+/** A pitch that failed, and what happened to the credit it was holding. */
+function FailedPipeline({ pipeline }: { pipeline: NonNullable<CampaignLeadRow["pipeline"]> }) {
+  const reason = pipeline.failureReason === "invalid_number" ? "Not on WhatsApp" : pipeline.failureReason === "no_valid_phone" ? "No WhatsApp number" : null;
+  return (
+    <span className="flex flex-col gap-0.5">
+      <StatusBadge status="FAILED" className="self-start" />
+      <span className="text-xs text-dash-muted-foreground">
+        {reason ? `${reason} · ` : ""}
+        {pipeline.creditOutcome === "REPLACED" ? "replaced by another lead" : pipeline.creditOutcome === "REFUNDED" ? "credit refunded" : "retrying"}
+      </span>
+    </span>
+  );
+}
+
+function BlockedReason({ reason, standby }: { reason: CampaignLeadRow["blockedReason"]; standby: boolean }) {
+  // Discovery keeps a few extra leads so a pitch whose number is not on
+  // WhatsApp can go to one of them instead of being refunded.
+  if (!reason && standby) {
+    return (
+      <span className="text-sm text-dash-muted-foreground" title="Pitched automatically if another lead's number isn't on WhatsApp">
+        Standby
+      </span>
+    );
+  }
   if (!reason) return <span className="text-dash-muted-foreground">Not selected</span>;
   return <span className="text-sm text-dash-muted-foreground">{BLOCKED_REASON_TEXT[reason]}</span>;
 }
@@ -69,6 +94,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   // session inside the panel.)
   const eligibleCount = leadRows.filter((row) => row.selectable).length;
   const remainingSlots = Math.max(0, (leadsResult?.targetCount ?? campaign.targetCount) - (leadsResult?.selectedCount ?? counts.selected));
+  const discovering = campaign.status === "RUNNING" || execution?.status === "RUNNING";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -107,6 +133,10 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           )}
         </div>
       </div>
+
+      <CampaignLiveProgress campaignId={id} initialRows={leadRows} sendingPaused={campaign.sendingPaused} discovering={discovering} />
+
+      <CampaignMessageCard campaignId={id} messageTemplate={campaign.messageTemplate} />
 
       {(leadRows.length > 0 || (batchesResult?.items.length ?? 0) > 0) && (
         <PitchBatchPanel
@@ -170,18 +200,30 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                       <StatusBadge status={row.status} />
                     </TableCell>
                     <TableCell>
-                      {row.pipeline ? <StatusBadge status={row.pipeline.stage} /> : <BlockedReason reason={row.blockedReason} />}
+                      {row.pipeline ? (
+                        row.pipeline.stage === "FAILED" ? <FailedPipeline pipeline={row.pipeline} /> : <StatusBadge status={row.pipeline.stage} />
+                      ) : (
+                        <BlockedReason reason={row.blockedReason} standby={remainingSlots === 0} />
+                      )}
                     </TableCell>
                     <TableCell>
                       {row.pipeline?.videoReady ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Button asChild variant="ghost" size="sm" title="Watch the demo video">
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <Button asChild variant="ghost" size="sm" title="Watch the phone video">
                             <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer">
-                              <Play />
-                              Watch
+                              <Smartphone />
+                              Phone
                             </a>
                           </Button>
-                          <Button asChild variant="ghost" size="sm" title="Download the demo video as MP4">
+                          {row.pipeline.laptopVideoReady && (
+                            <Button asChild variant="ghost" size="sm" title="Watch the laptop video">
+                              <a href={`/api/pipelines/${row.pipeline.id}/video?view=laptop`} target="_blank" rel="noopener noreferrer">
+                                <Laptop />
+                                Laptop
+                              </a>
+                            </Button>
+                          )}
+                          <Button asChild variant="ghost" size="sm" title="Download the phone video as MP4">
                             <a href={`/api/pipelines/${row.pipeline.id}/video?download=1`}>
                               <Download />
                               <span className="sr-only">Download</span>

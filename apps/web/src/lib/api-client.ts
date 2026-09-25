@@ -57,6 +57,8 @@ export const api = {
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -185,6 +187,8 @@ export type Me = {
   reservedCredits: number;
   /** Credits spent on pitches that actually sent. */
   usedCredits: number;
+  /** A linked WhatsApp is connected — required before a campaign can be created. */
+  whatsappConnected: boolean;
 };
 
 export const meApi = {
@@ -212,6 +216,10 @@ export type Campaign = {
   selectionMode: SelectionMode;
   targetCount: number;
   deliveryMode: DeliveryMode;
+  /** The WhatsApp message every pitch sends; null uses each lead's generated pitch. */
+  messageTemplate: string | null;
+  /** Sending is paused: pitches finish building and recording, then wait. */
+  sendingPaused: boolean;
   createdAt: string;
   updatedAt: string;
   market: "india" | "foreign";
@@ -229,6 +237,7 @@ export type CampaignCreateInput = {
   selectionMode?: SelectionMode;
   targetCount?: number;
   deliveryMode?: DeliveryMode;
+  messageTemplate?: string;
   market?: "india" | "foreign";
 };
 
@@ -297,7 +306,17 @@ export type CampaignLeadRow = {
   business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
-  pipeline: { id: string; stage: PipelineStage; failureReason: string | null; videoReady: boolean } | null;
+  pipeline: {
+    id: string;
+    stage: PipelineStage;
+    failureReason: string | null;
+    /** Set when the number was not on WhatsApp and the credit went to another lead. */
+    replacedById: string | null;
+    creditOutcome: "CONSUMED" | "REFUNDED" | "REPLACED" | null;
+    updatedAt: string;
+    videoReady: boolean;
+    laptopVideoReady: boolean;
+  } | null;
   selectable: boolean;
   blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
 };
@@ -310,7 +329,9 @@ export const campaignsApi = {
   run: (id: string) => api.post<{ campaign: Campaign; execution: unknown }>(`/api/campaigns/${id}/run`, {}),
   parseQuery: (query: string) =>
     api.post<{ parsed: Partial<CampaignCreateInput> | null; reason?: "not_configured" | "parse_failed" }>("/api/campaigns/parse-query", { query }),
-  pauseSending: (id: string) => api.post<unknown>(`/api/campaigns/${id}/pause-sending`, {}),
+  pauseSending: (id: string) => api.post<{ paused: true; held: number }>(`/api/campaigns/${id}/pause-sending`, {}),
+  resumeSending: (id: string) => api.post<{ paused: false; released: number }>(`/api/campaigns/${id}/resume-sending`, {}),
+  updateMessage: (id: string, messageTemplate: string | null) => api.put<Campaign>(`/api/campaigns/${id}/message`, { messageTemplate }),
   overview: (id: string) => api.get<CampaignOverview>(`/api/campaigns/${id}/overview`),
   leads: (id: string, query: { sort?: "score" | "recent"; search?: string } = {}) =>
     api.get<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }>(`/api/campaigns/${id}/leads${toQueryString(query)}`),
@@ -335,6 +356,8 @@ export type PitchBatch = {
   sentCount: number;
   failedCount: number;
   refundedCount: number;
+  /** Pitches whose number was not on WhatsApp and went to another lead instead of being refunded. */
+  replacedCount: number;
   /** Reserved slots whose credit is not resolved yet: pitches still in flight. */
   processingCount: number;
   createdAt: string;
