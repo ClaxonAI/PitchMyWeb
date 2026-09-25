@@ -33,3 +33,6 @@ Thumbs.db
 
 # Local script output (sample recordings)
 apps/api/scripts/downloads/
+
+# Redis snapshot written when redis-server is started from the repo root
+dump.rdb
