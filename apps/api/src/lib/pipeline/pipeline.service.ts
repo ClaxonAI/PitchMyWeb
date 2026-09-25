@@ -7,6 +7,7 @@ import { generateWhatsAppAction } from "../leads/whatsapp.service";
 import { emitEvent } from "../observability/events";
 import { createWebsiteProject, publishWebsiteProject } from "../websites/website.service";
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
+import { releaseWhatsAppIfCampaignFinished } from "../whatsapp/release.service";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
 import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, LAPTOP_VIDEO_CAPTION, previewExpiry, videoPageUrl } from "./links";
 import { CAMPAIGN_TEMPLATE_PROMPT_VERSION, renderMessageTemplate } from "./message-template";
@@ -230,7 +231,10 @@ async function failPipeline(
   if (replacementId) {
     emitEvent("pipeline.replaced", { pipelineId: pipeline.id, replacementPipelineId: replacementId, campaignId: pipeline.campaignId, reason });
     await runFromBuild(db, replacementId, deps);
+    return;
   }
+  // This may have been the campaign's last open pitch.
+  await releaseWhatsAppIfCampaignFinished(db, pipeline.campaignId);
 }
 
 /**
@@ -609,6 +613,7 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
   const byId = new Map(messages.map((m) => [m.id, m]));
 
   let changed = 0;
+  const delivered = new Set<string>();
   for (const pipeline of pending) {
     const message = byId.get(pipeline.whatsappMessageId!);
     if (!message) continue;
@@ -623,6 +628,7 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
       });
       if (claimed.count === 1) {
         changed += 1;
+        delivered.add(pipeline.campaignId);
         await markLeadPitched(db, pipeline.leadId, { source: "whatsapp_auto", messageId: message.id });
         emitEvent("pipeline.sent", { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId, mode: "AUTO" });
       }
@@ -634,6 +640,9 @@ export async function syncDeliveries(db: PrismaClient, filter: { campaignId?: st
       await failPipeline(db, pipeline, "DELIVERY_QUEUED", new PipelineStepError("not_delivered"), deps);
     }
   }
+  // Failures release on their own (failPipeline); a delivery may have been
+  // the campaign's last open pitch too.
+  for (const campaignId of delivered) await releaseWhatsAppIfCampaignFinished(db, campaignId);
   return changed;
 }
 
@@ -663,6 +672,7 @@ export async function markDirectSent(db: PrismaClient, userId: string, pipelineI
   });
   await markLeadPitched(db, pipeline.leadId, { source: "whatsapp_direct" });
   emitEvent("pipeline.sent", { pipelineId: pipeline.id, campaignId: pipeline.campaignId, leadId: pipeline.leadId, mode: "DIRECT" });
+  await releaseWhatsAppIfCampaignFinished(db, pipeline.campaignId);
   return db.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
 }
 

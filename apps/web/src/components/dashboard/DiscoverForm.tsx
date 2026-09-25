@@ -139,8 +139,8 @@ export function DiscoverForm() {
           <div className="flex flex-col gap-1.5">
             <h2 className="text-lg font-semibold text-dash-foreground">Connect your WhatsApp first</h2>
             <p className="max-w-prose text-sm text-dash-muted-foreground">
-              Every pitch — the message and both demo videos — is sent from your own WhatsApp number, so a campaign can only start once it is linked. It
-              takes about a minute: scan a QR code from WhatsApp → Linked devices.
+              Every pitch — the message and both demo videos — is sent from your own WhatsApp number, so each campaign starts by linking it. It takes
+              about a minute: scan a QR code from WhatsApp → Linked devices. When the campaign has finished, PitchMyWeb unlinks itself again.
             </p>
           </div>
           <Button asChild>

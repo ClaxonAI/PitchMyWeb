@@ -12,6 +12,7 @@ import {
   retryPipeline,
   syncDeliveries,
 } from "../pipeline/pipeline.service";
+import { releaseWhatsAppForFinishedCampaigns } from "../whatsapp/release.service";
 import { recoverStaleBatches } from "../campaigns/selection.service";
 import { getObjectStorage } from "../storage";
 
@@ -39,6 +40,7 @@ export type PipelineMaintenanceResult = {
   pipelinesAbandoned: number;
   pipelinesReleased: number;
   batchesRecovered: number;
+  whatsappReleased: number;
   durationMs: number;
 };
 
@@ -185,6 +187,9 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
   // the recording finishing and the send being queued: send it now.
   const pipelinesReleased = await releaseHeldPipelines(db, { olderThan: new Date(now.getTime() - STALE_HELD_MS) });
   const batchesRecovered = await recoverStaleBatches(db, now);
+  // Backstop for the per-pitch triggers: unlink WhatsApp for users whose
+  // campaigns have all finished.
+  const whatsappReleased = await releaseWhatsAppForFinishedCampaigns(db);
 
   let recordingsDeleted = 0;
   const storage = getObjectStorage();
@@ -218,6 +223,7 @@ export async function runPipelineMaintenanceJob(db: PrismaClient, now = new Date
     pipelinesAbandoned,
     pipelinesReleased,
     batchesRecovered,
+    whatsappReleased,
     recordingsReconciled,
     recordingsTimedOut,
     recordingsDeleted,

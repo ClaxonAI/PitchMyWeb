@@ -42,8 +42,9 @@ export function ConnectedCard({
       </div>
 
       <p className="mt-4 border-t border-whatsapp/20 pt-4 text-[12px] leading-relaxed text-ink/60">
-        Disconnecting unlinks this device in WhatsApp, deletes the stored credentials, and cancels anything still queued.
-        Your message history stays.
+        PitchMyWeb unlinks itself automatically once your campaigns have finished sending, so nothing stays linked between
+        campaigns — you&apos;ll scan a new code for the next one. Disconnecting now does the same straight away and cancels anything
+        still queued. Your message history stays.
       </p>
     </div>
   );

@@ -86,8 +86,8 @@ export function WhatsAppPanel({ initialAccounts }: { initialAccounts: WhatsAppAc
         <p className="eyebrow text-primary">WhatsApp</p>
         <h1 className="display mt-3 text-[34px] leading-[1.05] sm:text-[44px]">Pitch from your own number</h1>
         <p className="mt-4 text-[15px] leading-relaxed text-ink/60">
-          Link WhatsApp once. Pitches then send from your number, with an opt-out list and sending limits applied
-          automatically.
+          Link WhatsApp for each campaign. Pitches send from your number, with an opt-out list and sending limits applied
+          automatically, and PitchMyWeb unlinks itself when the campaign has finished.
         </p>
       </header>
 

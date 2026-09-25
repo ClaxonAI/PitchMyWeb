@@ -134,6 +134,18 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
+      {campaign.whatsappReleasedAt && (
+        <div className="flex flex-col gap-3 rounded-dash-lg border border-dash-success/30 bg-dash-success/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-dash-foreground">
+            <span className="font-medium">Campaign finished.</span> PitchMyWeb unlinked your WhatsApp now that every pitch has an outcome — link it
+            again when you start your next campaign.
+          </p>
+          <Button asChild variant="outline" size="sm" className="self-start sm:self-auto">
+            <Link href="/discover">Start a new campaign</Link>
+          </Button>
+        </div>
+      )}
+
       <CampaignLiveProgress campaignId={id} initialRows={leadRows} sendingPaused={campaign.sendingPaused} discovering={discovering} />
 
       <CampaignMessageCard campaignId={id} messageTemplate={campaign.messageTemplate} />

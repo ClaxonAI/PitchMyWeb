@@ -6,6 +6,7 @@ import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service"
 import { calculateOpportunityScore } from "../scoring/scoring";
 import { releasePitchCredits, reservePitchCredits } from "../checkout/wallet.service";
 import { loadOwnedCampaign } from "./campaign.service";
+import { releaseWhatsAppIfCampaignFinished } from "../whatsapp/release.service";
 
 // Choosing which discovered leads get a site, a video and a pitch.
 //
@@ -368,7 +369,9 @@ export async function onDiscoveryCompleted(db: PrismaClient, campaignId: string,
   try {
     const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { selectionMode: true } });
     if (campaign?.selectionMode !== "AUTO") return;
-    await autoSelectLeads(db, campaignId, {}, deps);
+    const { started } = await autoSelectLeads(db, campaignId, {}, deps);
+    // Nothing to pitch: the campaign is already finished.
+    if (started.length === 0) await releaseWhatsAppIfCampaignFinished(db, campaignId);
   } catch (error) {
     console.error(`Auto-selection failed for campaign ${campaignId}:`, error);
     emitEvent("selection.failed", { campaignId, mode: "auto" }, { level: "error", alert: true });

@@ -26,6 +26,7 @@ export type OperationalEvent =
   | "pipeline.held"
   | "campaign.sending_paused"
   | "campaign.sending_resumed"
+  | "whatsapp.released_after_campaign"
   | "pipeline.sent"
   | "recording.finished"
   | "delivery.failed"

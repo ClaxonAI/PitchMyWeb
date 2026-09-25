@@ -16,7 +16,7 @@ export const plans: Plan[] = [
     name: "Auto",
     bestFor: "WhatsApp Business users",
     headline: "We pitch. You close.",
-    summary: "Link your WhatsApp once. Twenty pitches go out from your own number while you get on with your day.",
+    summary: "Link your WhatsApp for the campaign. Twenty pitches go out from your own number while you get on with your day.",
     unitLabel: "pitches",
     batchSize: 20,
     prices: [

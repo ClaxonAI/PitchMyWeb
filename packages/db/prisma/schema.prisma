@@ -336,6 +336,10 @@ model Campaign {
   // Pause sending: pitches keep building and recording, but hold before
   // they are handed to WhatsApp until the campaign is resumed.
   sendingPaused      Boolean            @default(false)
+  // When every pitch in this campaign had a final outcome and PitchMyWeb
+  // unlinked the user's WhatsApp (release.service.ts). Each campaign asks the
+  // user to link again; nothing stays linked between campaigns.
+  whatsappReleasedAt DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 

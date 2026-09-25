@@ -220,6 +220,8 @@ export type Campaign = {
   messageTemplate: string | null;
   /** Sending is paused: pitches finish building and recording, then wait. */
   sendingPaused: boolean;
+  /** Every pitch finished and PitchMyWeb unlinked WhatsApp; the next campaign links it again. */
+  whatsappReleasedAt: string | null;
   createdAt: string;
   updatedAt: string;
   market: "india" | "foreign";

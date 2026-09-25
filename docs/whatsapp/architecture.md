@@ -102,6 +102,21 @@ socket is still coming back.
 Shutdown is the mirror image: stop consuming, close the sockets, release the locks, and leave the account
 rows and credentials exactly as they are.
 
+## Linked per campaign
+
+A link lasts one campaign, not forever. Starting a campaign requires a
+connected account (`assertWhatsAppConnected`); when every pitch in it has a
+final outcome and none of the user's other campaigns is still working,
+`apps/api/src/lib/whatsapp/release.service.ts` sends the worker a
+`disconnect` command — the same path as the Disconnect button: log the
+device out of WhatsApp, wipe the stored credentials, mark the account
+DISCONNECTED. The next campaign starts with a fresh QR scan.
+
+It waits for the last **delivery receipt**, not the last send: receipts only
+arrive over the linked device, and a sent pitch that never gets one is
+failed as `not_delivered` and refunded after a day. Held (paused) pitches
+and failures still waiting for an automatic retry also keep the link.
+
 ## Sending
 
 ```
