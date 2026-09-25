@@ -68,16 +68,29 @@ step "swap"
 # ~1 GB while filming: without swap either can hit the OOM killer and fail the
 # deploy halfway. 4 GB of swap absorbs those peaks; swappiness stays low so the
 # running app keeps to RAM. Idempotent: created once, re-enabled if off.
+#
+# Never fatal: a box without swap still deploys (as it always has), so a full
+# disk or an odd filesystem only costs the safety margin, not the release.
 SWAPFILE=/swapfile
-if [ ! -f "$SWAPFILE" ]; then
-  fallocate -l 4G "$SWAPFILE" || dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096
-  chmod 600 "$SWAPFILE"
-  mkswap "$SWAPFILE"
-fi
-swapon --show=NAME --noheadings | grep -qx "$SWAPFILE" || swapon "$SWAPFILE"
-grep -q "^$SWAPFILE " /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
-sysctl -q -w vm.swappiness=10
-grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
+setup_swap() {
+  if [ ! -f "$SWAPFILE" ]; then
+    # 4 GB of swap plus room for the build: refuse rather than fill the disk.
+    local free_kb
+    free_kb="$(df --output=avail -k / | tail -1 | tr -d ' ')"
+    if [ "${free_kb:-0}" -lt $((6 * 1024 * 1024)) ]; then
+      echo "only $((free_kb / 1024)) MB free on / — skipping swap creation"
+      return 0
+    fi
+    fallocate -l 4G "$SWAPFILE" || dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096
+    chmod 600 "$SWAPFILE"
+    mkswap "$SWAPFILE"
+  fi
+  swapon --show=NAME --noheadings | grep -qx "$SWAPFILE" || swapon "$SWAPFILE"
+  grep -q "^$SWAPFILE " /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+  sysctl -q -w vm.swappiness=10
+  grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
+}
+setup_swap || echo "WARNING: swap setup failed; continuing without it"
 free -m
 
 step "apt packages"
@@ -209,7 +222,15 @@ set +a
 : "${REDIS_URL:?not in SSM}"
 
 step "npm ci"
-as_app_path npm ci
+# Retried once from a clean slate: a deploy that was interrupted (the box
+# stopped mid-install, or two deploys overlapping before the lock above
+# existed) leaves node_modules half-written, and npm ci then fails with
+# ENOTEMPTY/EEXIST on every later run until it is removed.
+if ! as_app_path npm ci; then
+  echo "npm ci failed; removing node_modules and retrying once"
+  rm -rf node_modules apps/*/node_modules packages/*/node_modules
+  as_app_path npm ci
+fi
 
 step "playwright chromium"
 # --with-deps pulls the shared libraries headless Chromium needs; they are not
@@ -245,7 +266,14 @@ for app in web api sites; do
   # that. Only types/: the rest of .next is what the running server is still
   # serving until the swap below.
   rm -rf "apps/$app/.next/types"
-  as_app env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"
+  # Retried once: on a small box a build can be killed for memory while the
+  # workers are busy (the recorder's Chromium). Nothing is swapped in until
+  # all three succeed, so a retry is always safe.
+  if ! as_app env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"; then
+    echo "build of apps/$app failed; retrying once"
+    rm -rf "apps/$app/$BUILD_DIR"
+    as_app env NEXT_DIST_DIR="$BUILD_DIR" npm run build -w "apps/$app"
+  fi
 done
 
 step "swap in the new build"
@@ -283,6 +311,17 @@ CERTBOT_EMAIL="${CERTBOT_EMAIL:-}" bash infrastructure/aws/setup-nginx.sh
 
 step "status"
 app_pm2 list
+free -m
+
+step "health"
+# What the deploy actually serves, straight from each backend (nginx aside),
+# so the log says whether the release came up — not only that pm2 started it.
+sleep 5
+for target in "web http://127.0.0.1:3000/" "api http://127.0.0.1:4000/api/me" "sites http://127.0.0.1:3200/"; do
+  set -- $target
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$2" || true)"
+  echo "$1: HTTP $code"
+done
 
 echo
 echo "=== bootstrap finished $(date -Is) ==="

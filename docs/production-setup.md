@@ -275,6 +275,21 @@ page. Three things reliably go wrong:
 
 ## Deploying
 
+**From Windows, one command** (PowerShell 5.1 or 7, in the repository folder,
+with the AWS CLI configured):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infrastructure\aws\deploy.ps1                   # deploy origin/main
+powershell -ExecutionPolicy Bypass -File infrastructure\aws\deploy.ps1 -Resize t3.medium # deploy, then resize the box
+powershell -ExecutionPolicy Bypass -File infrastructure\aws\deploy.ps1 -Status           # read-only: running deploys, log tail, memory, pm2
+```
+
+It packages `origin/main` (never `HEAD`, which may be another branch with
+uncommitted changes), waits for any deploy already running instead of
+overlapping it, starts `bootstrap.sh` exactly once, follows it to the end,
+prints the end of the deploy log if it fails, and checks the site answers.
+Every step it takes is below, for doing it by hand.
+
 Source reaches the box as a `git archive` tarball through S3, not a clone.
 The repository belongs to the `ClaxonAI` account while the work happens as a
 collaborator, and a fine-grained token only reaches repositories its creator
