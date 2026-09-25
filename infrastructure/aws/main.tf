@@ -278,6 +278,54 @@ resource "aws_s3_bucket_versioning" "storage" {
   }
 }
 
+# Demo videos are deleted by the API's pipeline-maintenance job once their
+# download window (VIDEO_RETENTION_DAYS, 7 by default) closes. With
+# versioning on, that delete only adds a delete marker and the old version
+# keeps being billed — so this is what actually frees the storage:
+#   - a deleted recording's old version is removed a day later
+#   - the delete markers left behind are cleaned up
+#   - a recording the job never reached (scheduler down) still expires a
+#     couple of days after its window, as a backstop
+# Scoped to recordings/ so the deploy tarball under deploy/ is untouched.
+resource "aws_s3_bucket_lifecycle_configuration" "storage" {
+  bucket     = aws_s3_bucket.storage.id
+  depends_on = [aws_s3_bucket_versioning.storage]
+
+  rule {
+    id     = "expire-demo-recordings"
+    status = "Enabled"
+
+    filter {
+      prefix = "recordings/"
+    }
+
+    expiration {
+      days = var.recording_retention_days + 2
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  rule {
+    id     = "remove-recording-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = "recordings/"
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+}
+
 # IAM Role for EC2
 resource "aws_iam_role" "ec2_role" {
   name = "pitchmyweb-ec2-role"

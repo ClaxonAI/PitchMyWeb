@@ -122,6 +122,10 @@ describe("processRecording", () => {
     expect(row.mimeType).toBe("video/mp4");
     expect(row.sizeBytes).toBeGreaterThan(0);
     expect(row.attempts).toBe(1);
+    // Downloadable for the default 7 days, then cleaned out of storage.
+    const days = (row.expiresAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThanOrEqual(7);
     expect(put).toHaveBeenCalledTimes(2);
     expect(put.mock.calls[0]?.[2]).toBe("video/mp4");
     expect(notify).toHaveBeenCalledWith(recording.id);

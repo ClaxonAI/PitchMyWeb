@@ -142,12 +142,24 @@ export class SessionManager {
   }
 
   /**
-   * User-initiated disconnect: unlink on WhatsApp, wipe the stored
-   * credentials, and cancel anything still queued for this account. The
-   * account row itself stays, so the user can relink without losing its
-   * message history.
+   * Disconnect: unlink on WhatsApp, wipe the stored credentials, and cancel
+   * anything still queued for this account. The account row itself stays,
+   * so the user can relink without losing its message history.
+   *
+   * Either the user asked (Disconnect) or the API's session policy did,
+   * after a campaign finished. The policy's command names the login it was
+   * decided for; if the user has linked again since, the command is stale
+   * and ending the new session would be exactly wrong, so it is skipped.
    */
-  async disconnect(accountId: string): Promise<void> {
+  async disconnect(accountId: string, options: { expectedLinkedAt?: string } = {}): Promise<void> {
+    if (options.expectedLinkedAt) {
+      const account = await this.db.whatsAppAccount.findUnique({ where: { id: accountId }, select: { linkedAt: true } });
+      if (!account || account.linkedAt?.toISOString() !== options.expectedLinkedAt) {
+        logger.info({ accountId }, "skipping automatic sign-out; the account was linked again since it was decided");
+        return;
+      }
+      logger.info({ accountId }, "signing out after the campaign (session policy)");
+    }
     try {
       await this.provider.disconnect(accountId, { logout: true });
     } catch (error) {

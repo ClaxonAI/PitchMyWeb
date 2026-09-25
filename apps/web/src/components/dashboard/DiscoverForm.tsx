@@ -15,6 +15,7 @@ import { Input } from "@/components/dashboard-ui/input";
 import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
 import { useSession } from "./SessionProvider";
+import { WhatsAppCampaignStep } from "./WhatsAppCampaignStep";
 
 export function DiscoverForm() {
   const router = useRouter();
@@ -28,6 +29,9 @@ export function DiscoverForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [parseHint, setParseHint] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  // Campaigns started here pitch from the user's WhatsApp as soon as
+  // discovery finishes, so a linked number is part of starting one.
+  const [whatsappReady, setWhatsappReady] = useState(false);
   const {
     register,
     handleSubmit,
@@ -54,6 +58,12 @@ export function DiscoverForm() {
       if (error instanceof ApiError && error.code === "PAYMENT_REQUIRED") {
         router.push("/pricing");
         return;
+      }
+      if (error instanceof ApiError && error.code === "WHATSAPP_NOT_CONNECTED") {
+        // Signed out between loading this page and pressing Find (another
+        // campaign finished, or the 3-day window closed): the step above
+        // picks that up on its next poll and shows the code again.
+        setWhatsappReady(false);
       }
       setSubmitError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     }
@@ -107,6 +117,7 @@ export function DiscoverForm() {
 
   return (
     <div className="flex flex-col gap-6">
+      <WhatsAppCampaignStep onReadyChange={setWhatsappReady} />
       <p className="text-sm text-dash-muted-foreground">
         {availableCredits} pitch {availableCredits === 1 ? "credit" : "credits"} available. Searching costs nothing — you choose how many of the leads to
         pitch once you can see them.
@@ -130,7 +141,7 @@ export function DiscoverForm() {
             </Button>
           </div>
           <p className="text-xs text-dash-muted-foreground">
-            Search fills the form from your sentence. Nothing is scraped until you press Find businesses. After that, leads without a website are selected and WhatsApp messages go out automatically if your number is linked.
+            Search fills the form from your sentence. Nothing is scraped until you press Find businesses. After that, leads without a website are selected and pitched from your linked WhatsApp automatically.
           </p>
           {parseHint && <p className="text-xs text-dash-muted-foreground">{parseHint}</p>}
         </CardContent>
@@ -197,15 +208,12 @@ export function DiscoverForm() {
             {submitError && <p className="text-sm text-dash-destructive sm:col-span-2">{submitError}</p>}
 
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || !whatsappReady}>
                 {isSubmitting ? "Searching…" : "Find businesses"}
               </Button>
-              <p className="mt-2 text-xs text-dash-muted-foreground">
-                Link WhatsApp first if you want those pitches sent without another click.{" "}
-                <Link href="/whatsapp" className="underline underline-offset-2">
-                  Open WhatsApp
-                </Link>
-              </p>
+              {!whatsappReady && (
+                <p className="mt-2 text-xs text-dash-muted-foreground">Link your WhatsApp above first — the pitches are sent from your number.</p>
+              )}
             </div>
           </form>
         </CardContent>

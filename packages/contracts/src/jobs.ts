@@ -18,6 +18,12 @@ export const sessionCommandSchema = z
       .string()
       .regex(/^\d{8,15}$/)
       .optional(),
+    // Automatic sign-outs only (apps/api lib/whatsapp/session-policy.ts):
+    // the login (WhatsAppAccount.linkedAt, ISO) the sign-out was decided
+    // for. The worker skips the command when the account has been linked
+    // again since, so a sign-out that waited in the queue can never end the
+    // user's newer session. Absent for a user's own Disconnect.
+    expectedLinkedAt: z.string().datetime().optional(),
   })
   .refine((command) => command.type !== "pairing-code" || command.phoneNumber !== undefined, {
     message: "phoneNumber is required for a pairing-code command",

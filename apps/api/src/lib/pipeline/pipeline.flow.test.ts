@@ -23,7 +23,8 @@ import {
   syncDeliveries,
   type PipelineDeps,
 } from "./pipeline.service";
-import { listCampaignPipelines } from "./pipeline-view";
+import { getPipelineVideoUrl, listCampaignPipelines, VideoExpiredError } from "./pipeline-view";
+import { getPublicVideoUrl } from "../sites/public-site.service";
 
 const SOURCE = "pipeline:test";
 const JOB_SECRET = "pipeline-test-jobs-secret-0123456789";
@@ -460,6 +461,43 @@ describe("recording hand-off and delivery", () => {
   });
 });
 
+describe("WhatsApp session after the campaign", () => {
+  async function deliverOnlyPitch(label: string, stayLinked: boolean) {
+    const { user, pipeline } = await recordingStage(label, "AUTO");
+    const linkedAt = new Date();
+    const account = await prisma.whatsAppAccount.create({
+      data: {
+        userId: user.id,
+        status: "CONNECTED",
+        phoneNumber: "919000000001",
+        lastConnectedAt: linkedAt,
+        linkedAt,
+        stayLinkedUntil: stayLinked ? new Date(linkedAt.getTime() + 3 * 24 * 60 * 60 * 1000) : null,
+      },
+    });
+    await readyRecording(pipeline.recordingId!);
+    await onRecordingFinished(prisma, pipeline.recordingId!);
+    const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    // Still sending: the receipt has not arrived, so the number stays linked.
+    await syncDeliveries(prisma, { campaignId: pipeline.campaignId });
+    expect((await prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: account.id } })).logoutReason).toBeNull();
+
+    await prisma.whatsAppMessage.update({ where: { id: queued.whatsappMessageId! }, data: { status: "DELIVERED", deliveredAt: new Date() } });
+    await syncDeliveries(prisma, { campaignId: pipeline.campaignId });
+    return prisma.whatsAppAccount.findUniqueOrThrow({ where: { id: account.id } });
+  }
+
+  it("signs the number out the moment the campaign's last pitch is delivered", async () => {
+    const account = await deliverOnlyPitch("signout-after", false);
+    expect(account.logoutReason).toBe("campaign_finished");
+  });
+
+  it("keeps it linked when the user chose to stay signed in for 3 days", async () => {
+    const account = await deliverOnlyPitch("stay-linked-after", true);
+    expect(account.logoutReason).toBeNull();
+  });
+});
+
 describe("credit resolution", () => {
   it("consumes exactly one credit when a pipeline reaches SENT via a delivery receipt", async () => {
     const { user, pipeline } = await recordingStage("credit-consume", "AUTO");
@@ -667,6 +705,65 @@ describe("pipeline maintenance job", () => {
       reservedCredits: before.reservedCredits - 1,
       availableCredits: before.availableCredits + 1,
     });
+  });
+});
+
+describe("demo video retention", () => {
+  // Storage is swapped for an in-memory stand-in for this block, the same
+  // cache lib/storage.ts reads, so deletes and signed URLs are observable.
+  const g = globalThis as { objectStorage?: unknown };
+
+  it("is downloadable until its window closes, then refused and deleted from storage", async () => {
+    const deleted: string[] = [];
+    const previous = g.objectStorage;
+    g.objectStorage = {
+      delete: async (key: string) => void deleted.push(key),
+      signedGetUrl: async (key: string) => `https://storage.test/${key}`,
+    };
+    try {
+      const { user, campaign, pipeline } = await recordingStage("video-retention", "DIRECT");
+      const recordingId = pipeline.recordingId!;
+      await readyRecording(recordingId);
+      await onRecordingFinished(prisma, recordingId);
+      const mp4 = `recordings/test/${recordingId}.mp4`;
+      const poster = `recordings/test/${recordingId}.jpg`;
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      await prisma.demoRecording.update({ where: { id: recordingId }, data: { expiresAt, posterKey: poster } });
+      const project = await prisma.websiteProject.findUniqueOrThrow({ where: { id: pipeline.websiteProjectId! } });
+
+      // Inside the window: the dashboard can play/download it and the public page links it.
+      expect(await getPipelineVideoUrl(prisma, user.id, pipeline.id, { download: true })).toBe(`https://storage.test/${mp4}`);
+      expect(await getPublicVideoUrl(prisma, project.slug)).toBe(`https://storage.test/${mp4}`);
+      const before = (await listCampaignLeads(prisma, user.id, campaign.id)).items[0]!;
+      expect(before.pipeline).toMatchObject({ videoReady: true, videoExpired: false, videoExpiresAt: expiresAt });
+
+      // Past the deadline it is refused at once, even before the sweep runs.
+      await expect(getPipelineVideoUrl(prisma, user.id, pipeline.id, { now: new Date(expiresAt.getTime() + 1000) })).rejects.toThrow(VideoExpiredError);
+      await expect(getPublicVideoUrl(prisma, project.slug, new Date(expiresAt.getTime() + 1000))).rejects.toThrow(NotFoundError);
+
+      // A sweep before the deadline leaves it alone.
+      const { deleteExpiredRecordings } = await import("../jobs/pipeline-maintenance.job");
+      await deleteExpiredRecordings(prisma);
+      expect(deleted).not.toContain(mp4);
+
+      // After the deadline the video and its poster are deleted and the row forgets the keys.
+      await prisma.demoRecording.update({ where: { id: recordingId }, data: { expiresAt: new Date(Date.now() - 1000) } });
+      expect(await deleteExpiredRecordings(prisma)).toBeGreaterThanOrEqual(1);
+      expect(deleted).toEqual(expect.arrayContaining([mp4, poster]));
+      expect(await prisma.demoRecording.findUniqueOrThrow({ where: { id: recordingId } })).toMatchObject({
+        storageKey: null,
+        posterKey: null,
+        failureReason: "expired",
+      });
+
+      await expect(getPipelineVideoUrl(prisma, user.id, pipeline.id)).rejects.toThrow(VideoExpiredError);
+      await expect(getPublicVideoUrl(prisma, project.slug)).rejects.toThrow(NotFoundError);
+      expect((await getPublicSite(prisma, project.slug)).hasVideo).toBe(false);
+      const after = (await listCampaignLeads(prisma, user.id, campaign.id)).items[0]!;
+      expect(after.pipeline).toMatchObject({ videoReady: false, videoExpired: true });
+    } finally {
+      g.objectStorage = previous;
+    }
   });
 });
 

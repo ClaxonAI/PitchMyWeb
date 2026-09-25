@@ -48,9 +48,12 @@ export function sendQueue(): Queue<SendJob> {
  * Enqueues a session command. Payloads are validated here as well as in the
  * worker, so a malformed job never reaches Redis in the first place.
  */
-export async function enqueueSessionCommand(command: SessionCommand): Promise<void> {
+export async function enqueueSessionCommand(command: SessionCommand, options: { jobId?: string } = {}): Promise<void> {
   const payload = sessionCommandSchema.parse(command);
   await sessionQueue().add(payload.type, payload, {
+    // Only the automatic sign-out sets one, so a sweep that runs while the
+    // worker is busy cannot pile up duplicate commands.
+    ...(options.jobId ? { jobId: options.jobId } : {}),
     removeOnComplete: true,
     removeOnFail: 100,
     attempts: 1,

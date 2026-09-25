@@ -90,9 +90,20 @@ export type WhatsAppAccount = {
   lastConnectedAt: string | null;
   lastSeenAt: string | null;
   lastError: string | null;
+  /** When this login began (the link request). */
+  linkedAt: string | null;
+  /** Set when the user ticked "keep me signed in for 3 days"; null means signed out after the campaign. */
+  stayLinkedUntil: string | null;
+  /** Why the system signed the number out, if it did. Cleared by the next link. */
+  logoutReason: WhatsAppLogoutReason | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export type WhatsAppLogoutReason = "campaign_finished" | "stay_linked_expired" | "unused";
+
+/** How long "keep me signed in" lasts (apps/api lib/whatsapp/session-policy.ts STAY_LINKED_DAYS). */
+export const STAY_LINKED_DAYS = 3;
 
 export type WhatsAppMessage = {
   id: string;
@@ -125,11 +136,23 @@ export type Paginated<T> = { items: T[]; page: number; pageSize: number; total: 
 export const whatsappApi = {
   listAccounts: () => api.get<{ items: WhatsAppAccount[] }>("/api/whatsapp/accounts"),
   createAccount: () => api.post<WhatsAppAccount>("/api/whatsapp/accounts", {}),
-  connect: (id: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/connect`, {}),
-  pairingCode: (id: string, phoneNumber: string) =>
-    api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/pairing-code`, { phoneNumber }),
+  connect: (id: string, options: { stayLinked?: boolean } = {}) =>
+    api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/connect`, { stayLinked: options.stayLinked === true }),
+  pairingCode: (id: string, phoneNumber: string, options: { stayLinked?: boolean } = {}) =>
+    api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/pairing-code`, { phoneNumber, stayLinked: options.stayLinked === true }),
   disconnect: (id: string) => api.post<WhatsAppAccount>(`/api/whatsapp/accounts/${id}/disconnect`, {}),
-  status: (id: string) => api.get<{ accountId: string; status: WaStatus; phoneNumber: string | null; lastSeenAt: string | null; lastError: string | null; qrDataUrl: string | null }>(`/api/whatsapp/accounts/${id}/status`),
+  setStayLinked: (id: string, stayLinked: boolean) => api.patch<WhatsAppAccount>(`/api/whatsapp/accounts/${id}`, { stayLinked }),
+  status: (id: string) =>
+    api.get<{
+      accountId: string;
+      status: WaStatus;
+      phoneNumber: string | null;
+      lastSeenAt: string | null;
+      lastError: string | null;
+      stayLinkedUntil: string | null;
+      logoutReason: WhatsAppLogoutReason | null;
+      qrDataUrl: string | null;
+    }>(`/api/whatsapp/accounts/${id}/status`),
   previewMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
     api.post<MessagePreview>("/api/whatsapp/messages/preview", input),
   sendMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
@@ -297,7 +320,18 @@ export type CampaignLeadRow = {
   business: Pick<Business, "id" | "name" | "category" | "city" | "address" | "phone" | "website" | "websiteVerificationStatus" | "rating" | "reviewCount">;
   hasValidPhone: boolean;
   pitch: string | null;
-  pipeline: { id: string; stage: PipelineStage; failureReason: string | null; videoReady: boolean } | null;
+  /**
+   * videoReady: the demo video can be watched/downloaded now. videoExpiresAt:
+   * when that stops (it is then deleted from storage). videoExpired: it did.
+   */
+  pipeline: {
+    id: string;
+    stage: PipelineStage;
+    failureReason: string | null;
+    videoReady: boolean;
+    videoExpiresAt: string | null;
+    videoExpired: boolean;
+  } | null;
   selectable: boolean;
   blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
 };

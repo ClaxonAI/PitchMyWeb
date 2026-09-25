@@ -44,3 +44,13 @@ variable "s3_bucket_name" {
   type        = string
   default     = "pitchmyweb-prod-recordings"
 }
+
+variable "recording_retention_days" {
+  description = "Days a demo video stays downloadable; keep equal to the app's VIDEO_RETENTION_DAYS. The bucket expires recordings 2 days after this as a backstop."
+  type        = number
+  default     = 7
+  validation {
+    condition     = var.recording_retention_days >= 1 && var.recording_retention_days <= 90
+    error_message = "recording_retention_days must be between 1 and 90 (the app accepts the same range)."
+  }
+}

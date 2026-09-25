@@ -42,6 +42,11 @@ const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>,
   not_pitchable_status: "Already pitched",
 };
 
+/** "until 2 Oct" — short, since it sits under two icon buttons in a table cell. */
+function formatVideoDeadline(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 function BlockedReason({ reason }: { reason: CampaignLeadRow["blockedReason"] }) {
   if (!reason) return <span className="text-dash-muted-foreground">Not selected</span>;
   return <span className="text-sm text-dash-muted-foreground">{BLOCKED_REASON_TEXT[reason]}</span>;
@@ -111,6 +116,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
       {(leadRows.length > 0 || (batchesResult?.items.length ?? 0) > 0) && (
         <PitchBatchPanel
           campaignId={id}
+          deliveryMode={campaign.deliveryMode}
           eligibleCount={eligibleCount}
           remainingSlots={remainingSlots}
           initialBatches={batchesResult?.items ?? []}
@@ -174,7 +180,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                     </TableCell>
                     <TableCell>
                       {row.pipeline?.videoReady ? (
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex flex-wrap items-center gap-1">
                           <Button asChild variant="ghost" size="sm" title="Watch the demo video">
                             <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer">
                               <Play />
@@ -187,6 +193,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                               <span className="sr-only">Download</span>
                             </a>
                           </Button>
+                          {row.pipeline.videoExpiresAt && (
+                            <span className="text-xs text-dash-muted-foreground" title="Videos are deleted after this date to keep storage small">
+                              until {formatVideoDeadline(row.pipeline.videoExpiresAt)}
+                            </span>
+                          )}
+                        </span>
+                      ) : row.pipeline?.videoExpired ? (
+                        <span className="text-sm text-dash-muted-foreground" title="Demo videos can be downloaded for 7 days after they are recorded">
+                          Expired
                         </span>
                       ) : (
                         <span className="text-dash-muted-foreground">—</span>

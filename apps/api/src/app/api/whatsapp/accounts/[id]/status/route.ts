@@ -28,6 +28,10 @@ export async function handleGetWhatsAppStatus(db: PrismaClient, request: NextReq
     lastConnectedAt: account.lastConnectedAt,
     lastSeenAt: account.lastSeenAt,
     lastError: account.lastError,
+    // Session lifetime (lib/whatsapp/session-policy.ts), so a page left open
+    // can say "signed in until …" or why the number was signed out.
+    stayLinkedUntil: account.stayLinkedUntil,
+    logoutReason: account.logoutReason,
     // The QR reaches the browser over pub/sub, which is published once and
     // kept by nobody. A client whose stream was not open at that instant
     // never receives it, and without this the poll can only report the

@@ -868,6 +868,18 @@ model WhatsAppAccount {
   // Sanitized, user-facing text only, same convention as
   // CampaignExecution.errorMessage: never a raw Baileys error or stack.
   lastError       String?
+  // Session lifetime (lib/whatsapp/session-policy.ts). A linked number is
+  // signed out as soon as the campaign that needed it has finished, unless
+  // the user ticked "keep me signed in for 3 days" when linking — then it
+  // stays linked until stayLinkedUntil. linkedAt is when this login began
+  // (the connect request), so "a campaign finished after this login" can be
+  // told apart from one that finished before it; lastConnectedAt cannot do
+  // that, because every reconnect moves it. logoutReason records why the
+  // system signed the number out ("campaign_finished" | "stay_linked_expired"
+  // | "unused"), so the dashboard can explain it; a new link clears it.
+  linkedAt        DateTime?
+  stayLinkedUntil DateTime?
+  logoutReason    String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -878,7 +890,8 @@ model WhatsAppAccount {
   @@index([userId])
   // The worker restoreAll() sweep on boot scans for CONNECTED/RECONNECTING
   // accounts across every user — the one query in this system that is not
-  // scoped to a single user, so it needs its own index.
+  // scoped to a single user, so it needs its own index. The session-policy
+  // sweep uses the same shape of query.
   @@index([status])
   @@map("whatsapp_accounts")
 }
@@ -1135,6 +1148,10 @@ model DemoRecording {
   mimeType         String?
   failureReason    String?
   attempts         Int             @default(0)
+  // When the video stops being downloadable and its objects are deleted
+  // from storage (VIDEO_RETENTION_DAYS after it became READY, see
+  // @pitchmyweb/storage videoExpiry). Null until the recording is READY.
+  expiresAt        DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -1143,6 +1160,8 @@ model DemoRecording {
 
   @@index([websiteProjectId, status])
   @@index([status, createdAt])
+  // The storage cleanup sweep: "READY recordings whose expiresAt has passed".
+  @@index([expiresAt])
   @@map("demo_recordings")
 }
 

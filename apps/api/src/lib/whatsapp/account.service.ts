@@ -2,6 +2,7 @@ import type { PrismaClient, WhatsAppAccount } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { enqueueSessionCommand } from "./queue";
+import { stayLinkedUntilFor } from "./session-policy";
 
 // Linked-account lifecycle. Every query is scoped by `{ id, userId }` rather
 // than by id alone, so another user's account id is indistinguishable from
@@ -20,7 +21,18 @@ const MAX_ACCOUNTS_PER_USER = 1;
  */
 export type PublicAccount = Pick<
   WhatsAppAccount,
-  "id" | "phoneNumber" | "displayName" | "status" | "lastConnectedAt" | "lastSeenAt" | "lastError" | "createdAt" | "updatedAt"
+  | "id"
+  | "phoneNumber"
+  | "displayName"
+  | "status"
+  | "lastConnectedAt"
+  | "lastSeenAt"
+  | "lastError"
+  | "linkedAt"
+  | "stayLinkedUntil"
+  | "logoutReason"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 const PUBLIC_FIELDS = {
@@ -31,9 +43,23 @@ const PUBLIC_FIELDS = {
   lastConnectedAt: true,
   lastSeenAt: true,
   lastError: true,
+  linkedAt: true,
+  stayLinkedUntil: true,
+  logoutReason: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/**
+ * Every link attempt starts a new login for the session policy
+ * (session-policy.ts): its own start time, the user's answer to "keep me
+ * signed in for 3 days", and no leftover reason from the previous sign-out.
+ */
+export type LinkOptions = { stayLinked?: boolean };
+
+function newLogin(options: LinkOptions, now = new Date()) {
+  return { linkedAt: now, stayLinkedUntil: stayLinkedUntilFor(options.stayLinked === true, now), logoutReason: null };
+}
 
 export async function listAccounts(db: PrismaClient, userId: string): Promise<PublicAccount[]> {
   return db.whatsAppAccount.findMany({
@@ -68,11 +94,11 @@ export async function createAccount(db: PrismaClient, userId: string): Promise<P
  * here rather than waiting for the worker, so the UI reflects the click
  * immediately even if the worker is briefly busy.
  */
-export async function requestConnect(db: PrismaClient, userId: string, accountId: string): Promise<PublicAccount> {
+export async function requestConnect(db: PrismaClient, userId: string, accountId: string, options: LinkOptions = {}): Promise<PublicAccount> {
   await getAccount(db, userId, accountId);
   const account = await db.whatsAppAccount.update({
     where: { id: accountId },
-    data: { status: "CONNECTING", lastError: null },
+    data: { status: "CONNECTING", lastError: null, ...newLogin(options) },
     select: PUBLIC_FIELDS,
   });
   await enqueueSessionCommand({ type: "connect", accountId });
@@ -85,7 +111,13 @@ export async function requestConnect(db: PrismaClient, userId: string, accountId
  * helper the wa.me link builder uses, so "not a plausible phone number" is
  * decided in exactly one place in this codebase.
  */
-export async function requestPairingCode(db: PrismaClient, userId: string, accountId: string, rawPhone: string): Promise<PublicAccount> {
+export async function requestPairingCode(
+  db: PrismaClient,
+  userId: string,
+  accountId: string,
+  rawPhone: string,
+  options: LinkOptions = {},
+): Promise<PublicAccount> {
   await getAccount(db, userId, accountId);
   const phoneNumber = normalizePhoneForWhatsApp(rawPhone);
   if (!phoneNumber) {
@@ -93,11 +125,27 @@ export async function requestPairingCode(db: PrismaClient, userId: string, accou
   }
   const account = await db.whatsAppAccount.update({
     where: { id: accountId },
-    data: { status: "CONNECTING", lastError: null },
+    data: { status: "CONNECTING", lastError: null, ...newLogin(options) },
     select: PUBLIC_FIELDS,
   });
   await enqueueSessionCommand({ type: "pairing-code", accountId, phoneNumber });
   return account;
+}
+
+/**
+ * Changes the answer to "keep me signed in for 3 days" for the current
+ * login — from the checkbox under a QR that is already on screen, or from
+ * the connected card. Turning it on starts a fresh 3-day window from now;
+ * turning it off means the number is signed out once nothing is left to
+ * send (session-policy.ts), which may be at the next sweep.
+ */
+export async function setStayLinked(db: PrismaClient, userId: string, accountId: string, stayLinked: boolean): Promise<PublicAccount> {
+  await getAccount(db, userId, accountId);
+  return db.whatsAppAccount.update({
+    where: { id: accountId },
+    data: { stayLinkedUntil: stayLinkedUntilFor(stayLinked) },
+    select: PUBLIC_FIELDS,
+  });
 }
 
 /**

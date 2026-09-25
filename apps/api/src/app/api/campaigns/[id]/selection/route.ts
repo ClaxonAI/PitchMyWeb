@@ -7,6 +7,8 @@ import { parseJsonBody } from "../../../../../lib/api/request";
 import { errorResponse, jsonOk } from "../../../../../lib/api/response";
 import { rateLimit } from "../../../../../lib/api/rate-limit";
 import { autoSelectForUser, selectLeads } from "../../../../../lib/campaigns/selection.service";
+import { loadOwnedCampaign } from "../../../../../lib/campaigns/campaign.service";
+import { assertWhatsAppReady } from "../../../../../lib/whatsapp/session-policy";
 import type { PipelineDeps } from "../../../../../lib/pipeline/pipeline.service";
 import { cuidSchema } from "../../../../../lib/validation/common";
 import { campaignSelectionSchema } from "../../../../../lib/validation/pipeline";
@@ -30,6 +32,9 @@ export async function handleSelectLeads(
   const id = cuidSchema.parse(params.id);
   const body = await parseJsonBody(request, campaignSelectionSchema);
   await rateLimit(`selection:user:${user.id}`, 30, 10 * 60 * 1000);
+  // Checked before any credit is reserved: pitching a batch with no linked
+  // number would only fail every pipeline at the send step and refund it.
+  await assertWhatsAppReady(db, user.id, await loadOwnedCampaign(db, id, user.id));
 
   const result =
     "auto" in body ? await autoSelectForUser(db, user.id, id, { count: body.count }, deps) : await selectLeads(db, user.id, id, body.leadIds, deps);

@@ -99,7 +99,13 @@ client, with rate limits, a global opt-out list and encrypted credential storage
 [docs/adr/0001-automated-whatsapp-via-baileys.md](docs/adr/0001-automated-whatsapp-via-baileys.md) for why,
 and what it costs.
 
-Link a number at `/dashboard/whatsapp` after signing in.
+Link a number at `/whatsapp` after signing in, or right on the Discover page — every Auto campaign needs a linked
+number to start. For privacy the number is signed out (device unlinked, stored session deleted) as soon as the
+campaign has finished sending, unless the user ticks "keep me signed in for 3 days" when linking; see
+[Session lifetime](docs/whatsapp/architecture.md#session-lifetime).
+
+Demo videos stay downloadable for `VIDEO_RETENTION_DAYS` (7 by default) and are then deleted from object storage by
+the `pipeline-maintenance` job.
 
 ## Status
 
