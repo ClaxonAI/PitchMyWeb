@@ -43,7 +43,7 @@ export function LinkPackMock({ batchSize }: { batchSize: number }) {
                     <ArrowUpRight size={12} className="shrink-0 text-ink/60" />
                   )}
                 </span>
-                <span className="mt-0.5 block truncate font-mono text-[9px] text-primary/80">wa.me/{l.phone}</span>
+                <span className="mt-0.5 block truncate font-mono text-[9px] text-primary">wa.me/{l.phone}</span>
               </button>
             </li>
           ))}

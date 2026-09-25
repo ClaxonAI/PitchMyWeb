@@ -31,7 +31,7 @@ export function FinalCTA() {
               Someone will sell these businesses a website.{" "}
               <em className="not-italic text-lime/90">Make it you.</em>
             </h2>
-            <p className="mx-auto mt-7 max-w-md text-[17px] leading-relaxed text-white/65">
+            <p className="mx-auto mt-7 max-w-md text-[17px] leading-relaxed text-white/85">
               Start with {auto.batchSize} pitches for{" "}
               {formatPrice(getPrice(auto, "india"))}. It takes about two minutes to set up.
             </p>
@@ -43,7 +43,7 @@ export function FinalCTA() {
                 href="/#how"
                 size="lg"
                 variant="ghost"
-                className="text-white/75 hover:bg-white/10 hover:text-white"
+                className="text-white/90 hover:bg-white/10 hover:text-white"
               >
                 How it works
               </Button>

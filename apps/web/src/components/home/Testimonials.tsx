@@ -64,7 +64,7 @@ export function Testimonials() {
                     >
                       {initials(t.role)}
                     </span>
-                    <span className={cn("truncate text-[13px]", featured ? "text-white/65" : "text-ink/60")}>
+                    <span className={cn("truncate text-[13px]", featured ? "text-white/80" : "text-ink/60")}>
                       {t.role}
                     </span>
                   </div>

@@ -48,14 +48,14 @@ export function Footer() {
         <LinkColumn title="Company" links={footerLinks.company} />
       </Container>
 
-      {/* Oversized watermark */}
+      {/* Oversized watermark. Drawn as CSS generated content rather than text:
+          it is pure decoration at 4% opacity, and as real text every
+          accessibility checker flagged it as unreadable on every page. */}
       <Container className="overflow-hidden">
-        <p
+        <div
           aria-hidden
-          className="display -mb-[0.22em] text-center text-[19vw] leading-none text-white/[0.04] select-none lg:text-[210px]"
-        >
-          PitchMyWeb
-        </p>
+          className="display -mb-[0.22em] text-center text-[19vw] leading-none text-white/[0.04] select-none before:content-['PitchMyWeb'] lg:text-[210px]"
+        />
       </Container>
 
       <div className="border-t border-white/6">

@@ -47,7 +47,7 @@ function RecordVisual() {
             <Play size={15} className="ml-0.5 fill-ink" />
           </span>
         </span>
-        <span className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-coral px-2 py-0.5 font-mono text-[9px] font-bold tracking-wider text-white">
+        <span className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-coral px-2 py-0.5 font-mono text-[9px] font-bold tracking-wider text-ink">
           <span className="size-1.5 animate-pulse rounded-full bg-white" /> REC
         </span>
       </div>

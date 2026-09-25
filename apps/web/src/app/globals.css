@@ -78,6 +78,10 @@
 
   --animate-marquee: marquee 40s linear infinite;
   --animate-rise: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* The hero text's entrance: the same slide as rise without the fade. The
+   * headline is the page's largest paint, and an element at opacity 0 does not
+   * count as painted — the fade alone added its full 0.7s to LCP on phones. */
+  --animate-slide-up: slide-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-pop: pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-scan: scan 1.8s ease-in-out infinite;
   --animate-fade-up: fade-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -89,6 +93,10 @@
   @keyframes rise {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(16px); }
+    to { transform: translateY(0); }
   }
   @keyframes pop {
     from { opacity: 0; transform: translateY(8px) scale(0.97); }

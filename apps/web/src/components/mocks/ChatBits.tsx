@@ -11,7 +11,7 @@ export function ChatHeader({ name, status = "online" }: { name: string; status?:
       </span>
       <div className="leading-tight">
         <p className="text-[13px] font-medium">{name}</p>
-        <p className="text-[10px] text-white/65">{status}</p>
+        <p className="text-[10px] text-white/80">{status}</p>
       </div>
     </div>
   );
@@ -40,7 +40,7 @@ export function Bubble({
       >
         {children}
         {time && (
-          <span className="mt-1 flex items-center justify-end gap-1 text-[9.5px] text-black/40">
+          <span className="mt-1 flex items-center justify-end gap-1 text-[9.5px] text-black/60">
             {time}
             {out && <CheckCheck size={12} className="text-[#53bdeb]" />}
           </span>

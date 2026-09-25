@@ -76,7 +76,7 @@ export function ProblemSection() {
             <h3 className="display mt-4 text-[40px] leading-[1.05] tracking-[-0.02em] sm:text-[48px] lg:text-[56px]">
               All of it. One tap.
             </h3>
-            <p className="mt-5 max-w-[36rem] text-[16px] leading-[1.65] text-white/75 sm:text-[17px]">
+            <p className="mt-5 max-w-[36rem] text-[16px] leading-[1.65] text-white/85 sm:text-[17px]">
               Agents find them, build the sites, record the demos and send from your WhatsApp. You just answer the
               replies.
             </p>
