@@ -144,6 +144,21 @@ aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RAZORPAY_KEY_S
 unset RZP_KEY_ID RZP_KEY_SECRET
 ```
 
+**Also set `PAYMENT_GATEWAY=razorpay`.** Without it the API uses the dummy
+checkout (`checkout.service.ts`), which marks an order paid without charging
+anything, so every "purchase" grants free credits:
+
+```bash
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/PAYMENT_GATEWAY \
+  --type String --value razorpay --overwrite
+```
+
+Payment is confirmed when the browser returns to /api/checkout/verify with
+Razorpay's signed response. There is no webhook yet, so a buyer who closes the
+tab after paying but before that call is charged without the order being
+marked paid; until a webhook exists, find such payments in the Razorpay
+dashboard and grant the credits by hand.
+
 Then reload secrets on the box and restart the API (or simply redeploy, which
 does both):
 
