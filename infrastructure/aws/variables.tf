@@ -54,3 +54,9 @@ variable "recording_retention_days" {
     error_message = "recording_retention_days must be between 1 and 90 (the app accepts the same range)."
   }
 }
+
+variable "instance_type" {
+  description = "EC2 instance type for the app box (see the comment on aws_instance.app)"
+  type        = string
+  default     = "t3.medium"
+}
