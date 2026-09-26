@@ -76,8 +76,13 @@ export const config = {
     // which stops any shared cache or CDN from serving that file — for a
     // cookie the request will never send back. webp covers public/images
     // (every logo there is one); txt|xml cover /robots.txt and /sitemap.xml.
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|webp|ttf|woff2?|ico|csv|docx?|xlsx?|zip|txt|xml|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    //
+    // /api is left out as well. Every /api request is only forwarded to the
+    // API app (next.config.ts rewrites), which checks its own session; this
+    // web app has no API routes of its own. Running Clerk and the cookie sync
+    // on each of those calls (including every poll a running campaign makes)
+    // only added time to them.
+    "/((?!_next|api/|[^?]*\\.(?:html?|css|js(?!on)|png|jpg|jpeg|gif|svg|webp|ttf|woff2?|ico|csv|docx?|xlsx?|zip|txt|xml|webmanifest)).*)",
     "/__clerk/:path*",
   ],
 };

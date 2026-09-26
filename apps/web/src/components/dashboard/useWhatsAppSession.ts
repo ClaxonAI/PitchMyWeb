@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { whatsappApi, type WaStatus, type WhatsAppLogoutReason } from "@/lib/api-client";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 // Live session state for one account.
 //
@@ -136,52 +137,46 @@ export function useWhatsAppSession(
   }, [accountId, applyEvent]);
 
   // --- Polling fallback -----------------------------------------------
-  useEffect(() => {
+  // A reply that arrives after the account changed belongs to the old one.
+  const accountRef = useRef(accountId);
+  accountRef.current = accountId;
+  const poll = useCallback(async (): Promise<void> => {
     if (!accountId) return;
-    let cancelled = false;
-
-    const poll = async (): Promise<void> => {
-      try {
-        const status = await whatsappApi.status(accountId);
-        if (cancelled) return;
-        setState((current) => ({
-          ...current,
-          status: status.status,
-          // The stream is still where this normally arrives. The poll carries
-          // it too because a publish is seen only by clients already
-          // listening: one that connects a moment late, or reconnects after a
-          // dropped stream, would otherwise sit on a QR screen with no QR and
-          // no way to ask for it again. Never cleared here — a poll that
-          // arrives without one must not blank a QR the stream delivered.
-          qrDataUrl: status.qrDataUrl ?? current.qrDataUrl,
-          // The same for a pairing code, which is otherwise delivered only
-          // over the stream. Kept while the account still says a code is
-          // ready; dropped once it has moved on (linked, expired, failed).
-          ...(status.status === "PAIRING_CODE_READY"
-            ? {
-                pairingCode: status.pairingCode ?? current.pairingCode,
-                pairingCodeExpiresAt: status.pairingCodeExpiresAt ?? current.pairingCodeExpiresAt,
-              }
-            : status.status === "CONNECTING"
-              ? {}
-              : { pairingCode: null, pairingCodeExpiresAt: null }),
-          phoneNumber: status.phoneNumber ?? current.phoneNumber,
-          lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
-          error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,
-          logoutReason: status.logoutReason,
-        }));
-      } catch {
-        // Transient: the next tick tries again.
-      }
-    };
-
-    void poll();
-    const timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    try {
+      const status = await whatsappApi.status(accountId);
+      if (accountRef.current !== accountId) return;
+      setState((current) => ({
+        ...current,
+        status: status.status,
+        // The stream is still where this normally arrives. The poll carries
+        // it too because a publish is seen only by clients already
+        // listening: one that connects a moment late, or reconnects after a
+        // dropped stream, would otherwise sit on a QR screen with no QR and
+        // no way to ask for it again. Never cleared here — a poll that
+        // arrives without one must not blank a QR the stream delivered.
+        qrDataUrl: status.qrDataUrl ?? current.qrDataUrl,
+        // The same for a pairing code, which is otherwise delivered only
+        // over the stream. Kept while the account still says a code is
+        // ready; dropped once it has moved on (linked, expired, failed).
+        ...(status.status === "PAIRING_CODE_READY"
+          ? {
+              pairingCode: status.pairingCode ?? current.pairingCode,
+              pairingCodeExpiresAt: status.pairingCodeExpiresAt ?? current.pairingCodeExpiresAt,
+            }
+          : status.status === "CONNECTING"
+            ? {}
+            : { pairingCode: null, pairingCodeExpiresAt: null }),
+        phoneNumber: status.phoneNumber ?? current.phoneNumber,
+        lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
+        error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,
+        logoutReason: status.logoutReason,
+      }));
+    } catch {
+      // Transient: the next tick tries again.
+    }
   }, [accountId]);
+  // Paused while the tab is hidden; refreshed the moment it is shown again.
+  useVisibleInterval(() => void poll(), POLL_INTERVAL_MS, Boolean(accountId), { immediate: true });
 
   const reset = useCallback(() => setState({ ...INITIAL }), []);
 

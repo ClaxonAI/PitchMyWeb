@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LoaderCircle, Send } from "lucide-react";
 import { ApiError, campaignsApi, type DeliveryMode, type PitchBatch } from "@/lib/api-client";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { Button } from "@/components/dashboard-ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { Input } from "@/components/dashboard-ui/input";
@@ -117,9 +118,8 @@ export function PitchBatchPanel({
     setCount((current) => Math.min(Math.max(1, current), Math.max(1, max)));
   }, [max]);
 
-  useEffect(() => {
-    if (!working) return;
-    const timer = window.setInterval(() => {
+  useVisibleInterval(
+    () => {
       campaignsApi
         .batches(campaignId)
         .then((result) => {
@@ -129,9 +129,10 @@ export function PitchBatchPanel({
           if (!result.items.some((batch) => batch.status === "PROCESSING")) router.refresh();
         })
         .catch(() => undefined);
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [campaignId, working, router]);
+    },
+    POLL_MS,
+    working,
+  );
 
   async function onPitch() {
     setSubmitting(true);
