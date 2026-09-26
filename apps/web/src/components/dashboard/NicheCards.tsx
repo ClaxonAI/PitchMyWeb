@@ -113,7 +113,7 @@ export function NicheCards({
             onClick={() => onCity(name)}
             aria-pressed={name.toLowerCase() === key}
             className={cn(
-              "inline-flex min-h-8 items-center gap-1 rounded-full border px-3 text-xs transition",
+              "inline-flex min-h-8 items-center gap-1 rounded-full border px-3 text-xs transition max-md:min-h-11 max-md:px-3.5",
               name.toLowerCase() === key
                 ? "border-dash-primary bg-dash-primary text-dash-primary-foreground"
                 : "border-dash-border bg-dash-card text-dash-foreground hover:bg-dash-muted",

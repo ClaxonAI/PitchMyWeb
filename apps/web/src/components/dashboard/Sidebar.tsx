@@ -24,9 +24,10 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             href={item.href}
             onMouseEnter={() => router.prefetch(item.href)}
             onFocus={() => router.prefetch(item.href)}
+            onTouchStart={() => router.prefetch(item.href)}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-3 rounded-dash-md px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-3 rounded-dash-md px-3 py-2 text-sm max-md:min-h-11 font-medium transition-colors",
               active ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted-foreground hover:bg-dash-accent hover:text-dash-foreground",
             )}
           >

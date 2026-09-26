@@ -164,3 +164,20 @@
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Tables that stack into cards on phones (<Table stacked>). Each row becomes
+   a card and each cell a "label  value" line, the label coming from the
+   cell's data-label; the cell marked data-primary is the card's title. Wide
+   tables otherwise scroll sideways on a phone, hiding most columns. */
+@media (max-width: 639.98px) {
+  .dash-table-stack { border: 0; overflow: visible; }
+  .dash-table-stack table, .dash-table-stack tbody, .dash-table-stack tr, .dash-table-stack td { display: block; width: 100%; }
+  .dash-table-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .dash-table-stack tbody { display: flex; flex-direction: column; gap: .75rem; }
+  .dash-table-stack tr { border: 1px solid var(--dash-border); border-radius: var(--dash-radius, .75rem); background: var(--dash-card); padding: .75rem 1rem; }
+  .dash-table-stack tbody tr:last-child { border: 1px solid var(--dash-border); }
+  .dash-table-stack td { display: flex; min-height: 2.25rem; align-items: center; justify-content: space-between; gap: 1rem; padding: .25rem 0; text-align: right; overflow-wrap: anywhere; }
+  .dash-table-stack td::before { content: attr(data-label); flex-shrink: 0; text-align: left; font-size: .75rem; color: var(--dash-muted-foreground); }
+  .dash-table-stack td[data-primary] { justify-content: flex-start; padding-bottom: .5rem; text-align: left; font-size: .9375rem; }
+  .dash-table-stack td[data-primary]::before { content: none; }
+}

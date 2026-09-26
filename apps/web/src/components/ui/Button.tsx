@@ -26,7 +26,8 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-9 rounded-lg px-3.5 text-[13px]",
+  // max-md: 44px on touch screens.
+  sm: "h-9 rounded-lg px-3.5 text-[13px] max-md:h-11",
   md: "h-11 rounded-lg px-5 text-sm",
   lg: "h-13 rounded-lg px-6 text-[15px]",
 };

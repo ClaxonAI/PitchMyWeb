@@ -16,10 +16,11 @@ const buttonVariants = cva(
         link: "text-dash-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-dash-sm px-3 text-xs",
-        lg: "h-10 rounded-dash-lg px-6",
-        icon: "h-9 w-9 shrink-0",
+        // max-md: touch screens get 44px targets; the compact sizes stay for mouse.
+        default: "h-9 px-4 py-2 max-md:h-11",
+        sm: "h-8 rounded-dash-sm px-3 text-xs max-md:h-11 max-md:min-w-11",
+        lg: "h-10 rounded-dash-lg px-6 max-md:h-11",
+        icon: "h-9 w-9 shrink-0 max-md:h-11 max-md:w-11",
       },
     },
     defaultVariants: { variant: "default", size: "default" },
