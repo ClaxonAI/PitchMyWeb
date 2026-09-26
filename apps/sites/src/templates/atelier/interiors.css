@@ -1,0 +1,49 @@
+/* "Material Library" interiors design — styled with Tailwind in InteriorsAtelier.tsx. */
+
+body:has(.interiors-library) { background: #26291f; }
+.interiors-library { -webkit-tap-highlight-color: rgba(208, 179, 122, .2); }
+.interiors-library ::selection { background: #d0b37a; color: #26291f; }
+.interiors-library :focus-visible { outline: 1px solid #d0b37a; outline-offset: 4px; }
+.interiors-library summary { list-style: none; }
+.interiors-library summary::-webkit-details-marker { display: none; }
+
+/* Materials, drawn with gradients only. */
+.swatch-marble {
+  background:
+    linear-gradient(115deg, transparent 38%, rgba(120, 120, 128, .35) 40%, transparent 43%),
+    linear-gradient(160deg, transparent 58%, rgba(150, 150, 158, .3) 60%, transparent 62%),
+    linear-gradient(80deg, transparent 20%, rgba(170, 170, 176, .25) 22%, transparent 25%),
+    radial-gradient(circle at 30% 30%, #fbfaf7, #e4e1db);
+}
+.swatch-oak {
+  background:
+    repeating-linear-gradient(92deg, rgba(90, 58, 30, .18) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(88deg, rgba(255, 240, 210, .12) 0 1px, transparent 1px 13px),
+    linear-gradient(180deg, #c49a68, #a8784a);
+}
+.swatch-brass { background: linear-gradient(135deg, #8a6a33 0%, #e8cf96 32%, #b58f4f 52%, #f3dfab 68%, #9d7a3f 100%); }
+.swatch-linen {
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 105, 80, .08) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(120, 105, 80, .08) 0 1px, transparent 1px 3px),
+    #e8e0cf;
+}
+.swatch-terrazzo {
+  background:
+    radial-gradient(circle at 20% 30%, #b5532f 0 5px, transparent 6px),
+    radial-gradient(circle at 70% 20%, #3f4a3a 0 4px, transparent 5px),
+    radial-gradient(circle at 55% 70%, #c9a86a 0 6px, transparent 7px),
+    radial-gradient(circle at 85% 80%, #7d8a79 0 3px, transparent 4px),
+    radial-gradient(circle at 35% 85%, #3f4a3a 0 3px, transparent 4px),
+    #ece6da;
+  background-size: 70px 70px;
+}
+.swatch-walnut {
+  background:
+    repeating-linear-gradient(94deg, rgba(30, 18, 10, .25) 0 3px, transparent 3px 11px),
+    linear-gradient(180deg, #6b4630, #4b2f1f);
+}
+
+/* The hero fan: cards spread from a common centre. */
+.library-card { transform: translate(-50%, -50%) translateX(var(--shift)) rotate(var(--fan)); transition: transform .6s cubic-bezier(.2, .7, .2, 1); }
+@media (hover: hover) { .library-card:hover { transform: translate(-50%, -54%) translateX(var(--shift)) rotate(var(--fan)); } }

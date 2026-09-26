@@ -3,10 +3,18 @@ import type { DentalContent, PreviewDesign, PreviewTemplateCode } from "@pitchmy
 import { hasDesign } from "@pitchmyweb/templates";
 import { DentalClinicSite } from "./dental-clinic/DentalClinicSite";
 import { ClinicAtelier } from "./atelier/ClinicAtelier";
+import { CoachingAtelier } from "./atelier/CoachingAtelier";
+import { EventAtelier } from "./atelier/EventAtelier";
+import { GymAtelier } from "./atelier/GymAtelier";
+import { InteriorsAtelier } from "./atelier/InteriorsAtelier";
 import { DentalAtelier } from "./atelier/DentalAtelier";
 import { RestaurantAtelier } from "./atelier/RestaurantAtelier";
 import { SalonAtelier } from "./atelier/SalonAtelier";
 import { ClinicEditorial } from "./editorial/ClinicEditorial";
+import { CoachingEditorial } from "./editorial/CoachingEditorial";
+import { EventEditorial } from "./editorial/EventEditorial";
+import { GymEditorial } from "./editorial/GymEditorial";
+import { InteriorsEditorial } from "./editorial/InteriorsEditorial";
 import { DentalEditorial } from "./editorial/DentalEditorial";
 import { RestaurantEditorial } from "./editorial/RestaurantEditorial";
 import { SalonEditorial } from "./editorial/SalonEditorial";
@@ -29,10 +37,10 @@ const DESIGNS: { [T in PreviewTemplateCode]?: Partial<Record<Exclude<PreviewDesi
   clinic: { studio: ClinicStudio, editorial: ClinicEditorial, atelier: ClinicAtelier },
   restaurant: { studio: RestaurantStudio, editorial: RestaurantEditorial, atelier: RestaurantAtelier },
   salon: { studio: SalonStudio, editorial: SalonEditorial, atelier: SalonAtelier },
-  gym: { studio: GymStudio },
-  interiors: { studio: InteriorsStudio },
-  event: { studio: EventStudio },
-  coaching: { studio: CoachingStudio },
+  gym: { studio: GymStudio, editorial: GymEditorial, atelier: GymAtelier },
+  interiors: { studio: InteriorsStudio, editorial: InteriorsEditorial, atelier: InteriorsAtelier },
+  event: { studio: EventStudio, editorial: EventEditorial, atelier: EventAtelier },
+  coaching: { studio: CoachingStudio, editorial: CoachingEditorial, atelier: CoachingAtelier },
 };
 
 /** The component that draws this content, or null for the classic layout. */

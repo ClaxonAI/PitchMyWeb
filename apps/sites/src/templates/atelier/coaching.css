@@ -1,0 +1,20 @@
+/* "Crest" coaching design — styled with Tailwind in CoachingAtelier.tsx. */
+
+body:has(.coaching-crest) { background: #f4efe3; }
+.coaching-crest { -webkit-tap-highlight-color: rgba(154, 122, 58, .18); }
+.coaching-crest ::selection { background: #14213d; color: #f4efe3; }
+.coaching-crest :focus-visible { outline: 2px solid #9a7a3a; outline-offset: 3px; }
+.coaching-crest summary { list-style: none; }
+.coaching-crest summary::-webkit-details-marker { display: none; }
+
+/* Parchment: a soft vignette and faint fibres. */
+.crest-hero {
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(255, 255, 255, .7), transparent 60%),
+    repeating-linear-gradient(8deg, rgba(20, 33, 61, .018) 0 2px, transparent 2px 7px);
+}
+
+/* The crest's gold catches the light now and then. */
+@keyframes crest-shine { 0%, 80%, 100% { filter: brightness(1); } 88% { filter: brightness(1.18) drop-shadow(0 0 12px rgba(201, 168, 94, .45)); } }
+.crest-shine { animation: crest-shine 6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .crest-shine { animation: none; } }

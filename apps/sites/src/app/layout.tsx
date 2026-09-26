@@ -12,7 +12,7 @@ const gelasio = Gelasio({ subsets: ["latin"], weight: ["400", "500"], style: ["n
 const barlowCondensed = Barlow_Condensed({ subsets: ["latin"], weight: ["400", "800", "900"], variable: "--font-barlow-condensed", preload: false });
 // Studio, editorial and atelier designs. Same rule: only pages that use them download them.
 const manrope = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], variable: "--font-manrope", preload: false });
-const fraunces = Fraunces({ subsets: ["latin"], style: ["normal", "italic"], axes: ["opsz", "SOFT", "WONK"], variable: "--font-fraunces", preload: false });
+const fraunces = Fraunces({ subsets: ["latin"], style: ["normal", "italic"], axes: ["opsz", "SOFT"], variable: "--font-fraunces", preload: false });
 const bodoni = Bodoni_Moda({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-bodoni", preload: false });
 const italiana = Italiana({ subsets: ["latin"], weight: "400", variable: "--font-italiana", preload: false });
 const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["300", "400", "500", "600"], style: ["normal", "italic"], variable: "--font-cormorant", preload: false });
