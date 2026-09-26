@@ -19,9 +19,13 @@ function wait(milliseconds: number): Promise<void> {
  * refused for a reason the user can act on (the per-device account limit).
  *
  * Sends the device fingerprint so a Google/GitHub sign-up counts against the
- * same three-accounts-per-device limit as email sign-up.
+ * same three-accounts-per-device limit as email sign-up, and the paid order
+ * being claimed (if any) so it is attached whatever email the payment used.
  */
-export async function exchangeClerkSession(getToken: () => Promise<string | null>): Promise<true | false | { message: string }> {
+export async function exchangeClerkSession(
+  getToken: () => Promise<string | null>,
+  orderId?: string | null,
+): Promise<true | false | { message: string }> {
   const fingerprint = await deviceFingerprint();
   for (let attempt = 0; attempt < EXCHANGE_ATTEMPTS; attempt += 1) {
     try {
@@ -29,7 +33,13 @@ export async function exchangeClerkSession(getToken: () => Promise<string | null
       if (token) {
         const response = await fetch("/api/auth/clerk/session", {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}`, ...(fingerprint ? { "X-Device-Fingerprint": fingerprint } : {}) },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            ...(fingerprint ? { "X-Device-Fingerprint": fingerprint } : {}),
+          },
+          // A paid order to attach to this account, as email sign-in does.
+          body: JSON.stringify(orderId ? { orderId } : {}),
           credentials: "same-origin",
           cache: "no-store",
         });

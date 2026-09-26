@@ -1,8 +1,5 @@
-import Link from "next/link";
 import { LayoutTemplate, Search, Send, Video } from "lucide-react";
 import { Container } from "@/components/ui/Container";
-import { getPlan, getPrice } from "@/data/plans";
-import { formatPrice } from "@/lib/utils";
 
 const steps = [
   { title: "Find a business", time: "~2 hrs", Icon: Search },
@@ -12,8 +9,6 @@ const steps = [
 ] as const;
 
 export function ProblemSection() {
-  const foreignAuto = formatPrice(getPrice(getPlan("auto"), "foreign"));
-
   return (
     <>
       <section
@@ -84,22 +79,6 @@ export function ProblemSection() {
         </Container>
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-ink">
-        <Container className="flex items-center justify-between gap-4 py-3.5">
-          <div className="min-w-0">
-            <p className="truncate text-[14px] font-semibold text-white sm:text-[15px]">
-              Start a campaign from {foreignAuto}
-            </p>
-            <p className="truncate text-[12px] text-white/60">India &amp; Global · Automatic or Direct</p>
-          </div>
-          <Link
-            href="/pricing"
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-paper px-5 text-[13px] font-semibold text-ink transition hover:bg-mist"
-          >
-            See plans →
-          </Link>
-        </Container>
-      </div>
     </>
   );
 }

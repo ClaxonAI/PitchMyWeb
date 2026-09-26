@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { navLinks } from "@/data/site";
+import { useBackToClose } from "@/lib/use-back-to-close";
 import { cn } from "@/lib/utils";
 
 // Set by middleware.ts whenever the app session cookie (HttpOnly) exists.
@@ -34,6 +35,37 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
   const signedIn = useSignedIn(pathname);
+  const headerRef = useRef<HTMLElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+
+  // The menu closes whenever the page changes. The navbar stays mounted across
+  // client navigations, so without this a menu left open by tapping "Sign in"
+  // came along to /login and sat over the Google / GitHub buttons.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // While open: Back, Escape or a tap outside the header (or on the dimmed
+  // page) closes it, and the page behind does not scroll.
+  const dismiss = useBackToClose(open, close);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismiss();
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) dismiss();
+    };
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open, dismiss]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -44,6 +76,7 @@ export function Navbar() {
 
   return (
     <header
+      ref={headerRef}
       className={cn(
         "sticky top-0 z-50 border-b transition-all duration-300",
         scrolled || open
@@ -92,7 +125,8 @@ export function Navbar() {
           type="button"
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          aria-controls="mobile-menu"
+          onClick={() => (open ? dismiss() : setOpen(true))}
           className="-mr-2 grid size-11 place-items-center rounded-lg transition-colors hover:bg-mist md:hidden"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
@@ -100,13 +134,19 @@ export function Navbar() {
       </Container>
 
       {open && (
-        <div className="animate-rise border-t border-ink/8 bg-white md:hidden">
+        <>
+          {/* Dims the page under the menu; tapping it closes the menu. */}
+          <div aria-hidden onClick={dismiss} className="fixed inset-x-0 top-16 bottom-0 bg-ink/30 md:hidden" />
+          <div
+            id="mobile-menu"
+            className="animate-rise absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-t border-ink/8 bg-white shadow-[0_24px_40px_-24px_rgba(10,10,10,.35)] md:hidden"
+          >
           <Container className="flex flex-col py-3">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={close}
                 className={cn(
                   "border-b border-ink/6 py-3.5 text-[15px] last:border-0 transition-colors",
                   pathname === link.href ? "text-ink font-medium" : "text-ink/70",
@@ -116,15 +156,16 @@ export function Navbar() {
               </Link>
             ))}
             {signedIn ? (
-              <Button href="/dashboard" variant="primary" className="mt-3 w-full">Go to dashboard</Button>
+              <Button href="/dashboard" variant="primary" className="mt-3 w-full" onClick={close}>Go to dashboard</Button>
             ) : (
               <>
-                <Button href="/login" variant="ghost" className="mt-3 w-full">Sign in</Button>
-                <Button href="/register" variant="primary" className="mt-2 w-full">Start pitching</Button>
+                <Button href="/login" variant="ghost" className="mt-3 w-full" onClick={close}>Sign in</Button>
+                <Button href="/register" variant="primary" className="mt-2 w-full" onClick={close}>Start pitching</Button>
               </>
             )}
           </Container>
-        </div>
+          </div>
+        </>
       )}
     </header>
   );

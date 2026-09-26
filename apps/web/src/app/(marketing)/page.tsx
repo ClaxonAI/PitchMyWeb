@@ -11,6 +11,7 @@ import { PricingTeaser } from "@/components/home/PricingTeaser";
 import { Principles } from "@/components/home/Principles";
 import { ProblemSection } from "@/components/home/ProblemSection";
 import { SampleSites } from "@/components/home/SampleSites";
+import { StickyPlansBar } from "@/components/home/StickyPlansBar";
 import { Testimonials } from "@/components/home/Testimonials";
 import { TrustStrip } from "@/components/home/TrustStrip";
 
@@ -63,6 +64,7 @@ export default function HomePage() {
       <div className="defer-offscreen">
         <FinalCTA />
       </div>
+      <StickyPlansBar />
     </>
   );
 }

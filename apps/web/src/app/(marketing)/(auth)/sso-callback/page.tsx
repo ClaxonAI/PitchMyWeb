@@ -4,6 +4,8 @@ import { AuthenticateWithRedirectCallback, useAuth } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { exchangeClerkSession } from "@/lib/clerk-session";
+import { afterSignIn } from "@/lib/safe-next";
+import { clearSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
 
 export default function SsoCallbackPage() {
   const router = useRouter();
@@ -12,10 +14,12 @@ export default function SsoCallbackPage() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let active = true;
-    void exchangeClerkSession(getToken).then(async (ok) => {
+    const intent = readSignInIntent();
+    void exchangeClerkSession(getToken, intent.orderId).then(async (ok) => {
       if (!active) return;
       if (ok === true) {
-        router.replace("/dashboard");
+        clearSignInIntent();
+        router.replace(afterSignIn(intent.next));
         router.refresh();
         return;
       }

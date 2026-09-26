@@ -1,5 +1,6 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { afterSignIn } from "@/lib/safe-next";
 
 // This file has to live in src/, next to app/ — not at the package root.
 // Next only looks for middleware beside the app directory, so while this sat
@@ -33,6 +34,19 @@ const AUTH_FORMS = new Set(["/login", "/register"]);
 // page offered "Go to dashboard" forever and every click bounced to /login.
 const EXPIRED_PARAM = "expired";
 
+// The page being requested, for requireSession() to put in /login?next= when
+// it has to send a signed-out visitor to sign in (a server component cannot
+// otherwise see its own URL).
+const PATH_HEADER = "x-pmw-path"; // read by lib/auth/require-session.ts
+
+// Typed by what it reads: Clerk hands over the request from its own copy of
+// next, whose NextRequest type does not match this app's.
+function next(request: { headers: Headers; nextUrl: { pathname: string; search: string } }): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set(PATH_HEADER, `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.next({ request: { headers } });
+}
+
 function clearSession(response: NextResponse): NextResponse {
   response.cookies.delete(SESSION_COOKIE);
   response.cookies.delete(SIGNED_IN_HINT);
@@ -46,16 +60,16 @@ export default clerkMiddleware((_auth, request) => {
 
   if (AUTH_FORMS.has(pathname)) {
     if (searchParams.get(EXPIRED_PARAM) === "1") {
-      return signedIn || hinted ? clearSession(NextResponse.next()) : undefined;
+      return signedIn || hinted ? clearSession(next(request)) : next(request);
     }
     if (signedIn && !searchParams.has("orderId")) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL(afterSignIn(searchParams.get("next")), request.url));
     }
   }
 
-  if (signedIn === hinted) return;
+  if (signedIn === hinted) return next(request);
 
-  const response = NextResponse.next();
+  const response = next(request);
   if (signedIn) {
     response.cookies.set(SIGNED_IN_HINT, "1", {
       path: "/",

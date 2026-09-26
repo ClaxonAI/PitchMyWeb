@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { safeNextPath } from "@/lib/safe-next";
 
 export type SessionUser = { id: string; email: string; name: string | null; role: "USER" | "ADMIN" | "SUPER_ADMIN"; planId: string | null; hasPaidAccess: boolean; allowedMarkets: Array<"india" | "foreign">; canDiscover: boolean; availableCredits: number; reservedCredits: number; usedCredits: number; whatsappConnected: boolean };
 
@@ -66,11 +67,18 @@ export async function requireSession(): Promise<SessionUser> {
   // A cookie the API refused is stale: ?expired=1 has middleware.ts clear it
   // (a server component cannot), so the home page stops offering "Go to
   // dashboard" and the redirect back from /login cannot loop.
-  if (!session && (await cookies()).has(SESSION_COOKIE_NAME)) redirect("/login?expired=1");
+  const back = returnParam((await headers()).get("x-pmw-path"));
+  if (!session && (await cookies()).has(SESSION_COOKIE_NAME)) redirect(`/login?expired=1${back ? `&${back}` : ""}`);
   // /login recovers a visitor who is signed in with Clerk but holds no app
   // session — the state an SSO round trip leaves them in when Clerk returns
   // them straight here. It performs the exchange on arrival and sends them
   // back, so this stays a plain redirect.
-  if (!session) redirect("/login");
+  if (!session) redirect(back ? `/login?${back}` : "/login");
   return session;
+}
+
+/** "next=<path>" so sign-in returns the visitor to the page they asked for; nothing for the dashboard itself. */
+function returnParam(path: string | null): string | null {
+  const safe = safeNextPath(path);
+  return safe && safe !== "/dashboard" ? `next=${encodeURIComponent(safe)}` : null;
 }

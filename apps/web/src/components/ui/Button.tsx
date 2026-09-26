@@ -47,8 +47,11 @@ export function Button(props: LinkProps | ActionProps) {
   );
 
   if (typeof rest.href === "string") {
+    // Everything else (onClick, aria-*, target, rel…) reaches the link too; it
+    // used to be dropped, so a link-style button silently ignored onClick.
+    const { href, ...linkProps } = rest as LinkProps;
     return (
-      <Link href={rest.href} className={classes}>
+      <Link href={href} className={classes} {...linkProps}>
         {content}
       </Link>
     );
