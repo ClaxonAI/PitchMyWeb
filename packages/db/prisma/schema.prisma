@@ -222,6 +222,12 @@ model User {
   name         String?
   imageUrl     String?
   role         UserRole  @default(USER)
+  // When the email was proven to belong to this person: a Google/GitHub
+  // sign-in with a verified address. Null for accounts only ever used with a
+  // password, whose address nobody has checked. Gates the free credits, and
+  // decides whether a social sign-in may keep an existing password
+  // (lib/auth/verified-email.ts).
+  emailVerifiedAt DateTime?
   // Set by an admin; login and requireCurrentUser both refuse a non-null value.
   suspendedAt  DateTime?
   lastLoginAt  DateTime?
@@ -1209,6 +1215,11 @@ model Order {
   planId            String
   market            String
   payerEmail        String?
+  // The signed-in visitor who started this checkout, if any. Lets the payment
+  // webhook credit them even when they closed the tab before the browser
+  // could confirm the payment. Deliberately not the owning userId: an order
+  // is only owned once paid (claimOrder).
+  buyerId           String?
   countryCode       String?
   couponCode        String?
   // Smallest currency unit (cents), matching Razorpay's own convention.

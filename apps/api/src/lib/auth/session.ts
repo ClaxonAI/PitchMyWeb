@@ -46,6 +46,11 @@ export async function deleteSessionByToken(db: PrismaClient, token: string): Pro
   await db.session.deleteMany({ where: { tokenHash: hashToken(token) } });
 }
 
+/** Ends every session of a user except the one holding `keepToken` (password change). */
+export async function deleteOtherSessions(db: PrismaClient, userId: string, keepToken: string | undefined): Promise<void> {
+  await db.session.deleteMany({ where: { userId, ...(keepToken ? { NOT: { tokenHash: hashToken(keepToken) } } : {}) } });
+}
+
 export async function deleteSessionsForUser(db: PrismaClient, userId: string): Promise<void> {
   await db.session.deleteMany({ where: { userId } });
 }

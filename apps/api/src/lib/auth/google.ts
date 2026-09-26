@@ -3,6 +3,7 @@ import type { PrismaClient, User } from "@pitchmyweb/db";
 import { AccountSuspendedError, ConflictError, ValidationError } from "../errors";
 import { claimOrder, claimPaidOrdersForUser } from "../checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice } from "./trial-device";
+import { takeOverUnverifiedAccount } from "./verified-email";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "pmw_google_oauth";
 
@@ -109,6 +110,7 @@ export async function exchangeGoogleCode(
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
+    signal: AbortSignal.timeout(10_000),
   });
   const tokenJson = (await tokenRes.json()) as TokenResponse;
   if (!tokenRes.ok || !tokenJson.access_token) {
@@ -117,6 +119,7 @@ export async function exchangeGoogleCode(
 
   const infoRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { authorization: `Bearer ${tokenJson.access_token}` },
+    signal: AbortSignal.timeout(10_000),
   });
   const info = (await infoRes.json()) as UserInfoResponse;
   if (!infoRes.ok || !info.sub || !info.email) {
@@ -175,6 +178,7 @@ export async function upsertGoogleUser(
         lastLoginAt: new Date(),
         ...(profile.name && !byEmail.name ? { name: profile.name } : {}),
         ...(profile.picture ? { imageUrl: profile.picture } : {}),
+        ...(await takeOverUnverifiedAccount(db, byEmail)),
       },
     });
     if (orderId) await claimOrder(db, orderId, user.id);
@@ -188,6 +192,7 @@ export async function upsertGoogleUser(
   const user = await db.user.create({
     data: {
       email: profile.email,
+      emailVerifiedAt: new Date(),
       googleId: profile.sub,
       passwordHash: null,
       name: profile.name ?? null,

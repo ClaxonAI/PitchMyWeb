@@ -4,6 +4,7 @@ import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../../../lib/db/client";
 import { requireCurrentUser } from "../../../../../../lib/auth/current-user";
 import { parseJsonBody } from "../../../../../../lib/api/request";
+import { rateLimit } from "../../../../../../lib/api/rate-limit";
 import { errorResponse, jsonOk } from "../../../../../../lib/api/response";
 import { requestPairingCode } from "../../../../../../lib/whatsapp/account.service";
 import { cuidSchema } from "../../../../../../lib/validation/common";
@@ -20,6 +21,10 @@ export async function handleRequestPairingCode(db: PrismaClient, request: NextRe
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
   const body = await parseJsonBody(request, pairingCodeRequestSchema);
+  // Each request makes WhatsApp push a "link a device" prompt to that number:
+  // unbounded, it harasses whoever owns it and gets the sending IP flagged.
+  await rateLimit(`pairing-code:user:${user.id}`, 5, 60 * 60 * 1000);
+  await rateLimit(`pairing-code:number:${body.phoneNumber.replace(/\D/g, "")}`, 3, 60 * 60 * 1000);
   const account = await requestPairingCode(db, user.id, id, body.phoneNumber);
   return jsonOk(account, 202);
 }

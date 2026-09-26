@@ -81,7 +81,7 @@ export function createRateLimitRedis(url: string): Redis {
   });
 }
 
-function redisClient(): Redis {
+export function redisClient(): Redis {
   globalForRateLimit.rateLimitRedis ??= createRateLimitRedis(process.env.REDIS_URL ?? "redis://127.0.0.1:6381");
   return globalForRateLimit.rateLimitRedis;
 }
@@ -100,7 +100,12 @@ function warnFallback(error: unknown): void {
 }
 
 export function rateLimitStore(env: Record<string, string | undefined> = process.env): "memory" | "redis" {
-  return (env.RATE_LIMIT_STORE ?? "").trim().toLowerCase() === "redis" ? "redis" : "memory";
+  const configured = (env.RATE_LIMIT_STORE ?? "").trim().toLowerCase();
+  if (configured) return configured === "redis" ? "redis" : "memory";
+  // Unset in production means Redis: every API process must share one count,
+  // and production always has Redis. Refusing every limited request instead
+  // (below) would take login down over a missing setting.
+  return env.APP_ENV?.trim().toLowerCase() === "production" ? "redis" : "memory";
 }
 
 export type RateLimitOptions = { store?: "memory" | "redis"; redis?: Redis };

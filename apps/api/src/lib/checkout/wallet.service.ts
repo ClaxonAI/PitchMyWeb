@@ -119,8 +119,18 @@ export async function grantCredits(
  * Grants the free-tier allowance exactly once per user. Lazy — called
  * wherever a wallet is first read for a user (getAccessSnapshot), so no
  * registration/login/OAuth callback path needs to know this exists.
+ *
+ * Only to accounts whose email has been verified (a Google/GitHub sign-in):
+ * an email/password sign-up proves nothing about the address, so a script
+ * could otherwise mint free credits with throwaway accounts. Such an account
+ * gets its wallet, empty, and the grant arrives the first time it is read
+ * after the owner signs in with Google or GitHub.
  */
 export async function ensureFreeGrant(db: PrismaClient, userId: string): Promise<PitchWalletSnapshot> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { emailVerifiedAt: true } });
+  if (!user?.emailVerifiedAt) {
+    return getOrCreateWallet(db, userId);
+  }
   return grantCredits(db, { userId, amount: FREE_PITCH_ALLOWANCE, type: "FREE_GRANT", referenceId: `free-grant:${userId}` });
 }
 

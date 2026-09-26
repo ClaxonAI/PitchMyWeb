@@ -17,6 +17,11 @@ describe("rateLimitStore", () => {
     expect(rateLimitStore({ RATE_LIMIT_STORE: "Redis " })).toBe("redis");
     expect(rateLimitStore({ RATE_LIMIT_STORE: "memcached" })).toBe("memory");
   });
+
+  it("uses redis in production when nothing is configured", () => {
+    expect(rateLimitStore({ APP_ENV: "production" })).toBe("redis");
+    expect(rateLimitStore({ APP_ENV: "production", RATE_LIMIT_STORE: "memory" })).toBe("memory");
+  });
 });
 
 describe("rateLimit (memory store)", () => {

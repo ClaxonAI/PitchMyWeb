@@ -29,10 +29,12 @@ export async function handleVerifyPayment(db: PrismaClient, request: NextRequest
 
   const order = await verifyPayment(db, secret, body);
   const user = await getCurrentUser(db, request);
-  if (user && order.status === "PAID") {
-    await claimOrder(db, order.id, user.id);
+  // The signed-in visitor now, else whoever was signed in when checkout began.
+  const ownerId = user?.id ?? order.buyerId;
+  if (ownerId && order.status === "PAID") {
+    await claimOrder(db, order.id, ownerId);
   }
-  return jsonOk({ orderId: order.id, status: order.status, claimed: Boolean(user) });
+  return jsonOk({ orderId: order.id, status: order.status, claimed: Boolean(ownerId) });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

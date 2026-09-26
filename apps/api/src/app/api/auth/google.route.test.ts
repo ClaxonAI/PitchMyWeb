@@ -54,6 +54,7 @@ describe("upsertGoogleUser", () => {
     );
     const { id } = await reg.json();
     createdUserIds.push(id);
+    expect(await prisma.session.count({ where: { userId: id } })).toBe(1);
 
     const linked = await upsertGoogleUser(prisma, {
       sub: `google-sub-${email}`,
@@ -63,7 +64,20 @@ describe("upsertGoogleUser", () => {
     });
     expect(linked.id).toBe(id);
     expect(linked.googleId).toBe(`google-sub-${email}`);
-    expect(linked.passwordHash).toBeTruthy();
+    // Nobody had proven the password account's address was its creator's, so
+    // the verified Google sign-in takes it over: the password stops working
+    // and the sessions opened with it end (lib/auth/verified-email.ts).
+    expect(linked.passwordHash).toBeNull();
+    expect(linked.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(await prisma.session.count({ where: { userId: id } })).toBe(0);
+  });
+
+  it("keeps the password of an account whose email was already verified", async () => {
+    const email = uniqueEmail("google-keep");
+    const user = await prisma.user.create({ data: { email, passwordHash: "hash", emailVerifiedAt: new Date() } });
+    createdUserIds.push(user.id);
+    const linked = await upsertGoogleUser(prisma, { sub: `google-sub-${email}`, email, emailVerified: true });
+    expect(linked.passwordHash).toBe("hash");
   });
 
   it("refuses a suspended account", async () => {

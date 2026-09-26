@@ -257,6 +257,11 @@ resource "aws_elasticache_cluster" "redis" {
   subnet_group_name    = aws_elasticache_subnet_group.main.name
   security_group_ids   = [aws_security_group.redis.id]
 
+  # A daily snapshot, kept a day: BullMQ's queues live only here, so a node
+  # replacement without one loses every queued search, recording and send.
+  snapshot_retention_limit = 1
+  snapshot_window          = "20:30-21:30" # 02:00-03:00 IST, the quietest hour
+
   tags = {
     Name = "pitchmyweb-redis"
   }
@@ -268,6 +273,26 @@ resource "aws_s3_bucket" "storage" {
 
   tags = {
     Name = "pitchmyweb-storage"
+  }
+}
+
+# Nothing in this bucket is ever public: videos and posters go out as
+# short-lived signed URLs. This makes a mistaken public ACL or policy
+# impossible rather than merely unlikely.
+resource "aws_s3_bucket_public_access_block" "storage" {
+  bucket                  = aws_s3_bucket.storage.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "storage" {
+  bucket = aws_s3_bucket.storage.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
@@ -286,7 +311,7 @@ resource "aws_s3_bucket_versioning" "storage" {
 #   - the delete markers left behind are cleaned up
 #   - a recording the job never reached (scheduler down) still expires a
 #     couple of days after its window, as a backstop
-# Scoped to recordings/ so the deploy tarball under deploy/ is untouched.
+# Scoped to recordings/; deploy/ has its own, longer rule below.
 resource "aws_s3_bucket_lifecycle_configuration" "storage" {
   bucket     = aws_s3_bucket.storage.id
   depends_on = [aws_s3_bucket_versioning.storage]
@@ -309,6 +334,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "storage" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
+    }
+  }
+
+  # Every deploy uploads a release tarball under deploy/ (deploy.sh). Only the
+  # latest is ever used; the rest would otherwise accumulate forever.
+  rule {
+    id     = "expire-deploy-packages"
+    status = "Enabled"
+
+    filter {
+      prefix = "deploy/"
+    }
+
+    expiration {
+      days = 14
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
     }
   }
 

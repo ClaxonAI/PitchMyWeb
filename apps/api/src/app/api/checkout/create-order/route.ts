@@ -39,7 +39,8 @@ export async function handleCreateOrder(db: PrismaClient, request: NextRequest, 
     });
   }
 
-  const result = await createOrder(db, razorpay ?? createRazorpayClientFromEnv(), body);
+  const buyer = await getCurrentUser(db, request);
+  const result = await createOrder(db, razorpay ?? createRazorpayClientFromEnv(), body, buyer?.id ?? null);
 
   return jsonOk({
     orderId: result.orderId,
