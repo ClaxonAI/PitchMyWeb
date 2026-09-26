@@ -157,7 +157,7 @@ function PitchCard({ row, paused }: { row: Row; paused: boolean }) {
             href={`/api/pipelines/${row.pipeline.id}/video`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent"
+            className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent max-md:min-h-11 max-md:px-3.5"
           >
             <Smartphone className="size-3.5" /> Phone video
           </a>
@@ -166,7 +166,7 @@ function PitchCard({ row, paused }: { row: Row; paused: boolean }) {
               href={`/api/pipelines/${row.pipeline.id}/video?view=laptop`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent"
+              className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent max-md:min-h-11 max-md:px-3.5"
             >
               <Laptop className="size-3.5" /> Laptop video
             </a>

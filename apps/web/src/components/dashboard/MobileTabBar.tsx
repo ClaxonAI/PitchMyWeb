@@ -15,7 +15,7 @@ export function MobileTabBar() {
   if (pathname?.startsWith("/admin")) return null;
   return (
     <>
-      <div aria-hidden className="h-[calc(3.5rem+env(safe-area-inset-bottom))] shrink-0 md:hidden" />
+      <div aria-hidden className="h-[calc(3.5rem+1px+env(safe-area-inset-bottom))] shrink-0 md:hidden" />
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 border-t border-dash-border bg-dash-card pb-[env(safe-area-inset-bottom)] md:hidden">
         <ul className="grid grid-cols-4">
           {NAV_ITEMS.map((item) => {
