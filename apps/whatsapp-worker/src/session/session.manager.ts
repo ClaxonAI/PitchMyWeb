@@ -3,10 +3,10 @@ import type { Queue } from "bullmq";
 import type { Redis } from "ioredis";
 import type { PrismaClient, WhatsAppStatus } from "@pitchmyweb/db";
 import type { ReconnectJob, WaStatus } from "@pitchmyweb/contracts";
-import { WHATSAPP_QR_TTL_SECONDS, whatsappQrKey } from "@pitchmyweb/contracts";
+import { WHATSAPP_PAIRING_TTL_SECONDS, WHATSAPP_QR_TTL_SECONDS, whatsappPairingKey, whatsappQrKey } from "@pitchmyweb/contracts";
 import type { WorkerConfig } from "../config.js";
 import { logger, sanitizeError } from "../logger.js";
-import type { ProviderEvents, WhatsAppProvider } from "../providers/whatsapp.provider.js";
+import type { ConnectOptions, ProviderEvents, WhatsAppProvider } from "../providers/whatsapp.provider.js";
 import { EventPublisher, nowIso } from "../realtime/publisher.js";
 import type { InboundHandler } from "../workers/inbound.handler.js";
 import type { AuthStateRepository } from "./auth-state.repository.js";
@@ -85,12 +85,16 @@ export class SessionManager {
    * Opens a session. Returns false when another worker already owns it —
    * an ordinary outcome, not a failure.
    */
-  async connect(accountId: string): Promise<boolean> {
+  async connect(accountId: string, options: ConnectOptions = {}): Promise<boolean> {
+    return (await this.open(accountId, options)) === "started";
+  }
+
+  private async open(accountId: string, options: ConnectOptions): Promise<"started" | "locked" | "failed"> {
     const existing = this.live.get(accountId);
     if (existing) {
       // Already ours. A repeat connect (user clicked twice) is a no-op
       // rather than a socket churn.
-      return true;
+      return "started";
     }
 
     const lock = await SessionLock.acquire(this.lockRedis, accountId, this.config.WORKER_ID, {
@@ -103,41 +107,59 @@ export class SessionManager {
     });
     if (!lock) {
       logger.info({ accountId }, "another worker owns this session; skipping connect");
-      return false;
+      return "locked";
     }
 
     this.live.set(accountId, { lock, connecting: true });
 
     try {
       await this.setStatus(accountId, "CONNECTING");
-      await this.provider.connect(accountId, this.eventsFor(accountId));
+      await this.provider.connect(accountId, this.eventsFor(accountId), options);
       const entry = this.live.get(accountId);
       if (entry) entry.connecting = false;
-      return true;
+      return "started";
     } catch (error) {
       const message = sanitizeError(error, "Could not start the WhatsApp connection");
       logger.error({ accountId, err: message }, "connect failed");
       await this.releaseLock(accountId);
       await this.setStatus(accountId, "ERROR", { error: message });
-      return false;
+      return "failed";
     }
   }
 
-  /** Connects if needed, then asks WhatsApp for a pairing code. */
+  /**
+   * Links by pairing code: opens a fresh socket in pairing mode, and the
+   * provider asks WhatsApp for the code once that socket is ready.
+   *
+   * Always from a clean slate. Any socket already open for the account is a
+   * QR attempt the user has abandoned, and any stored credentials that are
+   * not a registered session are left over from an earlier failed attempt —
+   * WhatsApp treats a request carrying those as a login, refuses it and logs
+   * the account out, so they are removed before starting.
+   */
   async requestPairingCode(accountId: string, phoneNumber: string): Promise<void> {
-    if (!this.live.has(accountId)) {
-      const started = await this.connect(accountId);
-      if (!started) return;
+    const account = await this.db.whatsAppAccount.findUnique({ where: { id: accountId }, select: { status: true } });
+    if (!account) return;
+    if (account.status === "CONNECTED") {
+      logger.info({ accountId }, "ignoring pairing-code request; the account is already linked");
+      return;
     }
-    try {
-      // The socket needs a moment after opening before WhatsApp will
-      // answer a pairing-code request; Baileys surfaces that as a thrown
-      // error, which the retry below absorbs.
-      await this.withRetry(() => this.provider.requestPairingCode(accountId, phoneNumber));
-    } catch (error) {
-      const message = sanitizeError(error, "Could not request a pairing code");
-      logger.error({ accountId, err: message }, "pairing code request failed");
-      await this.setStatus(accountId, "ERROR", { error: message });
+    if (this.live.has(accountId)) {
+      try {
+        await this.provider.disconnect(accountId);
+      } catch (error) {
+        logger.warn({ accountId, err: sanitizeError(error) }, "closing the previous link attempt failed");
+      }
+      await this.releaseLock(accountId);
+    }
+    await this.authRepo.removeAll(accountId);
+    await this.redis.del(whatsappQrKey(accountId), whatsappPairingKey(accountId));
+
+    const outcome = await this.open(accountId, { pairingPhone: phoneNumber });
+    if (outcome === "locked") {
+      // Left alone this would sit at CONNECTING forever with nothing on
+      // screen; saying so lets the user simply try again.
+      await this.setStatus(accountId, "ERROR", { error: "WhatsApp linking is busy for this account. Wait a minute and get a new code." });
     }
   }
 
@@ -232,7 +254,13 @@ export class SessionManager {
       },
 
       onPairingCode: async (code) => {
+        // Parked as well as published, for the same reason as the QR: the
+        // publish reaches only clients whose stream is open right now, and
+        // the status poll serves this copy to everyone else.
+        const expiresAt = new Date(Date.now() + WHATSAPP_PAIRING_TTL_SECONDS * 1000).toISOString();
+        await this.redis.set(whatsappPairingKey(accountId), JSON.stringify({ code, expiresAt }), "EX", WHATSAPP_PAIRING_TTL_SECONDS);
         await this.publisher.publish({ type: "PAIRING_CODE", accountId, code, at: nowIso() });
+        logger.info({ accountId }, "pairing code published to subscribers");
       },
 
       onConnected: async ({ phoneNumber, displayName }) => {
@@ -409,21 +437,6 @@ export class SessionManager {
     const entry = this.live.get(accountId);
     this.live.delete(accountId);
     await entry?.lock.release();
-  }
-
-  private async withRetry<T>(operation: () => Promise<T>, attempts = 3, delayMs = 1_500): Promise<T> {
-    let lastError: unknown;
-    for (let i = 0; i < attempts; i += 1) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error;
-        if (i < attempts - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-      }
-    }
-    throw lastError;
   }
 
   /**

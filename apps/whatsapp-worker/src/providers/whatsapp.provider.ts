@@ -15,6 +15,16 @@ export type ConnectResult = {
   restored: boolean;
 };
 
+export type ConnectOptions = {
+  /**
+   * Link by pairing code instead of QR: the provider asks WhatsApp for an
+   * 8-character code for this number (digits, with country code) as soon as
+   * the socket is ready to register a device, and reports it through
+   * `onPairingCode`. No QR is emitted in this mode.
+   */
+  pairingPhone?: string;
+};
+
 export type SendTextResult = {
   /** The provider's own id for the sent message, used to match receipts. */
   providerMessageId: string;
@@ -50,14 +60,7 @@ export type ProviderEvents = {
 
 export interface WhatsAppProvider {
   /** Opens a socket for the account, restoring stored credentials if any. */
-  connect(accountId: string, events: ProviderEvents): Promise<ConnectResult>;
-
-  /**
-   * Asks WhatsApp for an 8-character pairing code for `phoneNumber`, the
-   * alternative to scanning a QR. Requires an open, unauthenticated socket,
-   * so `connect` runs first.
-   */
-  requestPairingCode(accountId: string, phoneNumber: string): Promise<string>;
+  connect(accountId: string, events: ProviderEvents, options?: ConnectOptions): Promise<ConnectResult>;
 
   /**
    * Closes the socket. `logout: true` also tells WhatsApp to unlink the

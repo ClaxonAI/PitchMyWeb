@@ -76,14 +76,14 @@ describe("backfillLegacyPitchCredits", () => {
 
   it("does not pay out twice when the normal claim path runs after it", async () => {
     // The order was placed anonymously and backfilled before its buyer ever
-    // signed in; claimPaidOrdersForUser then finds it by email and claims it
-    // the ordinary way. Both write `purchase:<orderId>`, so the second one
+    // signed in; claimPaidOrdersForUser then finds it by (verified) email and
+    // claims it the ordinary way. Both write `purchase:<orderId>`, so the second one
     // is a no-op rather than a second grant.
     const user = await newUser("legacy-then-claim");
     const order = await legacyPaidOrder(null, user.email);
 
     await backfillLegacyPitchCredits(prisma, { only: { payerEmails: [user.email] } });
-    await claimPaidOrdersForUser(prisma, user.id, user.email);
+    await claimPaidOrdersForUser(prisma, user.id, user.email, { emailVerified: true });
 
     expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { userId: true, credits: true } })).toEqual({
       userId: user.id,
@@ -91,6 +91,15 @@ describe("backfillLegacyPitchCredits", () => {
     });
     expect(await getOrCreateWallet(prisma, user.id)).toMatchObject({ availableCredits: 20 });
     expect(await prisma.pitchCreditLedger.count({ where: { userId: user.id, type: "PURCHASE" } })).toBe(1);
+  });
+
+  it("never hands an order to an account whose email was not verified", async () => {
+    // Someone registers with the buyer's email address (email-and-password
+    // sign-up checks nothing): the buyer's order must stay unclaimed.
+    const user = await newUser("legacy-unverified");
+    const order = await legacyPaidOrder(null, user.email);
+    await claimPaidOrdersForUser(prisma, user.id, user.email, { emailVerified: false });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { userId: true } })).userId).toBeNull();
   });
 
   it("grants an admin-assigned plan its pack, once", async () => {

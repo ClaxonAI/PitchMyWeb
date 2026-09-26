@@ -157,7 +157,7 @@ export async function upsertGoogleUser(
       },
     });
     if (orderId) await claimOrder(db, orderId, user.id);
-    await claimPaidOrdersForUser(db, user.id, user.email);
+    await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
     await claimTrialDevice(db, user.id, fingerprintId ?? undefined);
     return user;
   }
@@ -178,7 +178,7 @@ export async function upsertGoogleUser(
       },
     });
     if (orderId) await claimOrder(db, orderId, user.id);
-    await claimPaidOrdersForUser(db, user.id, user.email);
+    await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
     await claimTrialDevice(db, user.id, fingerprintId ?? undefined);
     return user;
   }
@@ -196,7 +196,7 @@ export async function upsertGoogleUser(
     },
   });
   if (orderId) await claimOrder(db, orderId, user.id);
-  await claimPaidOrdersForUser(db, user.id, user.email);
+  await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
   await claimTrialDevice(db, user.id, fingerprintId ?? undefined);
   return user;
 }

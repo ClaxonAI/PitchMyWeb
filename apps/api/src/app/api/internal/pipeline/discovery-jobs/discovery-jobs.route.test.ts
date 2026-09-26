@@ -61,6 +61,7 @@ describe("GET /api/internal/pipeline/discovery-jobs/:executionId", () => {
       minRating: campaign.minRating,
       minReviews: campaign.minReviews,
       leadLimit: campaign.leadLimit,
+      excludeExternalIds: [],
     });
   });
 

@@ -118,12 +118,23 @@ describe("SendGuard", () => {
     expect(await guard.evaluate(baseInput(f, phoneNumber))).toEqual({ allowed: true });
   });
 
-  it("scopes the duplicate check to one account", async () => {
+  it("refuses a number another user contacted inside the exclusivity window", async () => {
     const first = await fixture("dup-account-a");
     const second = await fixture("dup-account-b");
     const phoneNumber = uniquePhone();
     await db.whatsAppMessage.create({
       data: { userId: first.userId, accountId: first.accountId, phoneNumber, body: "earlier", status: "SENT", sentAt: new Date() },
+    });
+    expect(await guard.evaluate(baseInput(second, phoneNumber))).toMatchObject({ allowed: false, reason: "claimed_elsewhere" });
+  });
+
+  it("allows it again once the exclusivity window has passed", async () => {
+    const first = await fixture("dup-old-a");
+    const second = await fixture("dup-old-b");
+    const phoneNumber = uniquePhone();
+    const longAgo = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000);
+    await db.whatsAppMessage.create({
+      data: { userId: first.userId, accountId: first.accountId, phoneNumber, body: "earlier", status: "SENT", sentAt: longAgo, createdAt: longAgo },
     });
     expect(await guard.evaluate(baseInput(second, phoneNumber))).toEqual({ allowed: true });
   });

@@ -241,6 +241,7 @@ model User {
   pitchWallet       PitchWallet?
   pitchCreditLedger PitchCreditLedger[]
   pitchBatches      PitchBatch[]
+  businessClaims    BusinessClaim[]
 
   @@index([role])
   @@map("users")
@@ -462,6 +463,8 @@ model Business {
   // this constraint (Postgres treats NULLs as distinct), which matches the
   // documented rule that this key only applies when the provider supplies
   // an external id.
+  claim BusinessClaim?
+
   @@unique([source, externalId])
   @@index([category])
   @@index([city])
@@ -996,6 +999,8 @@ model WhatsAppMessage {
   // equality match on two columns plus a range on the third, which this
   // composite serves directly and [accountId, status] cannot.
   @@index([accountId, phoneNumber, createdAt])
+  // Business exclusivity: "has any other user contacted this number lately".
+  @@index([phoneNumber, createdAt])
   // Inbound receipts arrive keyed by the WhatsApp id, not ours.
   @@index([providerMessageId])
   @@map("whatsapp_messages")
@@ -1006,14 +1011,19 @@ model WhatsAppMessage {
 // PitchMyWeb user may message it. Enforced in the API before a message is
 // ever queued and again in the worker before it is sent.
 model OptOut {
-  id          String       @id @default(cuid())
-  phoneNumber String       @unique
-  source      OptOutSource
+  id              String       @id @default(cuid())
+  phoneNumber     String       @unique
+  source          OptOutSource
   // Free text for MANUAL entries ("asked by phone"); for INBOUND_KEYWORD it
   // records which keyword matched.
-  reason      String?
-  createdAt   DateTime     @default(now())
+  reason          String?
+  // Who added a MANUAL entry, so their own list can be shown to them without
+  // exposing every other customer's. Null for inbound STOP replies and for
+  // entries recorded before this column existed.
+  createdByUserId String?
+  createdAt       DateTime     @default(now())
 
+  @@index([createdByUserId])
   @@map("opt_outs")
 }
 
@@ -1285,4 +1295,36 @@ model PitchCreditLedger {
 
   @@index([userId, createdAt])
   @@map("pitch_credit_ledger")
+}
+
+// Which user a business "belongs to", so two users never pitch the same
+// business. A business is claimed when a user starts pitching it (RESERVED),
+// becomes theirs for 90 days once the pitch is sent (PITCHED), and goes back
+// to everyone if the pitch is refunded or replaced (RELEASED) or the claim
+// expires. One row per business: the unique key is what makes two users
+// racing for the same business end with exactly one winner.
+enum BusinessClaimStatus {
+  RESERVED
+  PITCHED
+  RELEASED
+}
+
+model BusinessClaim {
+  id         String              @id @default(cuid())
+  businessId String              @unique
+  userId     String
+  campaignId String
+  status     BusinessClaimStatus @default(RESERVED)
+  claimedAt  DateTime            @default(now())
+  // RESERVED: a safety net for pitches that never resolve. PITCHED: 90 days
+  // after the pitch was sent. Past this, anyone may claim the business.
+  expiresAt  DateTime
+  updatedAt  DateTime            @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status, expiresAt])
+  @@map("business_claims")
 }

@@ -1,4 +1,4 @@
-import { createRedisConnection, whatsappQrKey } from "@pitchmyweb/contracts";
+import { createRedisConnection, whatsappPairingKey, whatsappQrKey } from "@pitchmyweb/contracts";
 
 // One connection per process, reused across requests. Next reloads modules in
 // development, so it hangs off globalThis to avoid leaking a socket per reload
@@ -23,6 +23,23 @@ export async function readCachedQr(accountId: string): Promise<string | null> {
   } catch {
     // Redis being unreachable must not take the status endpoint down with
     // it; the stream is still the primary path for this value.
+    return null;
+  }
+}
+
+/**
+ * The pairing code the worker parked for this account, or null once it has
+ * expired. Same reasoning as the QR: the code reaches the browser over a
+ * one-shot publish, and without this a page whose stream was not open at
+ * that instant would never show it.
+ */
+export async function readCachedPairingCode(accountId: string): Promise<{ code: string; expiresAt: string } | null> {
+  try {
+    const raw = await client().get(whatsappPairingKey(accountId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { code?: unknown; expiresAt?: unknown };
+    return typeof parsed.code === "string" && typeof parsed.expiresAt === "string" ? { code: parsed.code, expiresAt: parsed.expiresAt } : null;
+  } catch {
     return null;
   }
 }

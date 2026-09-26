@@ -1,6 +1,7 @@
 import type { LeadPipeline, Pitch, PipelineStage, Prisma, PrismaClient } from "@pitchmyweb/db";
 import { buildPreviewContent } from "@pitchmyweb/templates";
 import { ConflictError, DomainError, NotFoundError, ValidationError } from "../errors";
+import { confirmBusinessClaim, releaseBusinessClaim, reserveBusiness } from "../leads/claims.service";
 import { isLeadTransitionAllowed, transitionLeadStatus } from "../leads/lifecycle";
 import { isPitchableBusiness } from "../leads/phone";
 import { generateWhatsAppAction } from "../leads/whatsapp.service";
@@ -39,6 +40,7 @@ export const NON_RETRYABLE_REASONS = [
   "opted_out",
   "invalid_number",
   "recent_duplicate",
+  "claimed_elsewhere",
   // A business whose number WhatsApp cannot reach (no valid number at all,
   // or a landline) will not have gained one by the time a retry runs — the
   // classification comes from the stored Business row, not from anything
@@ -61,7 +63,9 @@ export const NON_RETRYABLE_REASONS = [
 // business, so the reserved credit moves to the next eligible lead in the
 // same campaign instead of being refunded — and is refunded only when the
 // campaign has no eligible lead left to give it to.
-export const REPLACEABLE_REASONS = ["invalid_number", "no_valid_phone"];
+// A business another user is already working with gets the same treatment
+// as an unreachable number: its credit moves to the next business.
+export const REPLACEABLE_REASONS = ["invalid_number", "no_valid_phone", "claimed_elsewhere"];
 
 export type PipelineDeps = {
   enqueueRecording: (job: { recordingId: string }) => Promise<void>;
@@ -144,6 +148,17 @@ async function resolvePipelineCredit(
   });
   if (claimed.count !== 1) return;
 
+  // Business exclusivity follows the credit: a sent pitch makes the business
+  // this user's for 90 days; one that never went out frees it for everyone.
+  const owner = await tx.leadPipeline.findUnique({ where: { id: pipeline.id }, select: { campaignId: true, lead: { select: { businessId: true } } } });
+  if (owner) {
+    if (outcome === "CONSUMED") {
+      await confirmBusinessClaim(tx, { businessId: owner.lead.businessId, userId });
+    } else {
+      await releaseBusinessClaim(tx, { businessId: owner.lead.businessId, userId, campaignId: owner.campaignId });
+    }
+  }
+
   if (outcome === "REPLACED") {
     // The credit stays reserved and now belongs to the replacement pipeline
     // (same batch), which will consume or refund it when it resolves. So the
@@ -209,7 +224,7 @@ async function failPipeline(
     const userId = updated.campaign.userId;
 
     if (REPLACEABLE_REASONS.includes(reason) && updated.batchId && updated.creditOutcome === null) {
-      const replacement = await claimReplacementLead(tx, { campaignId: pipeline.campaignId, batchId: updated.batchId });
+      const replacement = await claimReplacementLead(tx, { campaignId: pipeline.campaignId, batchId: updated.batchId, userId });
       if (replacement) {
         await tx.leadPipeline.update({ where: { id: pipeline.id }, data: { replacedById: replacement.id } });
         await resolvePipelineCredit(tx, { id: pipeline.id, batchId: updated.batchId }, userId, "REPLACED");
@@ -250,7 +265,7 @@ async function failPipeline(
  */
 async function claimReplacementLead(
   tx: Prisma.TransactionClient,
-  input: { campaignId: string; batchId: string },
+  input: { campaignId: string; batchId: string; userId: string },
 ): Promise<{ id: string } | null> {
   const candidates = await tx.lead.findMany({
     where: { campaignId: input.campaignId, status: { in: ["NEW", "ANALYZED"] }, pipelines: { none: { campaignId: input.campaignId } } },
@@ -260,6 +275,8 @@ async function claimReplacementLead(
   });
   for (const lead of candidates) {
     if (!isPitchableBusiness(lead.business)) continue;
+    // Another user may have pitched this business since discovery found it.
+    if (!(await reserveBusiness(tx, { businessId: lead.businessId, userId: input.userId, campaignId: input.campaignId }))) continue;
     const created = await tx.leadPipeline.createMany({
       data: [{ campaignId: input.campaignId, leadId: lead.id, batchId: input.batchId }],
       skipDuplicates: true,
@@ -342,8 +359,18 @@ export type StartPipelinesInput = {
  */
 export async function startPipelines(db: PrismaClient, input: StartPipelinesInput, deps: PipelineDeps = defaultDeps): Promise<LeadPipeline[]> {
   if (input.leadIds.length === 0) return [];
+  // Claim each business before its pipeline exists. One another user already
+  // holds is left out, exactly like a lead that already has a pipeline: the
+  // caller releases the credit it reserved for it.
+  const campaign = await db.campaign.findUniqueOrThrow({ where: { id: input.campaignId }, select: { userId: true } });
+  const leads = await db.lead.findMany({ where: { id: { in: [...input.leadIds] }, campaignId: input.campaignId }, select: { id: true, businessId: true } });
+  const claimable: string[] = [];
+  for (const lead of leads) {
+    if (await reserveBusiness(db, { businessId: lead.businessId, userId: campaign.userId, campaignId: input.campaignId })) claimable.push(lead.id);
+  }
+  if (claimable.length === 0) return [];
   await db.leadPipeline.createMany({
-    data: input.leadIds.map((leadId) => ({ campaignId: input.campaignId, leadId, batchId: input.batchId })),
+    data: claimable.map((leadId) => ({ campaignId: input.campaignId, leadId, batchId: input.batchId })),
     skipDuplicates: true,
   });
   const pipelines = await db.leadPipeline.findMany({ where: { batchId: input.batchId, stage: "SELECTED" } });

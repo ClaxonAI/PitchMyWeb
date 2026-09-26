@@ -42,6 +42,7 @@ const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>,
   no_phone: "No WhatsApp number",
   already_selected: "Already selected",
   not_pitchable_status: "Already pitched",
+  taken: "Taken by another PitchMyWeb user",
 };
 
 /** "until 2 Oct" — short, since it sits under two icon buttons in a table cell. */
@@ -81,15 +82,15 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const { id } = await params;
   const cookie = (await cookies()).toString();
 
-  const overview = await fetchJson<CampaignOverview>(`/api/campaigns/${id}/overview`, cookie);
+  // Independent reads, fetched together: one round trip to the API instead
+  // of three in a row (this page is revisited constantly while a campaign runs).
+  const [overview, leadsResult, batchesResult] = await Promise.all([
+    fetchJson<CampaignOverview>(`/api/campaigns/${id}/overview`, cookie),
+    fetchJson<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }>(`/api/campaigns/${id}/leads`, cookie),
+    fetchJson<{ items: PitchBatch[] }>(`/api/campaigns/${id}/batches`, cookie),
+  ]);
   if (!overview) notFound();
-
-  const leadsResult = await fetchJson<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }>(
-    `/api/campaigns/${id}/leads`,
-    cookie,
-  );
   const leadRows = leadsResult?.items ?? [];
-  const batchesResult = await fetchJson<{ items: PitchBatch[] }>(`/api/campaigns/${id}/batches`, cookie);
 
   const { campaign, execution, counts } = overview;
   const blockedCount = leadRows.filter((row) => !row.pipeline && row.blockedReason).length;

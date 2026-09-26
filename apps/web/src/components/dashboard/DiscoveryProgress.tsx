@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { campaignsApi, type CampaignOverview } from "@/lib/api-client";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 import type { DiscoveryStage } from "@/lib/api-client";
 
 type LiveEvent = {
@@ -43,9 +44,10 @@ export function DiscoveryProgress({
   const router = useRouter();
   const [event, setEvent] = useState<LiveEvent | null>(null);
   const running = initialStatus === "RUNNING";
+  const [finished, setFinished] = useState(false);
 
   useEffect(() => {
-    if (!running) return;
+    if (!running || finished) return;
 
     const source = new EventSource(`/api/campaigns/${campaignId}/executions/${executionId}/events`);
     const onMessage = (incoming: MessageEvent<string>) => {
@@ -63,22 +65,30 @@ export function DiscoveryProgress({
     source.addEventListener("COMPLETED", onMessage);
     source.addEventListener("FAILED", onMessage);
 
-    const timer = window.setInterval(() => {
-      campaignsApi.overview(campaignId).then((overview) => {
-        const status = overview.execution?.status;
-        if (status && status !== "RUNNING") {
-          source.close();
-          window.clearInterval(timer);
-          router.refresh();
-        }
-      }).catch(() => undefined);
-    }, 3000);
-
     return () => {
       source.close();
-      window.clearInterval(timer);
     };
-  }, [campaignId, executionId, running, router]);
+  }, [campaignId, executionId, running, finished]);
+
+  // The stream says how far the search got; this check is what notices it
+  // has ended (the stream closes without saying so) and reloads the page
+  // with the new leads.
+  useVisibleInterval(
+    () => {
+      campaignsApi
+        .overview(campaignId)
+        .then((overview) => {
+          const status = overview.execution?.status;
+          if (status && status !== "RUNNING") {
+            setFinished(true);
+            router.refresh();
+          }
+        })
+        .catch(() => undefined);
+    },
+    3000,
+    running && !finished,
+  );
 
   const text = lineFor(event, running);
   if (!text) return null;

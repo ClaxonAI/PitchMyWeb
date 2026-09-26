@@ -146,6 +146,8 @@ export const whatsappApi = {
       lastError: string | null;
       logoutReason: WhatsAppLogoutReason | null;
       qrDataUrl: string | null;
+      pairingCode?: string | null;
+      pairingCodeExpiresAt?: string | null;
     }>(`/api/whatsapp/accounts/${id}/status`),
   previewMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
     api.post<MessagePreview>("/api/whatsapp/messages/preview", input),
@@ -340,7 +342,7 @@ export type CampaignLeadRow = {
     videoExpired: boolean;
   } | null;
   selectable: boolean;
-  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
+  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | "taken" | null;
 };
 
 export const campaignsApi = {
@@ -395,6 +397,22 @@ export type CreditLedgerEntry = {
   pipelineId: string | null;
   orderId: string | null;
   createdAt: string;
+};
+
+export type NicheAvailability = {
+  slug: string;
+  label: string;
+  category: string;
+  template: string;
+  /** Businesses without a website this user could pitch; null when counts are unavailable. */
+  available: number | null;
+  /** The first search page was full, so there are more than `available`. */
+  more: boolean;
+};
+
+export const nichesApi = {
+  availability: (location: string) =>
+    api.get<{ location: string; configured: boolean; niches: NicheAvailability[] }>(`/api/niches/availability${toQueryString({ location })}`),
 };
 
 export const pitchCreditsApi = {

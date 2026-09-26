@@ -18,6 +18,8 @@ export type JobParams = {
   minRating: number | null;
   minReviews: number | null;
   leadLimit: number;
+  /** See DiscoveryQuery.excludeExternalIds. Optional: an older API omits it. */
+  excludeExternalIds?: string[];
 };
 
 export type ProcessDeps = {
@@ -70,6 +72,7 @@ export async function processDiscovery(
     minRating: params.minRating,
     minReviews: params.minReviews,
     leadLimit: params.leadLimit,
+    excludeExternalIds: new Set(params.excludeExternalIds ?? []),
   };
   if (deps.publish) {
     query.onProgress = async (event) => {
@@ -78,7 +81,9 @@ export async function processDiscovery(
   }
 
   try {
-    const businesses = await deps.source.search(query);
+    // Sources that cannot skip ids while paging (Overpass) are filtered here.
+    const excluded = query.excludeExternalIds;
+    const businesses = (await deps.source.search(query)).filter((b) => !(b.externalId && excluded?.has(b.externalId)));
     deps.log("info", { executionId, found: businesses.length }, "discovery search completed");
     await safePublish(deps, { stage: "COMPLETED", executionId, found: businesses.length, at: nowIso() });
     await deps.reportResults(executionId, businesses);

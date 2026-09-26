@@ -1,15 +1,16 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { QUEUE_SEND, QUEUE_SESSION, createRedisConnection } from "@pitchmyweb/contracts";
+import { QUEUE_SEND, QUEUE_SESSION, createRedisConnection, whatsappPairingKey } from "@pitchmyweb/contracts";
 import { prisma } from "../../../lib/db/client";
 import { createTestUser, deleteTestUsers } from "../../../lib/testing/db-test-helpers";
 import { SESSION_COOKIE_NAME, createSession } from "../../../lib/auth/session";
-import { NotFoundError, UnauthenticatedError } from "../../../lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, UnauthenticatedError, ValidationError } from "../../../lib/errors";
 import { sendQueue, sessionQueue } from "../../../lib/whatsapp/queue";
 import { handleCreateWhatsAppAccount, handleListWhatsAppAccounts } from "./accounts/route";
 import { handleGetWhatsAppAccount } from "./accounts/[id]/route";
 import { handleConnectWhatsAppAccount } from "./accounts/[id]/connect/route";
 import { handleGetWhatsAppStatus } from "./accounts/[id]/status/route";
+import { handleRequestPairingCode } from "./accounts/[id]/pairing-code/route";
 import { handleCreateWhatsAppMessage, handleListWhatsAppMessages } from "./messages/route";
 import { handlePreviewWhatsAppMessage } from "./messages/preview/route";
 import { handleCreateOptOut, handleListOptOuts } from "./opt-outs/route";
@@ -23,6 +24,7 @@ import { handleCreateOptOut, handleListOptOuts } from "./opt-outs/route";
 // only prove the mock was called.
 
 const createdUserIds: string[] = [];
+const redis = createRedisConnection(process.env.REDIS_URL ?? "redis://127.0.0.1:6381");
 const createdPhones: string[] = [];
 
 let seq = 0;
@@ -86,6 +88,7 @@ afterAll(async () => {
   await sessionQueue().close();
   await sendQueue().close();
   await deleteTestUsers(createdUserIds);
+  await redis.quit();
   await prisma.$disconnect();
 });
 
@@ -223,6 +226,58 @@ describe("POST /api/whatsapp/accounts/:id/connect", () => {
         { id: accountId },
       ),
     ).rejects.toThrow();
+  });
+});
+
+describe("POST /api/whatsapp/accounts/:id/pairing-code", () => {
+  async function linkAttempt(prefix: string) {
+    const { user, cookieHeader } = await authedUser(prefix);
+    const account = await prisma.whatsAppAccount.create({ data: { userId: user.id, status: "DISCONNECTED" } });
+    return { cookieHeader, accountId: account.id };
+  }
+
+  function pair(accountId: string, cookieHeader: string, phoneNumber: string) {
+    return handleRequestPairingCode(
+      prisma,
+      req(`http://localhost/api/whatsapp/accounts/${accountId}/pairing-code`, { method: "POST", body: { phoneNumber }, cookieHeader }),
+      { id: accountId },
+    );
+  }
+
+  it("adds India's country code to a 10-digit mobile number", async () => {
+    const { cookieHeader, accountId } = await linkAttempt("pair-in");
+    const response = await pair(accountId, cookieHeader, "9488329318");
+    expect(response.status).toBe(202);
+    const jobs = await sessionQueue().getJobs(["waiting", "delayed", "prioritized", "active"]);
+    const job = jobs.find((j) => j.data.accountId === accountId && j.data.type === "pairing-code");
+    expect(job?.data.phoneNumber).toBe("919488329318");
+  });
+
+  it("refuses a number whose country code cannot be known", async () => {
+    const { cookieHeader, accountId } = await linkAttempt("pair-bad");
+    await expect(pair(accountId, cookieHeader, "88329318")).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("refuses an account that is already linked", async () => {
+    const { cookieHeader, accountId } = await connectedAccount("pair-linked");
+    await expect(pair(accountId, cookieHeader, "+91 94883 29318")).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("the status poll serves the parked code", async () => {
+    const { cookieHeader, accountId } = await linkAttempt("pair-status");
+    await prisma.whatsAppAccount.update({ where: { id: accountId }, data: { status: "PAIRING_CODE_READY" } });
+    const expiresAt = new Date(Date.now() + 150_000).toISOString();
+    await redis.set(whatsappPairingKey(accountId), JSON.stringify({ code: "ABCD1234", expiresAt }), "EX", 150);
+    try {
+      const response = await handleGetWhatsAppStatus(prisma, req(`http://localhost/api/whatsapp/accounts/${accountId}/status`, { cookieHeader }), {
+        id: accountId,
+      });
+      const body = (await response.json()) as { pairingCode: string | null; pairingCodeExpiresAt: string | null };
+      expect(body.pairingCode).toBe("ABCD1234");
+      expect(body.pairingCodeExpiresAt).toBe(expiresAt);
+    } finally {
+      await redis.del(whatsappPairingKey(accountId));
+    }
   });
 });
 
@@ -390,13 +445,22 @@ describe("POST /api/whatsapp/messages/preview", () => {
 });
 
 describe("opt-outs", () => {
+  /** A user whose WhatsApp has messaged `phoneNumber`, so it is one of their contacts. */
+  async function userWhoMessaged(prefix: string, phoneNumber: string) {
+    const account = await connectedAccount(prefix);
+    await prisma.whatsAppMessage.create({
+      data: { userId: account.user.id, accountId: account.accountId, phoneNumber, body: "hello", status: "SENT", sentAt: new Date() },
+    });
+    return account;
+  }
+
   it("requires a session", async () => {
     await expect(handleListOptOuts(prisma, req("http://localhost/api/whatsapp/opt-outs"))).rejects.toThrow(UnauthenticatedError);
   });
 
-  it("adds a manual opt-out and normalizes the number", async () => {
-    const { cookieHeader } = await authedUser("optout-add");
+  it("adds a manual opt-out for one of the user's contacts and normalizes the number", async () => {
     const digits = trackedPhone();
+    const { cookieHeader } = await userWhoMessaged("optout-add", digits);
     const response = await handleCreateOptOut(
       prisma,
       req("http://localhost/api/whatsapp/opt-outs", { method: "POST", body: { phoneNumber: `+${digits}`, reason: "asked by phone" }, cookieHeader }),
@@ -407,12 +471,42 @@ describe("opt-outs", () => {
   });
 
   it("is idempotent", async () => {
-    const { cookieHeader } = await authedUser("optout-twice");
     const phoneNumber = trackedPhone();
+    const { cookieHeader } = await userWhoMessaged("optout-twice", phoneNumber);
     const body = { phoneNumber };
     await handleCreateOptOut(prisma, req("http://localhost/api/whatsapp/opt-outs", { method: "POST", body, cookieHeader }));
     await handleCreateOptOut(prisma, req("http://localhost/api/whatsapp/opt-outs", { method: "POST", body, cookieHeader }));
     expect(await prisma.optOut.count({ where: { phoneNumber } })).toBe(1);
+  });
+
+  it("refuses a number that is not one of the user's contacts", async () => {
+    const { cookieHeader } = await authedUser("optout-stranger");
+    await expect(
+      handleCreateOptOut(prisma, req("http://localhost/api/whatsapp/opt-outs", { method: "POST", body: { phoneNumber: trackedPhone() }, cookieHeader })),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("shows a user only the entries that concern them; an admin sees all", async () => {
+    const mine = trackedPhone();
+    const theirs = trackedPhone();
+    const me = await userWhoMessaged("optout-list-me", mine);
+    const them = await userWhoMessaged("optout-list-them", theirs);
+    for (const [who, phoneNumber] of [[me, mine], [them, theirs]] as const) {
+      await handleCreateOptOut(prisma, req("http://localhost/api/whatsapp/opt-outs", { method: "POST", body: { phoneNumber }, cookieHeader: who.cookieHeader }));
+    }
+    const listFor = async (cookieHeader: string) =>
+      ((await (await handleListOptOuts(prisma, req("http://localhost/api/whatsapp/opt-outs?pageSize=100", { cookieHeader }))).json()) as {
+        items: Array<{ phoneNumber: string }>;
+      }).items.map((item) => item.phoneNumber);
+
+    const seen = await listFor(me.cookieHeader);
+    expect(seen).toContain(mine);
+    expect(seen).not.toContain(theirs);
+
+    const admin = await authedUser("optout-list-admin");
+    await prisma.user.update({ where: { id: admin.user.id }, data: { role: "ADMIN" } });
+    const all = await listFor(admin.cookieHeader);
+    expect(all).toEqual(expect.arrayContaining([mine, theirs]));
   });
 
   it("rejects an implausible number", async () => {

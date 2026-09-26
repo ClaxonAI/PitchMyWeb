@@ -24,8 +24,9 @@ async function loadAnalytics(): Promise<AnalyticsSummary | null> {
 }
 
 export default async function BillingPage() {
-  const session = await requireSession();
-  const analytics = await loadAnalytics();
+  // Together, not one after the other; requireSession is the same cached
+  // call the layout already made for this request.
+  const [session, analytics] = await Promise.all([requireSession(), loadAnalytics()]);
   const plan = session.planId ? getPlan(session.planId as "auto" | "direct") : null;
 
   return (

@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@pitchmyweb/db";
-import { ALLOWED, deny, type PolicyDecision } from "@pitchmyweb/contracts";
+import { ALLOWED, EXCLUSIVITY_WINDOW_DAYS, deny, type PolicyDecision } from "@pitchmyweb/contracts";
 import type { WorkerConfig } from "../config.js";
 
 // The authoritative outreach gate, evaluated immediately before every send.
@@ -75,6 +75,16 @@ export class SendGuard {
       if (duplicate) {
         return deny("recent_duplicate");
       }
+    }
+
+    // Business exclusivity (see the same check in apps/api outreach-policy).
+    const exclusiveSince = new Date(now.getTime() - EXCLUSIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const elsewhere = await this.db.whatsAppMessage.findFirst({
+      where: { phoneNumber: input.phoneNumber, userId: { not: input.userId }, status: { in: [...CONTACTED_STATUSES] }, createdAt: { gte: exclusiveSince } },
+      select: { id: true },
+    });
+    if (elsewhere) {
+      return deny("claimed_elsewhere");
     }
 
     const rate = await this.checkRate(input.accountId, now);

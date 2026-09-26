@@ -52,3 +52,17 @@ export const WHATSAPP_QR_TTL_SECONDS = 90;
 export function whatsappQrKey(accountId: string): string {
   return `wa:qr:${accountId}`;
 }
+
+/**
+ * How long a WhatsApp pairing code stays usable, and how long the worker
+ * keeps the parked copy the status poll serves. WhatsApp ends a socket that
+ * has not registered a device after about 160s (its registration refs run
+ * out), which ends the code with it; the worker closes an unfinished pairing
+ * attempt a little before that, so the page never shows a dead code.
+ */
+export const WHATSAPP_PAIRING_TTL_SECONDS = 150;
+
+/** Parked pairing code, stored as JSON `{ code, expiresAt }`. Same reasoning as the QR copy above. */
+export function whatsappPairingKey(accountId: string): string {
+  return `wa:pairing:${accountId}`;
+}

@@ -1,6 +1,5 @@
 import type { PrismaClient, WhatsAppAccount } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import { normalizePhoneForWhatsApp } from "../leads/whatsapp.service";
 import { enqueueSessionCommand } from "./queue";
 
 // Linked-account lifecycle. Every query is scoped by `{ id, userId }` rather
@@ -101,10 +100,38 @@ export async function requestConnect(db: PrismaClient, userId: string, accountId
 }
 
 /**
+ * The number a user typed to link by code, as the digits WhatsApp expects
+ * (country code first, no "+"), or null when it cannot be read safely.
+ *
+ * Stricter than the general normalizer on purpose. A bare "9488329318"
+ * passes a digit count, but WhatsApp reads it as +94 (Sri Lanka) 88329318:
+ * the code request then goes to a number that is not the user's, and nothing
+ * ever arrives. So:
+ *  - "+" first: the country code is explicit; digits taken as typed.
+ *  - an Indian mobile written the local way (10 digits starting 6-9, with
+ *    or without a leading 0): +91 is added. PitchMyWeb's users are in India.
+ *  - 91 followed by an Indian mobile: already complete.
+ *  - anything else without a "+": rejected, with a message asking for the
+ *    country code, rather than guessed at.
+ */
+export function normalizeLinkingPhone(raw: string): string | null {
+  const trimmed = raw.trim();
+  let digits = trimmed.replace(/\D/g, "");
+  if (trimmed.startsWith("+")) {
+    return digits.length >= 8 && digits.length <= 15 ? digits : null;
+  }
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+    return digits.length >= 8 && digits.length <= 15 ? digits : null;
+  }
+  if (/^0?[6-9]\d{9}$/.test(digits)) return `91${digits.slice(-10)}`;
+  if (/^91[6-9]\d{9}$/.test(digits)) return digits;
+  return null;
+}
+
+/**
  * The alternative to scanning a QR: WhatsApp shows an 8-character code that
- * the user types on their phone. The number is normalized through the same
- * helper the wa.me link builder uses, so "not a plausible phone number" is
- * decided in exactly one place in this codebase.
+ * the user types on their phone.
  */
 export async function requestPairingCode(
   db: PrismaClient,
@@ -112,10 +139,15 @@ export async function requestPairingCode(
   accountId: string,
   rawPhone: string,
 ): Promise<PublicAccount> {
-  await getAccount(db, userId, accountId);
-  const phoneNumber = normalizePhoneForWhatsApp(rawPhone);
+  const existing = await getAccount(db, userId, accountId);
+  if (existing.status === "CONNECTED") {
+    // A code request on a linked session would overwrite its credentials
+    // with a half-registered device and sign it out.
+    throw new ConflictError("This WhatsApp is already linked. Disconnect it first to link a different number.");
+  }
+  const phoneNumber = normalizeLinkingPhone(rawPhone);
   if (!phoneNumber) {
-    throw new ValidationError("Enter a valid phone number, including the country code");
+    throw new ValidationError("Include your country code, e.g. +91 94883 29318");
   }
   const account = await db.whatsAppAccount.update({
     where: { id: accountId },

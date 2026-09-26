@@ -23,6 +23,7 @@ const BLOCKED_REASONS: Record<string, string> = {
   not_connected: "Not connected",
   invalid_number: "Not on WhatsApp",
   recent_duplicate: "Messaged recently",
+  claimed_elsewhere: "Taken by another user",
   rate_limited: "Rate limited",
 };
 

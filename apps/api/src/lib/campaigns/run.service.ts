@@ -1,6 +1,7 @@
 import type { Campaign, CampaignExecution, CampaignStatus, Prisma, PrismaClient } from "@pitchmyweb/db";
 import { isCampaignTransitionAllowed, loadOwnedCampaign, prepareCampaignRun } from "./campaign.service";
 import { applyDiscoveryInsights, ingestBusinessAsLead } from "../leads/lead.service";
+import { businessesTakenByOthers } from "../leads/claims.service";
 import { onDiscoveryCompleted } from "./selection.service";
 import { ConflictError } from "../errors";
 import { DemoProvider, type CampaignSearchInput } from "../providers/demo-provider";
@@ -197,6 +198,12 @@ export async function ingestBusinesses(
         await db.lead.delete({ where: { id: lead.id } }).catch(() => undefined);
         continue;
       }
+      // Business exclusivity: a business another user is pitching, or has
+      // pitched in the last 90 days, is never shown to this one.
+      if (leadCreated && (await businessesTakenByOthers(db, campaign.userId, [business.id])).size > 0) {
+        await db.lead.delete({ where: { id: lead.id } }).catch(() => undefined);
+        continue;
+      }
       if (leadCreated) {
         alreadySeen.add(business.id);
         if (isPitchableBusiness(business)) pitchable += 1;
@@ -218,7 +225,11 @@ export async function ingestBusinesses(
       const externalId = typeof rawInput?.externalId === "string" ? rawInput.externalId : null;
       const message = error instanceof Error ? error.message : "Unknown error";
       failedBusinesses.push({ name, externalId, error: message });
-      console.error(`Campaign run ${executionId}: failed to ingest business "${name}" (${externalId ?? "no externalId"}):`, error);
+      // The error's type and code only: a database error's message carries
+      // the row it was writing (phone numbers, emails), which has no place
+      // in the server log.
+      const code = typeof (error as { code?: unknown })?.code === "string" ? ` ${(error as { code: string }).code}` : "";
+      console.error(`Campaign run ${executionId}: failed to ingest business ${externalId ?? "(no externalId)"}: ${error instanceof Error ? error.name : "Error"}${code}`);
     }
   }
 

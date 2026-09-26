@@ -1,11 +1,11 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import type { Queue } from "bullmq";
-import { createRedisConnection, sessionLockKey, type ReconnectJob, type WaStatus } from "@pitchmyweb/contracts";
+import { createRedisConnection, sessionLockKey, whatsappPairingKey, type ReconnectJob, type WaStatus } from "@pitchmyweb/contracts";
 import { getConfig } from "../config.js";
 import { disconnectDb, getDb } from "../db.js";
 import { createTestAccount, type TestFixture } from "../testing/helpers.js";
 import { InboundHandler } from "../workers/inbound.handler.js";
-import type { ProviderEvents, WhatsAppProvider } from "../providers/whatsapp.provider.js";
+import type { ConnectOptions, ProviderEvents, WhatsAppProvider } from "../providers/whatsapp.provider.js";
 import { PostgresAuthStateRepository } from "./auth-state.repository.js";
 import { SessionManager } from "./session.manager.js";
 
@@ -24,19 +24,18 @@ class FakeProvider implements WhatsAppProvider {
   connectCalls = 0;
   /** Accounts this provider was asked to connect, in order. */
   connectedAccountIds: string[] = [];
+  /** Options passed to each connect, in order. */
+  connectOptions: ConnectOptions[] = [];
   disconnectCalls: Array<{ accountId: string; logout: boolean }> = [];
   status: WaStatus = "DISCONNECTED";
 
-  async connect(accountId: string, events: ProviderEvents) {
+  async connect(accountId: string, events: ProviderEvents, options: ConnectOptions = {}) {
     this.connectCalls += 1;
     this.connectedAccountIds.push(accountId);
+    this.connectOptions.push(options);
     this.events = events;
     this.status = "CONNECTING";
     return { restored: false };
-  }
-
-  async requestPairingCode() {
-    return "ABCD1234";
   }
 
   async disconnect(accountId: string, options: { logout?: boolean } = {}) {
@@ -95,7 +94,7 @@ async function statusOf(accountId: string): Promise<string> {
 
 afterEach(async () => {
   scheduledReconnects.length = 0;
-  await Promise.all(fixtures.map((f) => redis.del(sessionLockKey(f.accountId))));
+  await Promise.all(fixtures.map((f) => redis.del(sessionLockKey(f.accountId), whatsappPairingKey(f.accountId))));
   await Promise.all(fixtures.map((f) => f.cleanup()));
   fixtures.length = 0;
 });
@@ -333,6 +332,64 @@ describe("SessionManager", () => {
 
       expect(provider.connectedAccountIds).not.toContain(fixture.accountId);
       expect(await statusOf(fixture.accountId)).toBe("DISCONNECTED");
+    });
+  });
+
+  describe("pairing code", () => {
+    it("opens a fresh socket in pairing mode, from clean credentials", async () => {
+      const { fixture, provider, manager } = await setup("pair-fresh");
+      // Left over from an earlier failed attempt: exactly what made WhatsApp
+      // treat the request as a login and log the account out.
+      const repo = new PostgresAuthStateRepository(db, config.authEncryptionKey, 1);
+      await repo.set(fixture.accountId, "creds", "creds", { me: { id: "919800000001@s.whatsapp.net" } });
+
+      await manager.requestPairingCode(fixture.accountId, "919800000001");
+
+      expect(provider.connectCalls).toBe(1);
+      expect(provider.connectOptions[0]).toEqual({ pairingPhone: "919800000001" });
+      expect(await db.whatsAppAuthKey.count({ where: { accountId: fixture.accountId } })).toBe(0);
+      expect(await statusOf(fixture.accountId)).toBe("CONNECTING");
+    });
+
+    it("parks the code so the status poll can show it", async () => {
+      const { fixture, provider, manager } = await setup("pair-park");
+      await manager.requestPairingCode(fixture.accountId, "919800000001");
+      await provider.events!.onPairingCode("ABCD1234");
+      await provider.events!.onStatus("PAIRING_CODE_READY");
+
+      const parked = JSON.parse((await redis.get(whatsappPairingKey(fixture.accountId)))!) as { code: string; expiresAt: string };
+      expect(parked.code).toBe("ABCD1234");
+      expect(new Date(parked.expiresAt).getTime()).toBeGreaterThan(Date.now() + 140_000);
+      expect(await redis.ttl(whatsappPairingKey(fixture.accountId))).toBeGreaterThan(140);
+      expect(await statusOf(fixture.accountId)).toBe("PAIRING_CODE_READY");
+    });
+
+    it("replaces an open QR attempt instead of asking on its socket", async () => {
+      const { fixture, provider, manager } = await setup("pair-replace");
+      await manager.connect(fixture.accountId);
+      await manager.requestPairingCode(fixture.accountId, "919800000001");
+
+      expect(provider.disconnectCalls).toEqual([{ accountId: fixture.accountId, logout: false }]);
+      expect(provider.connectOptions).toEqual([{}, { pairingPhone: "919800000001" }]);
+      expect(await redis.get(sessionLockKey(fixture.accountId))).toContain(config.WORKER_ID);
+    });
+
+    it("leaves a linked account alone", async () => {
+      const { fixture, provider, manager } = await setup("pair-linked");
+      await db.whatsAppAccount.update({ where: { id: fixture.accountId }, data: { status: "CONNECTED" } });
+      await manager.requestPairingCode(fixture.accountId, "919800000001");
+      expect(provider.connectCalls).toBe(0);
+      expect(await statusOf(fixture.accountId)).toBe("CONNECTED");
+    });
+
+    it("says so when another worker holds the session, instead of hanging at CONNECTING", async () => {
+      const { fixture, provider, manager } = await setup("pair-locked");
+      await redis.set(sessionLockKey(fixture.accountId), "other-worker:token", "PX", 30_000);
+      await manager.requestPairingCode(fixture.accountId, "919800000001");
+      expect(provider.connectCalls).toBe(0);
+      const account = await db.whatsAppAccount.findUniqueOrThrow({ where: { id: fixture.accountId } });
+      expect(account.status).toBe("ERROR");
+      expect(account.lastError).toMatch(/busy/);
     });
   });
 

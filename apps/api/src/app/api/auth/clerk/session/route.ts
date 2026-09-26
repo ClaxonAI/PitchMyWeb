@@ -55,7 +55,7 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
       ? await db.user.update({ where: { id: existing.id }, data: { lastLoginAt: new Date(), ...(existing.googleId ? {} : { googleId: verified.sub }) } })
       : await db.user.create({ data: { email, googleId: verified.sub, passwordHash: null, name: clerkUser.firstName ? `${clerkUser.firstName}${clerkUser.lastName ? ` ${clerkUser.lastName}` : ""}` : null, imageUrl: clerkUser.imageUrl } });
 
-    await claimPaidOrdersForUser(db, user.id, user.email);
+    await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
     await claimTrialDevice(db, user.id, fingerprintId);
     const session = await createSession(db, user.id);
     const response = NextResponse.json({ id: user.id, email: user.email });

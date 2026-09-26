@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, CircleAlert, Clapperboard, Globe, Laptop, Pause, Send, Smartphone } from "lucide-react";
 import { campaignsApi, type CampaignLeadRow, type PipelineStage } from "@/lib/api-client";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +71,7 @@ const REASONS: Record<string, string> = {
   no_valid_phone: "No number WhatsApp can reach",
   opted_out: "Asked not to be contacted",
   recent_duplicate: "Messaged recently",
+  claimed_elsewhere: "Taken by another user",
   whatsapp_not_connected: "Your WhatsApp was disconnected",
   not_delivered: "No delivery receipt",
   paused: "Stopped by an earlier pause",
@@ -217,24 +219,29 @@ export function CampaignLiveProgress({
   const inFlight = pitched.some((row) => ACTIVE.includes(row.pipeline.stage) && !(sendingPaused && row.pipeline.stage === "VIDEO_UPLOADED"));
   const live = discovering || inFlight;
 
+  // One refresh of the whole page when the work settles (stage badges and
+  // credits elsewhere on it change then), not one per poll.
+  const settledOnce = useRef(false);
   useEffect(() => {
-    if (!live) return;
-    let settledOnce = false;
-    const timer = window.setInterval(() => {
+    if (live) settledOnce.current = false;
+  }, [live]);
+  useVisibleInterval(
+    () => {
       campaignsApi
         .leads(campaignId)
         .then((result) => {
           setRows(result.items);
           const stillWorking = result.items.some((row) => row.pipeline && ACTIVE.includes(row.pipeline.stage));
-          if (!stillWorking && !settledOnce) {
-            settledOnce = true;
+          if (!stillWorking && !settledOnce.current) {
+            settledOnce.current = true;
             router.refresh();
           }
         })
         .catch(() => undefined);
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [campaignId, live, router]);
+    },
+    POLL_MS,
+    live,
+  );
 
   const count = (predicate: (row: Row) => boolean) => pitched.filter(predicate).length;
   const building = count((row) => stepIndex(row.pipeline.stage) === 0);

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -26,7 +27,12 @@ const SESSION_COOKIE_NAME = "pmw_session";
  * the same null-check onto every child page. Do not "fix" this to match
  * the old page's leniency without re-deriving why they differ.
  */
-export async function getSession(): Promise<SessionUser | null> {
+export const getSession = cache(fetchSession);
+
+// Wrapped in React's cache() above: the dashboard layout and any page that
+// also needs the session (billing, settings) share one /api/me call per
+// request instead of making one each.
+async function fetchSession(): Promise<SessionUser | null> {
   const jar = await cookies();
   const cookie = jar.toString();
   try {
