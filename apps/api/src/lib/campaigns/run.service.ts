@@ -225,7 +225,11 @@ export async function ingestBusinesses(
       const externalId = typeof rawInput?.externalId === "string" ? rawInput.externalId : null;
       const message = error instanceof Error ? error.message : "Unknown error";
       failedBusinesses.push({ name, externalId, error: message });
-      console.error(`Campaign run ${executionId}: failed to ingest business "${name}" (${externalId ?? "no externalId"}):`, error);
+      // The error's type and code only: a database error's message carries
+      // the row it was writing (phone numbers, emails), which has no place
+      // in the server log.
+      const code = typeof (error as { code?: unknown })?.code === "string" ? ` ${(error as { code: string }).code}` : "";
+      console.error(`Campaign run ${executionId}: failed to ingest business ${externalId ?? "(no externalId)"}: ${error instanceof Error ? error.name : "Error"}${code}`);
     }
   }
 

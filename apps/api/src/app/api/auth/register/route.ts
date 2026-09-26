@@ -41,7 +41,7 @@ export async function handleRegister(db: PrismaClient, request: NextRequest): Pr
   await claimTrialDevice(db, user.id, body.fingerprintId);
 
   if (body.orderId) await claimOrder(db, body.orderId, user.id);
-  await claimPaidOrdersForUser(db, user.id, user.email);
+  await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: false });
 
   const session = await createSession(db, user.id);
   const response = jsonOk({ id: user.id, email: user.email }, 201);

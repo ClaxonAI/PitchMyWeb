@@ -141,6 +141,12 @@ describe("dummy payment gateway", () => {
     expect(isDummyPaymentGateway({ PAYMENT_GATEWAY: "razorpay" })).toBe(false);
   });
 
+  it("refuses to run in production, where it would give credits away", () => {
+    expect(() => isDummyPaymentGateway({ APP_ENV: "production" })).toThrow(/not configured/);
+    expect(() => isDummyPaymentGateway({ APP_ENV: "production", PAYMENT_GATEWAY: "dummy" })).toThrow(/not configured/);
+    expect(isDummyPaymentGateway({ APP_ENV: "production", PAYMENT_GATEWAY: "razorpay" })).toBe(false);
+  });
+
   it("creates a PAID order that can be claimed in one step", async () => {
     const { db, orders, users, wallets } = createFakeDb();
     const created = await createDummyPaidOrder(db, { planId: "direct", market: "india" });

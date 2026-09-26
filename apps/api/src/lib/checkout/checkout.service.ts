@@ -4,7 +4,7 @@ import type { RazorpayClient } from "./razorpay-client";
 import { computeOrderAmount, computeOrderAmountWithDiscount, creditsForPlan } from "./plan-pricing";
 import { verifyRazorpaySignature } from "./razorpay-signature";
 import { grantCredits } from "./wallet.service";
-import { NotFoundError, ValidationError, PaymentVerificationError } from "../errors";
+import { NotFoundError, PaymentConfigurationError, PaymentVerificationError, ValidationError } from "../errors";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -43,10 +43,21 @@ export type CreatedOrder = {
 
 type Env = Record<string, string | undefined>;
 
-/** Dummy checkout until Razorpay is switched on with PAYMENT_GATEWAY=razorpay. */
+/**
+ * Dummy checkout until Razorpay is switched on with PAYMENT_GATEWAY=razorpay.
+ *
+ * Never in production: a dummy order is PAID without any payment and grants
+ * credits, so a production server with the setting missing or mistyped would
+ * be giving credits away. There it throws instead, which the checkout route
+ * turns into a 503 ("payments are not configured").
+ */
 export function isDummyPaymentGateway(env: Env = process.env): boolean {
   const raw = (env.PAYMENT_GATEWAY ?? "dummy").trim().toLowerCase();
-  return raw !== "razorpay";
+  if (raw === "razorpay") return false;
+  if (env.APP_ENV?.trim().toLowerCase() === "production") {
+    throw new PaymentConfigurationError("Payments are not configured on this server (PAYMENT_GATEWAY must be razorpay in production).");
+  }
+  return true;
 }
 
 /**
@@ -181,11 +192,22 @@ export async function claimOrder(db: Db, orderId: string, userId: string): Promi
   await grantCredits(db, { userId, amount: order.credits, type: "PURCHASE", orderId: order.id, referenceId: `purchase:${order.id}` });
 }
 
-export async function claimPaidOrdersForUser(db: Db, userId: string, email: string): Promise<void> {
-  await db.order.updateMany({
-    where: { userId: null, payerEmail: email.trim().toLowerCase(), status: "PAID" },
-    data: { userId },
-  });
+/**
+ * Attaches unclaimed PAID orders paid with this email, then (re)grants every
+ * PAID order the user owns.
+ *
+ * The email match only runs when the provider has verified the address
+ * (Google, Clerk). An email-and-password account's address was never
+ * checked, so matching on it would let anyone register with someone else's
+ * email and collect the credits they paid for.
+ */
+export async function claimPaidOrdersForUser(db: Db, userId: string, email: string, options: { emailVerified: boolean }): Promise<void> {
+  if (options.emailVerified) {
+    await db.order.updateMany({
+      where: { userId: null, payerEmail: email.trim().toLowerCase(), status: "PAID" },
+      data: { userId },
+    });
+  }
   // Every PAID order this user now owns — both orders claimed just above and
   // any claimed by an earlier call — not only the newest. grantCredits is
   // idempotent per order id, so re-granting an already-credited order here

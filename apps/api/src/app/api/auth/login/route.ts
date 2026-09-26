@@ -43,7 +43,7 @@ export async function handleLogin(db: PrismaClient, request: NextRequest): Promi
   }
 
   if (body.orderId) await claimOrder(db, body.orderId, user.id);
-  await claimPaidOrdersForUser(db, user.id, user.email);
+  await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: false });
   await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await claimTrialDevice(db, user.id, body.fingerprintId);
 
