@@ -1,16 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 import type { AnalyticsSummary } from "@/lib/api-client";
-import { api } from "@/lib/api-client";
 
+// The charts library stays out of the first load: the numbers arrive with the
+// page (fetched on the server, see dashboard/page.tsx) and only the chart
+// code is fetched in the browser.
 const AnalyticsOverview = dynamic(() => import("./AnalyticsOverview").then((module) => module.AnalyticsOverview), {
   ssr: false,
   loading: () => <AnalyticsOverviewLoading />,
 });
 
-function AnalyticsOverviewLoading() {
+export function AnalyticsOverviewLoading() {
   return (
     <div className="flex animate-pulse flex-col gap-6" aria-busy="true" aria-label="Loading analytics">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -24,27 +25,7 @@ function AnalyticsOverviewLoading() {
   );
 }
 
-export function AnalyticsOverviewLoader() {
-  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void api
-      .get<AnalyticsSummary>("/api/analytics")
-      .then((summary) => {
-        if (active) setAnalytics(summary);
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  if (failed) return <p className="text-sm text-dash-muted-foreground">Analytics are unavailable right now — try refreshing in a moment.</p>;
-  if (!analytics) return <AnalyticsOverviewLoading />;
+export function AnalyticsOverviewLoader({ analytics }: { analytics: AnalyticsSummary | null }) {
+  if (!analytics) return <p className="text-sm text-dash-muted-foreground">Analytics are unavailable right now — try refreshing in a moment.</p>;
   return <AnalyticsOverview analytics={analytics} />;
 }

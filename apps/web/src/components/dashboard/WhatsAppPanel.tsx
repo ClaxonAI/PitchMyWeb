@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Container } from "@/components/ui/Container";
 import { whatsappApi, type WhatsAppAccount, type WhatsAppMessage } from "@/lib/api-client";
 import { ConnectedCard } from "./ConnectedCard";
@@ -10,6 +10,7 @@ import { MessagesTable } from "./MessagesTable";
 import { TestMessageForm } from "./TestMessageForm";
 import { useWhatsAppLink } from "./useWhatsAppLink";
 import { logoutReasonText } from "./whatsapp-session-text";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 // The dashboard page. Phase 2 supports one linked account per user, so the
 // panel works with the first account and creates one on demand rather than
@@ -36,12 +37,8 @@ export function WhatsAppPanel({ initialAccounts }: { initialAccounts: WhatsAppAc
   // Messages move through QUEUED -> SENDING -> SENT -> DELIVERED -> READ
   // without any client action, so the table polls. Receipts arrive on the
   // worker's own schedule, not in response to anything the browser did.
-  useEffect(() => {
-    if (!account || !connected) return;
-    void refreshMessages();
-    const timer = setInterval(() => void refreshMessages(), MESSAGE_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [account, connected, refreshMessages]);
+  // Paused while the tab is hidden, and refreshed the moment it is seen.
+  useVisibleInterval(() => void refreshMessages(), MESSAGE_REFRESH_MS, Boolean(account && connected), { immediate: true });
 
   return (
     <Container className="py-10 sm:py-14">

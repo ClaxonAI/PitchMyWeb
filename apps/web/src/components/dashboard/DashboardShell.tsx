@@ -4,12 +4,14 @@ import { ThemeProvider } from "./ThemeProvider";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { MobileTabBar } from "./MobileTabBar";
+import { RouteProgress } from "./RouteProgress";
 
 export function DashboardShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   return (
     <SessionProvider user={user}>
       <ThemeProvider>
         <div className="dashboard-shell flex">
+          <RouteProgress />
           <Sidebar />
           {/* min-w-0: a flex item will not shrink below its widest child
               otherwise, so a wide table widened the whole page on a phone
