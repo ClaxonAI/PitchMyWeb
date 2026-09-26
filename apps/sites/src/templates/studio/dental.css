@@ -1,0 +1,19 @@
+/* "Smile Studio" dental design — styled with Tailwind in DentalStudio.tsx.
+   Only what utilities cannot express lives here. */
+
+body:has(.smile-studio) { background: #f4f7f6; }
+.smile-studio { -webkit-tap-highlight-color: rgba(23, 160, 138, .15); }
+.smile-studio ::selection { background: #7fd8c9; color: #07242d; }
+.smile-studio :focus-visible { outline: 2px solid #17a08a; outline-offset: 3px; border-radius: 10px; }
+.smile-studio summary { list-style: none; }
+.smile-studio summary::-webkit-details-marker { display: none; }
+
+@keyframes smile-orbit { to { transform: rotate(360deg); } }
+@keyframes smile-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.smile-orbit { animation: smile-orbit 60s linear infinite; }
+.smile-art svg { animation: smile-float 7s ease-in-out infinite; }
+.smile-spark { animation: smile-float 5s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .smile-orbit, .smile-art svg, .smile-spark { animation: none; }
+}

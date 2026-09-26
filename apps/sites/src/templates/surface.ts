@@ -1,5 +1,5 @@
-import type { DentalContent, DentalTheme, PreviewTemplateCode } from "@pitchmyweb/templates";
-import { hasStudioDesign } from "@pitchmyweb/templates";
+import type { DentalContent, DentalTheme, PreviewDesign, PreviewTemplateCode } from "@pitchmyweb/templates";
+import { hasDesign } from "@pitchmyweb/templates";
 
 // The colour a phone's browser chrome takes for a preview (<meta
 // name="theme-color">): the page/header colour of whichever design is shown,
@@ -17,6 +17,10 @@ const CLASSIC: Record<DentalTheme, string> = {
   ink: "#eef2f6",
 };
 
+export type CardColors = { background: string; color: string; accent: string };
+type Standalone = Exclude<PreviewDesign, "classic">;
+type Surfaces<T> = { [K in PreviewTemplateCode]?: Partial<Record<Standalone, T>> };
+
 const STUDIO: Record<Exclude<PreviewTemplateCode, "dental-clinic">, string> = {
   clinic: "#f3f0e9",
   restaurant: "#f2eddf",
@@ -27,19 +31,35 @@ const STUDIO: Record<Exclude<PreviewTemplateCode, "dental-clinic">, string> = {
   coaching: "#e3e9df",
 };
 
-function studioTemplate(content: DentalContent): Exclude<PreviewTemplateCode, "dental-clinic"> | null {
-  return content.design === "studio" && content.template !== "dental-clinic" && hasStudioDesign(content.template) ? content.template : null;
+// Designs beyond the studio set: page colour and link-preview card, per template.
+const EXTRA_THEME: Surfaces<string> = {
+  "dental-clinic": { studio: "#f4f7f6", editorial: "#f3efe6", atelier: "#0f1a1d" },
+};
+const EXTRA_CARD: Surfaces<CardColors> = {
+  "dental-clinic": {
+    studio: { background: "#0c3b4a", color: "#f4f7f6", accent: "#7fd8c9" },
+    editorial: { background: "#1f2a2e", color: "#f3efe6", accent: "#c8553d" },
+    atelier: { background: "#0f1a1d", color: "#ece6da", accent: "#c9a96e" },
+  },
+};
+
+/** The standalone design on screen, or null for the classic layout. */
+function standalone(content: DentalContent): Standalone | null {
+  const design = content.design;
+  return design && design !== "classic" && hasDesign(content.template, design) ? design : null;
 }
 
 export function previewThemeColor(content: DentalContent): string {
-  const studio = studioTemplate(content);
-  return studio ? STUDIO[studio] : CLASSIC[content.theme];
+  const design = standalone(content);
+  if (!design) return CLASSIC[content.theme];
+  const extra = EXTRA_THEME[content.template]?.[design];
+  if (extra) return extra;
+  return content.template !== "dental-clinic" && design === "studio" ? STUDIO[content.template] : CLASSIC[content.theme];
 }
 
 // Link-preview card colours (the og:image): each design's deepest brand
 // colour behind light text, with its accent for the small details.
 
-export type CardColors = { background: string; color: string; accent: string };
 
 const CLASSIC_CARD: Record<DentalTheme, CardColors> = {
   teal: { background: "#0a3f3c", color: "#fffdf8", accent: "#e39266" },
@@ -64,6 +84,9 @@ const STUDIO_CARD: Record<Exclude<PreviewTemplateCode, "dental-clinic">, CardCol
 };
 
 export function previewCardColors(content: DentalContent): CardColors {
-  const studio = studioTemplate(content);
-  return studio ? STUDIO_CARD[studio] : CLASSIC_CARD[content.theme];
+  const design = standalone(content);
+  if (!design) return CLASSIC_CARD[content.theme];
+  const extra = EXTRA_CARD[content.template]?.[design];
+  if (extra) return extra;
+  return content.template !== "dental-clinic" && design === "studio" ? STUDIO_CARD[content.template] : CLASSIC_CARD[content.theme];
 }

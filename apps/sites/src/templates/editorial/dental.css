@@ -1,0 +1,24 @@
+/* "The Journal" dental design — styled with Tailwind in DentalEditorial.tsx.
+   Only what utilities cannot express lives here. */
+
+body:has(.dent-journal) { background: #f3efe6; }
+.dent-journal { -webkit-tap-highlight-color: rgba(180, 69, 47, .15); font-variant-numeric: oldstyle-nums; font-variant-ligatures: no-common-ligatures no-discretionary-ligatures no-historical-ligatures; }
+/* Fraunces' "wonky" alternates read as typos in a business name; keep the regular letterforms. */
+.dent-journal [class*="--font-fraunces"] { font-variation-settings: "WONK" 0, "SOFT" 30; }
+.dent-journal ::selection { background: #1f2a2e; color: #f3efe6; }
+.dent-journal :focus-visible { outline: 2px solid #b4452f; outline-offset: 3px; }
+
+/* The drop cap on the introduction. */
+.dent-dropcap > span:first-child {
+  float: left;
+  margin: .08em .12em 0 0;
+  font-size: 4.6em;
+  font-weight: 300;
+  line-height: .78;
+}
+
+/* Fine paper grain behind the whole page, drawn, not an image. */
+.dent-journal {
+  background-image: radial-gradient(rgba(31, 42, 46, .035) 1px, transparent 1px);
+  background-size: 3px 3px;
+}

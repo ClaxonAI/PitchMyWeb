@@ -2,10 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import {
   getPreviewChrome,
+  hasDesign,
   isPreviewTemplate,
   PREVIEW_DESIGNS,
   PREVIEW_TEMPLATE_CODES,
   type PreviewDesign,
+  type PreviewTemplateCode,
 } from "@pitchmyweb/templates";
 import { PreviewSite } from "@/templates/PreviewSite";
 import { previewThemeColor } from "@/templates/surface";
@@ -16,10 +18,11 @@ type PageProps = {
   searchParams: Promise<{ embed?: string; design?: string }>;
 };
 
-// Demos are deterministic: the classic layout unless ?design=studio asks for
-// the alternate one (the dental clinic only has the classic layout).
-function demoDesign(value: string | undefined): PreviewDesign {
-  return PREVIEW_DESIGNS.find((design) => design === value) ?? "classic";
+// Demos are deterministic: the classic layout unless ?design= names another
+// one this template has.
+function demoDesign(template: PreviewTemplateCode, value: string | undefined): PreviewDesign {
+  const design = PREVIEW_DESIGNS.find((candidate) => candidate === value);
+  return design && hasDesign(template, design) ? design : "classic";
 }
 
 export function generateStaticParams() {
@@ -41,7 +44,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export async function generateViewport({ params, searchParams }: PageProps): Promise<Viewport> {
   const template = (await params).template;
   if (!isPreviewTemplate(template)) return {};
-  return { themeColor: previewThemeColor(buildDemoContent(template, demoDesign((await searchParams).design))) };
+  return { themeColor: previewThemeColor(buildDemoContent(template, demoDesign(template, (await searchParams).design))) };
 }
 
 export default async function DemoTemplatePage({ params, searchParams }: PageProps) {
@@ -49,7 +52,7 @@ export default async function DemoTemplatePage({ params, searchParams }: PagePro
   if (!isPreviewTemplate(template)) notFound();
 
   const query = await searchParams;
-  const content = buildDemoContent(template, demoDesign(query.design));
+  const content = buildDemoContent(template, demoDesign(template, query.design));
 
   return (
     <div className={query.embed === "1" ? "demo-embed" : undefined}>

@@ -2,13 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   buildPreviewContent,
-  hasStudioDesign,
-  PREVIEW_DESIGNS,
+  designsFor,
   PREVIEW_TEMPLATE_CODES,
   type DentalBusinessInput,
   type DentalContent,
   type DentalLeadInput,
-  type PreviewTemplateCode,
 } from "@pitchmyweb/templates";
 import { PreviewSite } from "./PreviewSite";
 import { previewCardColors, previewThemeColor } from "./surface";
@@ -51,14 +49,18 @@ const FIXTURES: Record<string, { business: DentalBusinessInput; lead: DentalLead
   },
 };
 
-const STUDIO_ROOT: Record<Exclude<PreviewTemplateCode, "dental-clinic">, string> = {
-  clinic: "clinic-studio",
-  restaurant: "table-cloth",
-  salon: "salon",
-  gym: "training",
-  interiors: "interiors-studio",
-  event: "scene",
-  coaching: "academy-shell",
+// The root class of each standalone design, so a test can tell which one rendered.
+const DESIGN_ROOT: Record<string, string> = {
+  "dental-clinic/studio": "smile-studio",
+  "dental-clinic/editorial": "dent-journal",
+  "dental-clinic/atelier": "dent-atelier",
+  "clinic/studio": "clinic-studio",
+  "restaurant/studio": "table-cloth",
+  "salon/studio": "salon",
+  "gym/studio": "training",
+  "interiors/studio": "interiors-studio",
+  "event/studio": "scene",
+  "coaching/studio": "academy-shell",
 };
 
 const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -68,7 +70,7 @@ function render(content: DentalContent) {
 }
 
 const cases = PREVIEW_TEMPLATE_CODES.flatMap((template) =>
-  PREVIEW_DESIGNS.filter((design) => design === "classic" || hasStudioDesign(template)).flatMap((design) =>
+  designsFor(template).flatMap((design) =>
     Object.entries(FIXTURES).map(([fixture, { business, lead }]) => ({
       name: `${template} / ${design} / ${fixture}`,
       template,
@@ -84,8 +86,8 @@ describe("PreviewSite", () => {
     const html = render(content);
 
     // The requested design is the one on screen.
-    if (design === "studio") expect(html).toContain(`class="${STUDIO_ROOT[template as keyof typeof STUDIO_ROOT]}`);
-    else expect(html).toContain(`data-theme="${content.theme}"`);
+    if (design === "classic") expect(html).toContain(`data-theme="${content.theme}"`);
+    else expect(html).toContain(`class="${DESIGN_ROOT[`${template}/${design}`]}`);
 
     // The recorder tours [data-section] in order and refuses a page without them.
     const sections = [...html.matchAll(/data-section="([^"]+)"/g)].map((match) => match[1]);
@@ -122,9 +124,9 @@ describe("PreviewSite", () => {
     } else {
       expect(html).not.toContain("wa.me");
       expect(html).not.toContain("tel:");
-      if (design === "studio") expect(html).toContain(`Booking details for ${escapeHtml(content.businessName)} will appear here.`);
+      if (design !== "classic") expect(html).toContain(`Booking details for ${escapeHtml(content.businessName)} will appear here.`);
     }
-    if (content.mapsQuery && design === "studio") expect(html).toContain("maps.google.com/maps?q=");
+    if (content.mapsQuery && design !== "classic") expect(html).toContain("maps.google.com/maps?q=");
     if (fixture === "sparse") expect(content.servicesAreGeneric).toBe(true);
   });
 
