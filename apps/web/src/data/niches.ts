@@ -25,7 +25,7 @@ export const NICHE_CARDS: readonly NicheCard[] = [
   { slug: "coaching-centres", label: "Coaching centres", category: "Coaching Centre", template: "coaching" },
 ];
 
-/** Which of the two designs each template's sample site is shown in (matches public/samples). */
+/** Which design each template's card screenshot shows (matches public/samples). */
 export const SAMPLE_DESIGN: Record<string, "classic" | "studio"> = {
   "dental-clinic": "classic",
   clinic: "classic",
@@ -36,6 +36,14 @@ export const SAMPLE_DESIGN: Record<string, "classic" | "studio"> = {
   event: "studio",
   coaching: "classic",
 };
+
+/** Every template has these four site designs; a campaign hands them out in turn. */
+export const SITE_DESIGNS = [
+  { key: "classic", label: "Classic" },
+  { key: "studio", label: "Studio" },
+  { key: "editorial", label: "Editorial" },
+  { key: "atelier", label: "Atelier" },
+] as const;
 
 /** Templates being built next, shown so customers know what is on the way. */
 export const UPCOMING_NICHES = [

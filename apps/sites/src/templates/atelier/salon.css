@@ -1,0 +1,19 @@
+/* "Maison" salon design — styled with Tailwind in SalonAtelier.tsx. */
+
+body:has(.salon-maison) { background: #2b1a2e; }
+.salon-maison { -webkit-tap-highlight-color: rgba(224, 174, 152, .2); }
+.salon-maison ::selection { background: #e0ae98; color: #2b1a2e; }
+.salon-maison :focus-visible { outline: 1px solid #e0ae98; outline-offset: 4px; border-radius: 999px; }
+.salon-maison summary { list-style: none; }
+.salon-maison summary::-webkit-details-marker { display: none; }
+
+/* The oval mirror: a rose-gold rim around a slowly shifting pearl glass. */
+.maison-mirror { background: linear-gradient(145deg, #f3cdb9, #b77a63 45%, #f0c7b3 70%, #8e5a48); box-shadow: 0 40px 90px -40px rgba(224, 174, 152, .6); }
+.maison-glass {
+  background: radial-gradient(ellipse at 35% 25%, rgba(255, 255, 255, .35), transparent 45%),
+    linear-gradient(160deg, #6b4a6f 0%, #3c2640 45%, #7d5460 75%, #c69582 100%);
+  background-size: 100% 100%, 200% 200%;
+  animation: maison-glass 14s ease-in-out infinite alternate;
+}
+@keyframes maison-glass { from { background-position: 0 0, 0% 0%; } to { background-position: 0 0, 100% 100%; } }
+@media (prefers-reduced-motion: reduce) { .maison-glass { animation: none; } }

@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Check, ExternalLink, MapPin, Sofa, Sparkles } from "lucide-react";
+import { Check, MapPin, Sofa, Sparkles } from "lucide-react";
 import { ApiError, nichesApi, type NicheAvailability } from "@/lib/api-client";
-import { NICHE_CARDS, SAMPLE_DESIGN, UPCOMING_NICHES } from "@/data/niches";
+import { NICHE_CARDS, SAMPLE_DESIGN, SITE_DESIGNS, UPCOMING_NICHES } from "@/data/niches";
 import { sampleDemoUrl } from "@/data/sampleSites";
 import { cn } from "@/lib/utils";
 import type { SampleSite } from "@/types";
@@ -17,15 +17,16 @@ import type { SampleSite } from "@/types";
 
 const POPULAR_CITIES = ["Chennai", "Bengaluru", "Mumbai", "Hyderabad", "Delhi", "Pune", "Coimbatore", "Kochi"];
 
-/** Screenshot of each template's sample site (public/samples). Interiors has none yet. */
+/** Screenshot of each template's sample site (public/samples). */
 const PREVIEW: Record<string, string | undefined> = {
   "dental-clinic": "/samples/dental-clinic-classic.webp",
-  clinic: "/samples/dental-clinic-classic.webp",
+  clinic: "/samples/clinic-classic.webp",
   restaurant: "/samples/restaurant-studio.webp",
   salon: "/samples/salon-classic.webp",
   gym: "/samples/gym-studio.webp",
   event: "/samples/event-studio.webp",
   coaching: "/samples/coaching-classic.webp",
+  interiors: "/samples/interiors-classic.webp",
 };
 
 type Result = { configured: boolean; niches: NicheAvailability[] };
@@ -165,7 +166,7 @@ export function NicheCards({
                     {counting ? (
                       <span className="inline-block h-3 w-20 animate-pulse rounded bg-dash-muted align-middle" aria-label="Counting" />
                     ) : niche.available === null ? (
-                      "Sample site ready"
+                      "4 site designs ready"
                     ) : niche.available === 0 && !niche.more ? (
                       "None free nearby"
                     ) : (
@@ -180,16 +181,26 @@ export function NicheCards({
                   </span>
                 </span>
               </button>
-              <a
-                href={sampleDemoUrl({ template: niche.template as SampleSite["template"], design })}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-8 items-center gap-1 px-3 pb-2 text-[11.5px] font-medium text-dash-primary hover:underline"
-              >
-                View sample site
-                <ExternalLink className="h-3 w-3" aria-hidden />
-                <span className="sr-only">for {niche.label} (opens in a new tab)</span>
-              </a>
+              <div className="flex items-center gap-1.5 px-3 pb-2.5 text-[11.5px]" role="group" aria-label={`${niche.label}: four sample site designs`}>
+                {SITE_DESIGNS.map((option, index) => (
+                  <a
+                    key={option.key}
+                    href={sampleDemoUrl({ template: niche.template as SampleSite["template"], design: option.key })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`${option.label} design`}
+                    className={cn(
+                      "grid size-7 place-items-center rounded-full border font-medium transition hover:border-dash-primary hover:text-dash-primary",
+                      option.key === design ? "border-dash-primary/60 text-dash-primary" : "border-dash-border text-dash-foreground",
+                    )}
+                  >
+                    {index + 1}
+                    <span className="sr-only">
+                      {option.label} sample site for {niche.label} (opens in a new tab)
+                    </span>
+                  </a>
+                ))}
+              </div>
             </li>
           );
         })}

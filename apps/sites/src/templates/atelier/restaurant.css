@@ -1,0 +1,14 @@
+/* "Supper Club" restaurant design — styled with Tailwind in RestaurantAtelier.tsx. */
+
+body:has(.supper-club) { background: #141110; }
+.supper-club { -webkit-tap-highlight-color: rgba(229, 138, 78, .2); }
+.supper-club ::selection { background: #e58a4e; color: #141110; }
+.supper-club :focus-visible { outline: 1px solid #e58a4e; outline-offset: 4px; }
+.supper-club summary { list-style: none; }
+.supper-club summary::-webkit-details-marker { display: none; }
+
+/* Candlelight: glows that breathe very slowly. */
+@keyframes supper-glow { 0%, 100% { opacity: .75; transform: scale(1); } 45% { opacity: 1; transform: scale(1.05); } 60% { opacity: .85; } }
+.supper-glow { animation: supper-glow 7s ease-in-out infinite; }
+.supper-seal { box-shadow: inset 0 0 0 6px #141110, inset 0 0 0 7px rgba(229, 138, 78, .35); }
+@media (prefers-reduced-motion: reduce) { .supper-glow { animation: none; } }

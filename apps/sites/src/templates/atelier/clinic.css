@@ -1,0 +1,13 @@
+/* "Sanctuary" clinic design — styled with Tailwind in ClinicAtelier.tsx. */
+
+body:has(.clinic-sanctum) { background: #efe9df; }
+.clinic-sanctum { -webkit-tap-highlight-color: rgba(165, 98, 63, .15); }
+.clinic-sanctum ::selection { background: #33443a; color: #f6f1e8; }
+.clinic-sanctum :focus-visible { outline: 2px solid #a5623f; outline-offset: 3px; border-radius: 12px; }
+.clinic-sanctum summary { list-style: none; }
+.clinic-sanctum summary::-webkit-details-marker { display: none; }
+
+/* The sun in the arch rises a little and breathes. */
+@keyframes sanctum-sun { 0%, 100% { transform: translate(-50%, 0); opacity: .85; } 50% { transform: translate(-50%, -6px); opacity: 1; } }
+.sanctum-sun { animation: sanctum-sun 8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .sanctum-sun { animation: none; } }

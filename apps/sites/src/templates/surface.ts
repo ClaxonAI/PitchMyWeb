@@ -34,12 +34,47 @@ const STUDIO: Record<Exclude<PreviewTemplateCode, "dental-clinic">, string> = {
 // Designs beyond the studio set: page colour and link-preview card, per template.
 const EXTRA_THEME: Surfaces<string> = {
   "dental-clinic": { studio: "#f4f7f6", editorial: "#f3efe6", atelier: "#0f1a1d" },
+  clinic: { editorial: "#fbfbf9", atelier: "#efe9df" },
+  restaurant: { editorial: "#f7f1e3", atelier: "#141110" },
+  salon: { editorial: "#f6e3dc", atelier: "#2b1a2e" },
+  gym: { editorial: "#efeeea", atelier: "#000000" },
+  interiors: { editorial: "#e9e4dc", atelier: "#26291f" },
+  event: { editorial: "#fbf7f0", atelier: "#0d1330" },
+  coaching: { editorial: "#fdfcf7", atelier: "#14213d" },
 };
 const EXTRA_CARD: Surfaces<CardColors> = {
   "dental-clinic": {
     studio: { background: "#0c3b4a", color: "#f4f7f6", accent: "#7fd8c9" },
     editorial: { background: "#1f2a2e", color: "#f3efe6", accent: "#c8553d" },
     atelier: { background: "#0f1a1d", color: "#ece6da", accent: "#c9a96e" },
+  },
+  clinic: {
+    editorial: { background: "#0b0b0c", color: "#fbfbf9", accent: "#5b7cff" },
+    atelier: { background: "#33443a", color: "#f6f1e8", accent: "#d69a78" },
+  },
+  restaurant: {
+    editorial: { background: "#7a2020", color: "#f7f1e3", accent: "#f1c98d" },
+    atelier: { background: "#141110", color: "#f1e6d6", accent: "#e58a4e" },
+  },
+  salon: {
+    editorial: { background: "#121012", color: "#f6e3dc", accent: "#d0342c" },
+    atelier: { background: "#2b1a2e", color: "#f5ece6", accent: "#e0ae98" },
+  },
+  gym: {
+    editorial: { background: "#111111", color: "#efeeea", accent: "#e0301e" },
+    atelier: { background: "#000000", color: "#ffffff", accent: "#bdbdbd" },
+  },
+  interiors: {
+    editorial: { background: "#23211e", color: "#e9e4dc", accent: "#d9784f" },
+    atelier: { background: "#26291f", color: "#efe9dd", accent: "#d0b37a" },
+  },
+  event: {
+    editorial: { background: "#3b2f2c", color: "#fbf7f0", accent: "#d9b56e" },
+    atelier: { background: "#0d1330", color: "#e9e6f5", accent: "#e3c07a" },
+  },
+  coaching: {
+    editorial: { background: "#1d2b4f", color: "#fdfcf7", accent: "#fff176" },
+    atelier: { background: "#14213d", color: "#f4efe3", accent: "#c9a85e" },
   },
 };
 

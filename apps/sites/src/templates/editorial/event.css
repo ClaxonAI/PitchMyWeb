@@ -1,0 +1,30 @@
+/* "The Invitation" event design — styled with Tailwind in EventEditorial.tsx. */
+
+body:has(.event-invite) { background: #ecd9d0; }
+.event-invite { -webkit-tap-highlight-color: rgba(168, 131, 63, .18); }
+.event-invite ::selection { background: #a8833f; color: #fbf7f0; }
+.event-invite :focus-visible { outline: 2px solid #a8833f; outline-offset: 3px; border-radius: 6px; }
+.event-invite summary { list-style: none; }
+.event-invite summary::-webkit-details-marker { display: none; }
+
+/* Card stock with a gold hairline inset and a deckled shadow. */
+.invite-card {
+  background: #fbf7f0;
+  box-shadow: 0 1px 0 rgba(59, 47, 44, .05), 0 30px 60px -40px rgba(59, 47, 44, .6), inset 0 0 0 10px #fbf7f0, inset 0 0 0 11px rgba(168, 131, 63, .45);
+}
+
+/* Gold foil: a metallic gradient in the letters that slowly catches the light. */
+.invite-foil {
+  background: linear-gradient(100deg, #8a6528 0%, #d7b56c 28%, #f6e2a8 40%, #b58d45 55%, #8a6528 80%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: invite-foil 7s ease-in-out infinite alternate;
+  padding-bottom: .08em;
+}
+@keyframes invite-foil { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+
+/* The wax seal. */
+.invite-seal { background: radial-gradient(circle at 35% 30%, #c0534a, #8e2f2a 60%, #6d211d); box-shadow: 0 8px 18px -6px rgba(109, 33, 29, .7), inset 0 0 0 4px rgba(255, 255, 255, .08); }
+@media (prefers-reduced-motion: reduce) { .invite-foil { animation: none; } }

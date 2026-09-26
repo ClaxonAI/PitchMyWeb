@@ -52,7 +52,7 @@ export type SampleSite = {
   theme: { bg: string; fg: string; accent: string; muted: string };
   layout: "split" | "centered" | "editorial";
   /** Which apps/sites layout the demo and its preview image use. */
-  design: "classic" | "studio";
+  design: "classic" | "studio" | "editorial" | "atelier";
 };
 
 export type Testimonial = {

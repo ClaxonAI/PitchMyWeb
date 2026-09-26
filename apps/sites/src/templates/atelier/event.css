@@ -1,0 +1,36 @@
+/* "Gala" event design — styled with Tailwind in EventAtelier.tsx. */
+
+body:has(.event-gala) { background: #0d1330; }
+.event-gala { -webkit-tap-highlight-color: rgba(227, 192, 122, .2); }
+.event-gala ::selection { background: #e3c07a; color: #0d1330; }
+.event-gala :focus-visible { outline: 1px solid #e3c07a; outline-offset: 4px; border-radius: 999px; }
+.event-gala summary { list-style: none; }
+.event-gala summary::-webkit-details-marker { display: none; }
+
+.gala-sky { background: radial-gradient(ellipse at 50% -10%, #1f2a66 0%, #0d1330 60%); }
+
+/* A star field: scattered dots in two layers that twinkle out of step. */
+.gala-stars {
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 28% 62%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 44% 32%, #f4dea4, transparent),
+    radial-gradient(1px 1px at 63% 12%, #fff, transparent),
+    radial-gradient(2px 2px at 78% 44%, #f4dea4, transparent),
+    radial-gradient(1px 1px at 88% 78%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 8% 84%, #fff, transparent),
+    radial-gradient(1px 1px at 52% 88%, #fff, transparent),
+    radial-gradient(1px 1px at 36% 6%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 94% 22%, #fff, transparent);
+  background-size: 420px 320px;
+  animation: gala-twinkle 5s ease-in-out infinite;
+}
+.gala-stars-slow { background-size: 610px 450px; background-position: 120px 60px; animation-duration: 8s; animation-delay: 1.5s; opacity: .7; }
+@keyframes gala-twinkle { 0%, 100% { opacity: .9; } 50% { opacity: .35; } }
+
+/* Admission ticket with a perforated, torn stub. */
+.gala-ticket { background: linear-gradient(135deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02)); border: 1px solid rgba(227, 192, 122, .3); }
+.gala-stub { border-left: 2px dashed rgba(227, 192, 122, .45); background: rgba(227, 192, 122, .08); }
+
+.gala-medal { background: radial-gradient(circle at 35% 30%, #fbecc0, #d9ae5c 55%, #a97b2f); box-shadow: 0 0 0 6px rgba(227, 192, 122, .2), 0 20px 40px -18px rgba(227, 192, 122, .8); }
+@media (prefers-reduced-motion: reduce) { .gala-stars { animation: none; } }

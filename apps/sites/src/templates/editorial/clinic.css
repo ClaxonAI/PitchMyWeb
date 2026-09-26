@@ -1,0 +1,15 @@
+/* "The Report" clinic design — styled with Tailwind in ClinicEditorial.tsx. */
+
+body:has(.clinic-report) { background: #fbfbf9; }
+.clinic-report { -webkit-tap-highlight-color: rgba(31, 75, 216, .15); }
+.clinic-report ::selection { background: #1f4bd8; color: #ffffff; }
+.clinic-report :focus-visible { outline: 2px solid #1f4bd8; outline-offset: 3px; }
+.clinic-report summary { list-style: none; }
+.clinic-report summary::-webkit-details-marker { display: none; }
+
+/* The heartbeat draws itself once, then rests. */
+.clinic-pulse path { stroke-dasharray: 1500; stroke-dashoffset: 1500; animation: clinic-pulse 3.2s cubic-bezier(.6, 0, .2, 1) .3s forwards; }
+@keyframes clinic-pulse { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .clinic-pulse path { animation: none; stroke-dashoffset: 0; } }
+/* A recording or an embed must show the finished line. */
+.demo-embed .clinic-pulse path { animation: none; stroke-dashoffset: 0; }

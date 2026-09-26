@@ -1,0 +1,28 @@
+/* "Members' Club" gym design — styled with Tailwind in GymAtelier.tsx. */
+
+body:has(.gym-club) { background: #000000; }
+.gym-club { -webkit-tap-highlight-color: rgba(255, 255, 255, .15); }
+.gym-club ::selection { background: #ffffff; color: #000000; }
+.gym-club :focus-visible { outline: 1px solid #ffffff; outline-offset: 4px; }
+.gym-club summary { list-style: none; }
+.gym-club summary::-webkit-details-marker { display: none; }
+
+/* Rings expand from the centre and fade: a slow breath. */
+@keyframes club-ring { from { transform: scale(.35); opacity: .9; } to { transform: scale(1); opacity: 0; } }
+.club-ring { animation: club-ring 4.4s cubic-bezier(.2, .6, .3, 1) infinite; }
+@keyframes club-dot { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.club-dot { animation: club-dot 2.2s ease-in-out infinite; }
+/* At rest (reduced motion, or an embed): four still rings, largest faintest. */
+@media (prefers-reduced-motion: reduce) {
+  .club-ring { animation: none; }
+  .club-ring:nth-child(1) { transform: scale(.55); opacity: .5; }
+  .club-ring:nth-child(2) { transform: scale(.7); opacity: .38; }
+  .club-ring:nth-child(3) { transform: scale(.85); opacity: .26; }
+  .club-ring:nth-child(4) { transform: scale(1); opacity: .15; }
+  .club-dot { animation: none; }
+}
+.demo-embed .club-ring { animation: none; }
+.demo-embed .club-ring:nth-child(1) { transform: scale(.55); opacity: .5; }
+.demo-embed .club-ring:nth-child(2) { transform: scale(.7); opacity: .38; }
+.demo-embed .club-ring:nth-child(3) { transform: scale(.85); opacity: .26; }
+.demo-embed .club-ring:nth-child(4) { transform: scale(1); opacity: .15; }

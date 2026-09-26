@@ -948,10 +948,11 @@ describe("preview design selection", () => {
   const business = { name: "Spice House", category: "Restaurant", city: "Chennai" };
 
   it("picks a design at random for verticals that have several, and stores it in the content", () => {
+    const designs = designsFor("restaurant");
     expect(buildPreviewContent(business, {}, { random: () => 0 }).design).toBe("classic");
-    expect(buildPreviewContent(business, {}, { random: () => 0.99 }).design).toBe("studio");
-    const seen = new Set(Array.from({ length: 200 }, () => buildPreviewContent(business).design));
-    expect(seen).toEqual(new Set(["classic", "studio"]));
+    expect(buildPreviewContent(business, {}, { random: () => 0.99 }).design).toBe(designs[designs.length - 1]);
+    const seen = new Set(Array.from({ length: 400 }, () => buildPreviewContent(business).design));
+    expect(seen).toEqual(new Set(designs));
   });
 
   it("honours an explicit design, and gives the dental clinic all four of its designs", () => {
