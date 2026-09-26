@@ -85,7 +85,7 @@ export const SITES_PUBLIC_URL =
 
 export function sampleDemoUrl(site: Pick<SampleSite, "template" | "design">, embed = false) {
   const query = new URLSearchParams();
-  if (site.design === "studio") query.set("design", "studio");
+  if (site.design !== "classic") query.set("design", site.design);
   if (embed) query.set("embed", "1");
   const search = query.toString();
   return `${SITES_PUBLIC_URL}/demo/${site.template}${search ? `?${search}` : ""}`;

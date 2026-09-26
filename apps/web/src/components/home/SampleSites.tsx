@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 // page, which on a phone was most of its weight. The card opens the live demo.
 
 function SampleCard({ site, index }: { site: SampleSite; index: number }) {
-  const design = site.design === "studio" ? "Studio design" : "Classic design";
+  const design = `${site.design.charAt(0).toUpperCase()}${site.design.slice(1)} design`;
   return (
     <a
       href={sampleDemoUrl(site)}
