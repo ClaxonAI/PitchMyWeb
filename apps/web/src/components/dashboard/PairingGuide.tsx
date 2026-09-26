@@ -45,7 +45,7 @@ export function PairingGuide({ code, className }: { code?: string | null; classN
         className="relative h-[300px] w-[152px] shrink-0 rounded-[26px] border-[5px] border-[#1c1c28] bg-[#1c1c28] shadow-[0_18px_40px_-18px_rgba(20,20,40,0.45)]"
       >
         <div className="absolute top-1.5 left-1/2 z-10 h-1.5 w-12 -translate-x-1/2 rounded-full bg-[#1c1c28]" />
-        <div className="h-full w-full overflow-hidden rounded-[21px] bg-white text-[#111b21]">
+        <div className="h-full w-full overflow-hidden rounded-[21px] bg-[#ffffff] text-[#111b21]">
           <Screen step={step} code={shown} />
         </div>
       </div>
@@ -109,7 +109,7 @@ function Screen({ step, code }: { step: number; code: string }) {
               <span className="h-1.5 flex-1 rounded bg-[#e9edef]" />
             </div>
           ))}
-          <div className="absolute top-1 right-2 w-[98px] rounded-md bg-white py-1 text-[8.5px] shadow-lg ring-1 ring-black/5">
+          <div className="absolute top-1 right-2 w-[98px] rounded-md bg-[#ffffff] py-1 text-[8.5px] shadow-lg ring-1 ring-black/5">
             <p className="px-2 py-1 text-[#54656f]">New group</p>
             <p className="bg-[#fff8d6] px-2 py-1 font-semibold">Linked devices</p>
             <p className="px-2 py-1 text-[#54656f]">Settings</p>
