@@ -275,6 +275,22 @@ page. Three things reliably go wrong:
 
 ## Deploying
 
+**Automatically, from GitHub.** `.github/workflows/deploy.yml` deploys main
+each time CI passes on it (and on demand: Actions → Deploy → Run workflow).
+It runs `infrastructure/aws/deploy.sh`, the same steps as `deploy.ps1`
+below, and skips a commit when main has already moved past it. It signs in
+to AWS through GitHub's OIDC token, so no AWS key is stored in GitHub. One-time setup:
+
+1. Run `powershell -ExecutionPolicy Bypass -File infrastructure\aws\setup-github-deploy.ps1`
+   (AWS CLI configured). It creates the `pitchmyweb-github-deploy` role, which
+   only this repository's main branch can assume and which can only upload
+   `deploy/*` to the bucket and run commands on the app server. It prints the role ARN.
+2. Set that ARN as the repository variable `AWS_DEPLOY_ROLE_ARN`
+   (Settings → Secrets and variables → Actions → Variables). Until it is set
+   the workflow skips.
+
+Re-run step 1 if the app server is replaced: the permission names the instance.
+
 **From Windows, one command** (PowerShell 5.1 or 7, in the repository folder,
 with the AWS CLI configured):
 

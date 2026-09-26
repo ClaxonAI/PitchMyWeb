@@ -1,0 +1,60 @@
+name: Deploy
+
+# Deploys main to production once CI has passed on it; also runnable by hand
+# from the Actions tab ("Run workflow").
+#
+# AWS access is keyless: GitHub's OIDC token is exchanged for a short-lived
+# session on the pitchmyweb-github-deploy role, which only this repository's
+# main branch may assume and which can only upload the deploy package and run
+# the deploy on the app server. infrastructure/aws/setup-github-deploy.ps1
+# creates the role; its ARN goes in the repository variable
+# AWS_DEPLOY_ROLE_ARN. Until that is set, this workflow skips.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deploy at a time; a newer one waits for the running one rather than
+# cutting it off mid-build.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.AWS_DEPLOY_ROLE_ARN != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Skip if main has moved on
+        id: current
+        run: |
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" != "$(git rev-parse HEAD)" ]; then
+            echo "main is now at $latest; the deploy for that commit will run instead."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.current.outputs.skip != 'true'
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Deploy
+        if: steps.current.outputs.skip != 'true'
+        run: bash infrastructure/aws/deploy.sh
