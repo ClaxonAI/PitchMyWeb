@@ -49,8 +49,6 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$S3Key = "s3://$Bucket/deploy/current.tar.gz"
-$AppDir = "/home/ubuntu/PitchMyWeb"
 
 function Say([string]$Message) { Write-Host ("[{0}] {1}" -f (Get-Date -Format "HH:mm:ss"), $Message) }
 function Fail([string]$Message) { Write-Host ""; Write-Host "FAILED: $Message" -ForegroundColor Red; exit 1 }
@@ -178,6 +176,10 @@ if (-not $SkipDeploy) {
   & git -C $RepoRoot fetch origin main
   if ($LASTEXITCODE -ne 0) { Fail "git fetch origin main" }
   $commit = (& git -C $RepoRoot log -1 --format="%h %s" origin/main | Out-String).Trim()
+  $sha = (& git -C $RepoRoot rev-parse --short=12 origin/main | Out-String).Trim()
+  # Under its commit, so a later upload never replaces the package a running
+  # deploy is reading.
+  $S3Key = "s3://$Bucket/deploy/$sha.tar.gz"
   Say "deploying: $commit"
   $tarball = Join-Path $env:TEMP "pmw-deploy.tar.gz"
   & git -C $RepoRoot archive --format=tar.gz -o $tarball origin/main
@@ -186,7 +188,16 @@ if (-not $SkipDeploy) {
   [void](Invoke-Aws s3 cp $tarball $S3Key --only-show-errors)
 
   # 3. Run it once and follow it.
-  $deployId = Send-Shell $instance @("cd $AppDir && sudo SOURCE_S3=$S3Key bash infrastructure/aws/bootstrap.sh") ($TimeoutMinutes * 60) "pitchmyweb deploy"
+  # bootstrap.sh runs from the new package, not the copy already on the
+  # server: it unpacks the new source over itself and bash keeps reading the
+  # old file, so the old script would otherwise run this deploy.
+  $deployId = Send-Shell $instance @(
+    "set -e",
+    "rm -rf /tmp/pmw-boot && mkdir -p /tmp/pmw-boot",
+    "aws s3 cp '$S3Key' /tmp/pmw-boot/src.tar.gz --region '$Region' --only-show-errors",
+    "tar xzf /tmp/pmw-boot/src.tar.gz -C /tmp/pmw-boot infrastructure/aws/bootstrap.sh",
+    "SOURCE_S3='$S3Key' bash /tmp/pmw-boot/infrastructure/aws/bootstrap.sh"
+  ) ($TimeoutMinutes * 60) "pitchmyweb deploy $sha"
   Say "deploy started ($deployId); a full deploy takes about 10-15 minutes"
   $result = Wait-Command $instance $deployId $TimeoutMinutes "deploy"
   Write-Host ""

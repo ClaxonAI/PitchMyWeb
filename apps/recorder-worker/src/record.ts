@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser } from "playwright";
-import { probe } from "./transcode.js";
+import { videoSeconds } from "./transcode.js";
 
 // Records a scripted walkthrough of a preview page, as a portrait phone video
 // and as a laptop-screen video: every pitch sends both, so the owner sees the
@@ -119,6 +119,24 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const sectionCount = await page.locator("[data-section]").count();
     if (sectionCount === 0) throw new RecordingError("render_failed", "The preview rendered no sections");
+    // Chromium's screencast only captures a frame when the page repaints, and
+    // a still page repaints never: the hero hold is recorded only because some
+    // earlier frame is held on screen. On a busy machine that frame can be
+    // missed, and the video then starts at the first scroll with the hero shot
+    // gone. A 1px corner dot that changes imperceptibly every 100ms keeps
+    // frames coming for the whole recording (0 frames in a 2.5s hold without
+    // it, 25 with it).
+    await page.evaluate(() => {
+      const dot = document.createElement("div");
+      dot.setAttribute("aria-hidden", "true");
+      dot.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;pointer-events:none;z-index:2147483647;background:rgba(0,0,0,0.01)";
+      document.documentElement.appendChild(dot);
+      let on = false;
+      setInterval(() => {
+        on = !on;
+        dot.style.background = on ? "rgba(0,0,0,0.02)" : "rgba(0,0,0,0.01)";
+      }, 100);
+    });
     // Let above-the-fold reveals settle before the tour starts.
     await page.waitForTimeout(900);
     tourStartedAt = Date.now();
@@ -190,9 +208,7 @@ export async function recordTour(url: string, options: RecordOptions): Promise<R
     throw new RecordingError("render_failed", "Playwright produced no video");
   }
 
-  const webmSeconds = await probe(webmPath)
-    .then((info) => info.durationMs / 1000)
-    .catch(() => 0);
+  const webmSeconds = await videoSeconds(webmPath).catch(() => 0);
   return {
     webmPath,
     leadInSeconds: leadInSeconds({ contextStartedAt, tourStartedAt, closedAt, webmSeconds }),
@@ -214,7 +230,7 @@ const VIDEO_END_SLACK_SECONDS = 1;
  * machine, can lag them by seconds (3.3 s on a CI runner, which cut that much
  * of the hero shot). The end is observable: Playwright ends the video when
  * the context closes, or up to a second later if frames were still arriving
- * (sample sites loop animations). So the start is found from the end,
+ * (always, since the corner dot above keeps them coming). So the start is found from the end,
  * allowing that second, which errs towards keeping a moment of the settled
  * hero rather than cutting into the tour. The context's creation is always
  * before the first frame, so measuring from it bounds the trim from above,
