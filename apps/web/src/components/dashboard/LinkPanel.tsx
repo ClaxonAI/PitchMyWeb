@@ -157,7 +157,12 @@ export function LinkPanel({
               into WhatsApp on your phone, as shown below.
             </p>
 
-            {state.pairingCode && !codeExpired ? (
+            {requested && state.status === "RECONNECTING" ? (
+              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-whatsapp/30 bg-whatsapp/8 px-5 py-4 text-[13px] text-ink/80" role="status">
+                <RefreshCw size={18} strokeWidth={1.5} className="animate-spin" />
+                Code accepted. Finishing the link with WhatsApp…
+              </div>
+            ) : state.pairingCode && !codeExpired ? (
               <div className="mt-5 rounded-2xl border border-whatsapp/30 bg-whatsapp/8 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] tracking-wide text-ink/70 uppercase">Your code</p>
@@ -188,6 +193,10 @@ export function LinkPanel({
                 </div>
                 <p className="mt-2 text-[12px] leading-snug text-ink/70">
                   Sent for {fullNumber}. Type it in WhatsApp on that phone within the time shown.
+                </p>
+                <p className="mt-1.5 text-[12px] leading-snug text-ink/70" data-testid="pairing-help">
+                  If WhatsApp says <span className="font-semibold">Couldn’t link device</span>, check that {fullNumber} is the WhatsApp number
+                  on that phone, then get a new code. Still failing? Use the QR code instead.
                 </p>
                 <button
                   type="button"

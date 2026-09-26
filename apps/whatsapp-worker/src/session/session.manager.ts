@@ -229,7 +229,10 @@ export class SessionManager {
         // live entry with no socket behind it, and every later connect
         // returns "already connected" and does nothing, leaving the
         // account stuck at CONNECTING forever.
-        if (status === "ERROR") await this.releaseLock(accountId);
+        if (status === "ERROR") {
+          await this.releaseLock(accountId);
+          await this.clearPairingCode(accountId);
+        }
         await this.setStatus(accountId, status, detail);
       },
 
@@ -264,6 +267,7 @@ export class SessionManager {
       },
 
       onConnected: async ({ phoneNumber, displayName }) => {
+        await this.clearPairingCode(accountId);
         await this.setStatus(accountId, "CONNECTED", { phoneNumber, displayName });
         await this.publisher.publish({ type: "CONNECTED", accountId, phoneNumber, at: nowIso() });
       },
@@ -275,6 +279,7 @@ export class SessionManager {
         await this.authRepo.removeAll(accountId);
         await this.cancelQueuedMessages(accountId, "Account was unlinked");
         await this.releaseLock(accountId);
+        await this.clearPairingCode(accountId);
         await this.setStatus(accountId, "LOGGED_OUT");
         await this.publisher.publish({ type: "LOGGED_OUT", accountId, at: nowIso() });
         logger.info({ accountId, reason }, "account logged out");
@@ -306,6 +311,13 @@ export class SessionManager {
         await this.inbound.handleReceipt(providerMessageId, status);
       },
     };
+  }
+
+  /** A used or dead pairing code must never be served to the page again. */
+  private async clearPairingCode(accountId: string): Promise<void> {
+    await this.redis.del(whatsappPairingKey(accountId)).catch((error: unknown) => {
+      logger.warn({ accountId, err: sanitizeError(error) }, "could not clear the pairing code");
+    });
   }
 
   // -------------------------------------------------------------------
