@@ -459,6 +459,10 @@ function createFakeRunDb(campaignId: string) {
     },
     $executeRaw: async () => 0,
     $queryRaw: async () => [],
+    // Business exclusivity: no other user holds any of these businesses.
+    businessClaim: {
+      findMany: async () => [],
+    },
     lead: {
       findUnique: async ({ where }: { where: { campaignId_businessId: { campaignId: string; businessId: string } } }) =>
         leads.find((l) => l.campaignId === where.campaignId_businessId.campaignId && l.businessId === where.campaignId_businessId.businessId) ?? null,

@@ -55,6 +55,7 @@ export class SerperSource implements BusinessDiscoverySource {
 
       for (const place of places) {
         if (!place.title || !place.phoneNumber || place.website) continue; // Only website-less leads are worth pitching.
+        if (place.cid && query.excludeExternalIds?.has(place.cid)) continue; // Taken, or already this user's.
         if (query.minRating != null && (place.rating ?? 0) < query.minRating) continue;
         if (query.minReviews != null && (place.ratingCount ?? 0) < query.minReviews) continue;
 

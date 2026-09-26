@@ -42,6 +42,7 @@ const BLOCKED_REASON_TEXT: Record<NonNullable<CampaignLeadRow["blockedReason"]>,
   no_phone: "No WhatsApp number",
   already_selected: "Already selected",
   not_pitchable_status: "Already pitched",
+  taken: "Taken by another PitchMyWeb user",
 };
 
 /** "until 2 Oct" — short, since it sits under two icon buttons in a table cell. */

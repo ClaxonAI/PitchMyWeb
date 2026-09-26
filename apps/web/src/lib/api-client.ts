@@ -342,7 +342,7 @@ export type CampaignLeadRow = {
     videoExpired: boolean;
   } | null;
   selectable: boolean;
-  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
+  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | "taken" | null;
 };
 
 export const campaignsApi = {

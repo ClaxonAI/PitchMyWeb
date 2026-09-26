@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@pitchmyweb/db";
-import { ALLOWED, deny, type PolicyDecision } from "@pitchmyweb/contracts";
+import { ALLOWED, EXCLUSIVITY_WINDOW_DAYS, deny, type PolicyDecision } from "@pitchmyweb/contracts";
 
 // The API half of the outreach gate.
 //
@@ -62,6 +62,19 @@ export async function evaluate(db: PrismaClient, input: PolicyInput): Promise<Po
   });
   if (duplicate) {
     return deny("recent_duplicate");
+  }
+
+  // Business exclusivity, as a last line: whatever path led here, a number
+  // another user's account contacted inside the window is not messaged. It
+  // also covers the same business stored under two records, which the
+  // per-business claim cannot see.
+  const exclusiveSince = new Date(Date.now() - EXCLUSIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const elsewhere = await db.whatsAppMessage.findFirst({
+    where: { phoneNumber: input.phoneNumber, userId: { not: input.userId }, status: { in: [...CONTACTED_STATUSES] }, createdAt: { gte: exclusiveSince } },
+    select: { id: true },
+  });
+  if (elsewhere) {
+    return deny("claimed_elsewhere");
   }
 
   return ALLOWED;

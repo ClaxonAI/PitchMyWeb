@@ -42,6 +42,12 @@ export type DiscoveryQuery = {
   minRating: number | null;
   minReviews: number | null;
   leadLimit: number;
+  /**
+   * Provider ids to leave out: businesses another PitchMyWeb user holds, or
+   * this user already has. Skipped as they are found, so they use up neither
+   * the search budget nor an enrichment call.
+   */
+  excludeExternalIds?: ReadonlySet<string>;
   onProgress?: (event: { stage: "GEOCODING" } | { stage: "SEARCHING" } | { stage: "ENRICHING"; completed: number; total: number }) => Promise<void> | void;
 };
 

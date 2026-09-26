@@ -6,6 +6,7 @@ import { errorResponse, jsonOk } from "../../../../../../lib/api/response";
 import { requireJobSecret } from "../../../../../../lib/jobs/job-auth";
 import { NotFoundError, ConflictError } from "../../../../../../lib/errors";
 import { cuidSchema } from "../../../../../../lib/validation/common";
+import { excludedExternalIds } from "../../../../../../lib/leads/claims.service";
 
 type RouteParams = { params: Promise<{ executionId: string }> };
 
@@ -28,6 +29,11 @@ export async function handleGetDiscoveryJob(db: PrismaClient, request: NextReque
   }
 
   const { campaign } = execution;
+  // Businesses the worker should not even look at: held by another user
+  // (business exclusivity) or already given to this one.
+  const excluded = await Promise.all(
+    ["serper", "osm"].map((source) => excludedExternalIds(db, { userId: campaign.userId, source, location: campaign.location })),
+  );
   return jsonOk({
     executionId: execution.id,
     location: campaign.location,
@@ -36,6 +42,7 @@ export async function handleGetDiscoveryJob(db: PrismaClient, request: NextReque
     minRating: campaign.minRating,
     minReviews: campaign.minReviews,
     leadLimit: campaign.leadLimit,
+    excludeExternalIds: [...new Set(excluded.flat())],
   });
 }
 

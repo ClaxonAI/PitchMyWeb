@@ -1,5 +1,6 @@
 import type { Business, Campaign, Lead, LeadPipeline, PrismaClient } from "@pitchmyweb/db";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import { businessesTakenByOthers } from "../leads/claims.service";
 import { isPitchableBusiness } from "../leads/phone";
 import { emitEvent } from "../observability/events";
 import { startPipelines, type PipelineDeps } from "../pipeline/pipeline.service";
@@ -60,11 +61,14 @@ export type CampaignLeadRow = {
    * pipeline column — the single most confusing thing about a run where
    * discovery found businesses but auto-selection picked almost none.
    */
-  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | null;
+  blockedReason: "no_phone" | "already_selected" | "not_pitchable_status" | "taken" | null;
 };
 
-function blockedReasonFor(row: { pipeline: unknown; hasValidPhone: boolean; status: Lead["status"] }): CampaignLeadRow["blockedReason"] {
+function blockedReasonFor(row: { pipeline: unknown; hasValidPhone: boolean; status: Lead["status"]; taken: boolean }): CampaignLeadRow["blockedReason"] {
   if (row.pipeline) return "already_selected";
+  // Another user is pitching it, or has in the last 90 days (business
+  // exclusivity). Deliberately says nothing about who.
+  if (row.taken) return "taken";
   if (!row.hasValidPhone) return "no_phone";
   if (!(SELECTABLE_LEAD_STATUSES as readonly string[]).includes(row.status)) return "not_pitchable_status";
   return null;
@@ -88,7 +92,8 @@ function effectiveScore(lead: Lead & { business: Business }): { score: number; e
   return { score: total, estimated: true };
 }
 
-async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = new Date()): Promise<CampaignLeadRow[]> {
+async function loadCampaignLeadRows(db: PrismaClient, campaign: Pick<Campaign, "id" | "userId">, now = new Date()): Promise<CampaignLeadRow[]> {
+  const campaignId = campaign.id;
   const leads = await db.lead.findMany({
     where: { campaignId },
     include: {
@@ -121,10 +126,18 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = 
     };
   };
 
+  const taken = await businessesTakenByOthers(
+    db,
+    campaign.userId,
+    leads.filter((lead) => !lead.pipelines[0]).map((lead) => lead.businessId),
+    now,
+  );
+
   return leads.map((lead) => {
     const { score, estimated } = effectiveScore(lead);
     const pipeline = lead.pipelines[0] ?? null;
     const hasValidPhone = isPitchableBusiness(lead.business);
+    const isTaken = !pipeline && taken.has(lead.businessId);
     return {
       id: lead.id,
       status: lead.status,
@@ -158,8 +171,8 @@ async function loadCampaignLeadRows(db: PrismaClient, campaignId: string, now = 
             ...videoFor(pipeline.recordingId),
           }
         : null,
-      selectable: !pipeline && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
-      blockedReason: blockedReasonFor({ pipeline, hasValidPhone, status: lead.status }),
+      selectable: !pipeline && !isTaken && hasValidPhone && (SELECTABLE_LEAD_STATUSES as readonly string[]).includes(lead.status),
+      blockedReason: blockedReasonFor({ pipeline, hasValidPhone, status: lead.status, taken: isTaken }),
     };
   });
 }
@@ -173,7 +186,7 @@ export async function listCampaignLeads(
   query: CampaignLeadsQuery = {},
 ): Promise<{ items: CampaignLeadRow[]; total: number; selectedCount: number; targetCount: number }> {
   const campaign = await loadOwnedCampaign(db, campaignId, userId);
-  let rows = await loadCampaignLeadRows(db, campaign.id);
+  let rows = await loadCampaignLeadRows(db, campaign);
   const selectedCount = rows.filter((row) => row.pipeline).length;
 
   const search = query.search?.trim().toLowerCase();
@@ -267,7 +280,7 @@ export async function selectLeads(
   }
 
   const unique = [...new Set(leadIds)];
-  const rows = await loadCampaignLeadRows(db, campaign.id);
+  const rows = await loadCampaignLeadRows(db, campaign);
   const byId = new Map(rows.map((row) => [row.id, row]));
 
   const unknown = unique.filter((id) => !byId.has(id));
@@ -308,7 +321,7 @@ export async function autoSelectLeads(db: PrismaClient, campaignId: string, opti
 
   // loadCampaignLeadRows already orders by createdAt, which is discovery
   // order — the order the user saw the leads arrive in.
-  const rows = await loadCampaignLeadRows(db, campaign.id);
+  const rows = await loadCampaignLeadRows(db, campaign);
   const selectedCount = rows.filter((row) => row.pipeline).length;
   const slots = remainingSlots(campaign, selectedCount);
   const requestedCount = Math.min(options.count ?? slots, slots);

@@ -1,6 +1,7 @@
 import type { Campaign, CampaignExecution, CampaignStatus, Prisma, PrismaClient } from "@pitchmyweb/db";
 import { isCampaignTransitionAllowed, loadOwnedCampaign, prepareCampaignRun } from "./campaign.service";
 import { applyDiscoveryInsights, ingestBusinessAsLead } from "../leads/lead.service";
+import { businessesTakenByOthers } from "../leads/claims.service";
 import { onDiscoveryCompleted } from "./selection.service";
 import { ConflictError } from "../errors";
 import { DemoProvider, type CampaignSearchInput } from "../providers/demo-provider";
@@ -194,6 +195,12 @@ export async function ingestBusinesses(
       // recognisable once we have its id. Undo the lead rather than leave
       // the user looking at a business they were already sold.
       if (leadCreated && alreadySeen.has(business.id)) {
+        await db.lead.delete({ where: { id: lead.id } }).catch(() => undefined);
+        continue;
+      }
+      // Business exclusivity: a business another user is pitching, or has
+      // pitched in the last 90 days, is never shown to this one.
+      if (leadCreated && (await businessesTakenByOthers(db, campaign.userId, [business.id])).size > 0) {
         await db.lead.delete({ where: { id: lead.id } }).catch(() => undefined);
         continue;
       }

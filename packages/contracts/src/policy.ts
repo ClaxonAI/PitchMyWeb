@@ -20,7 +20,15 @@ export const POLICY_REASONS = [
   "recent_duplicate",
   /** An hourly/daily cap, or the minimum gap between sends. */
   "rate_limited",
+  /**
+   * Another PitchMyWeb user contacted this number inside the exclusivity
+   * window (business exclusivity: one user per business for 90 days).
+   */
+  "claimed_elsewhere",
 ] as const;
+
+/** Business exclusivity window, in days. Matches EXCLUSIVE_DAYS in apps/api's claims.service. */
+export const EXCLUSIVITY_WINDOW_DAYS = 90;
 
 export type PolicyReason = (typeof POLICY_REASONS)[number];
 
@@ -33,6 +41,7 @@ export const POLICY_REASON_MESSAGES: Record<PolicyReason, string> = {
   invalid_number: "This number is not reachable on WhatsApp.",
   recent_duplicate: "You already messaged this number recently. Give it some time before following up.",
   rate_limited: "Sending limit reached for now. This message will go out shortly.",
+  claimed_elsewhere: "Another PitchMyWeb user is already working with this business, so it was skipped.",
 };
 
 export function deny(reason: PolicyReason): PolicyDecision {

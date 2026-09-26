@@ -70,6 +70,7 @@ const REASONS: Record<string, string> = {
   no_valid_phone: "No number WhatsApp can reach",
   opted_out: "Asked not to be contacted",
   recent_duplicate: "Messaged recently",
+  claimed_elsewhere: "Taken by another user",
   whatsapp_not_connected: "Your WhatsApp was disconnected",
   not_delivered: "No delivery receipt",
   paused: "Stopped by an earlier pause",

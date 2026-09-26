@@ -34,7 +34,15 @@ describe("processDiscovery", () => {
     const outcome = await processDiscovery(deps, "exec-1");
 
     expect(outcome).toBe("completed");
-    expect(source.search).toHaveBeenCalledWith({ location: "Chennai", category: "Dental Clinic", radius: null, minRating: null, minReviews: null, leadLimit: 20 });
+    expect(source.search).toHaveBeenCalledWith({
+      location: "Chennai",
+      category: "Dental Clinic",
+      radius: null,
+      minRating: null,
+      minReviews: null,
+      leadLimit: 20,
+      excludeExternalIds: new Set(),
+    });
     expect(deps.reportResults).toHaveBeenCalledWith("exec-1", businesses);
     expect(deps.reportFailure).not.toHaveBeenCalled();
   });
