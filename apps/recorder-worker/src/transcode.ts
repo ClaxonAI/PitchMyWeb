@@ -92,6 +92,31 @@ export async function probe(file: string): Promise<{ durationMs: number; width: 
   };
 }
 
+/**
+ * Length of a video in seconds from its start. Uses the container's duration,
+ * or, when the file does not record one, the end of its last frame; 0 if
+ * neither can be read.
+ */
+export async function videoSeconds(file: string): Promise<number> {
+  const out = await run(ffprobeInstaller.path, [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_entries",
+    "format=duration,start_time:packet=pts_time,duration_time",
+    "-of",
+    "json",
+    file,
+  ]);
+  const parsed = JSON.parse(out) as { format?: { duration?: string; start_time?: string }; packets?: { pts_time?: string; duration_time?: string }[] };
+  const duration = Number(parsed.format?.duration);
+  if (Number.isFinite(duration) && duration > 0) return duration;
+  const start = Number(parsed.format?.start_time) || 0;
+  const end = Math.max(0, ...(parsed.packets ?? []).map((p) => Number(p.pts_time) + (Number(p.duration_time) || 0)).filter(Number.isFinite));
+  return Math.max(0, end - start);
+}
+
 export async function transcodeToMp4(
   webmPath: string,
   workDir: string,
