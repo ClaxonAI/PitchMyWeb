@@ -364,6 +364,20 @@ describe("SessionManager", () => {
       expect(await statusOf(fixture.accountId)).toBe("PAIRING_CODE_READY");
     });
 
+    it("drops the parked code once the phone links, or the attempt fails", async () => {
+      const linked = await setup("pair-clear-ok");
+      await linked.manager.requestPairingCode(linked.fixture.accountId, "919800000001");
+      await linked.provider.events!.onPairingCode("ABCD1234");
+      await linked.provider.events!.onConnected({ phoneNumber: "919800000001", displayName: "Test" });
+      expect(await redis.get(whatsappPairingKey(linked.fixture.accountId))).toBeNull();
+
+      const failed = await setup("pair-clear-err");
+      await failed.manager.requestPairingCode(failed.fixture.accountId, "919800000001");
+      await failed.provider.events!.onPairingCode("ABCD1234");
+      await failed.provider.events!.onStatus("ERROR", { error: "The code expired" });
+      expect(await redis.get(whatsappPairingKey(failed.fixture.accountId))).toBeNull();
+    });
+
     it("replaces an open QR attempt instead of asking on its socket", async () => {
       const { fixture, provider, manager } = await setup("pair-replace");
       await manager.connect(fixture.accountId);

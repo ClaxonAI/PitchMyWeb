@@ -5,7 +5,7 @@ import type { WaStatus } from "@pitchmyweb/contracts";
 import { baileysLogger, logger, sanitizeError } from "../logger.js";
 import { usePostgresAuthState } from "../session/auth-state.js";
 import type { AuthStateRepository } from "../session/auth-state.repository.js";
-import { classifyDisconnect } from "../session/disconnect-reason.js";
+import { classifyDisconnect, statusCodeOf } from "../session/disconnect-reason.js";
 import type { ConnectOptions, ConnectResult, NumberCheck, ProviderEvents, SendTextResult, SendVideoInput, WhatsAppProvider } from "./whatsapp.provider.js";
 
 // The only file in the monorepo that imports `baileys`.
@@ -35,6 +35,22 @@ function latestBaileysVersion(): ReturnType<typeof fetchLatestBaileysVersion> {
     throw error;
   });
   return latestVersionPromise;
+}
+
+/**
+ * The browser this client registers as. It only matters when a device is
+ * first linked; logins with saved credentials never send it.
+ *
+ * QR linking accepts any name, so the phone's "Linked devices" list shows
+ * "PitchMyWeb" and the user recognizes it when deciding whether to unlink.
+ * Linking by phone number does not: the browser name is turned into a
+ * platform id the phone checks, an unknown name ("PitchMyWeb") becomes
+ * OTHER_WEB_CLIENT, and the phone answers "Couldn't link device" after the
+ * code is typed. Code linking therefore registers as plain Chrome, the
+ * configuration Baileys' own phone-number example uses.
+ */
+export function browserFor(mode: "qr" | "pairing"): [string, string, string] {
+  return mode === "pairing" ? Browsers.ubuntu("Chrome") : Browsers.appropriate("PitchMyWeb");
 }
 
 export class BaileysProvider implements WhatsAppProvider {
@@ -70,10 +86,7 @@ export class BaileysProvider implements WhatsAppProvider {
       version,
       auth: state,
       logger: baileysLogger(accountId),
-      // Identifies the linked device in the WhatsApp "Linked devices"
-      // list. Being honest about what it is matters: the user should
-      // recognize it when deciding whether to unlink.
-      browser: Browsers.appropriate("PitchMyWeb"),
+      browser: browserFor(options.pairingPhone ? "pairing" : "qr"),
       // This is an outreach client, not a chat app. Pulling an entire
       // message history would be a large, slow privacy liability for data
       // the product never reads.
@@ -98,7 +111,10 @@ export class BaileysProvider implements WhatsAppProvider {
     const pairingPhone = options.pairingPhone;
     let pairingRequested = false;
 
-    socket.ev.on("creds.update", () => {
+    socket.ev.on("creds.update", (update) => {
+      if (pairingPhone && update.registered === true) {
+        logger.info({ accountId }, "pairing: the phone accepted the code");
+      }
       void saveCreds().catch((error) => {
         logger.error({ accountId, err: sanitizeError(error) }, "failed to persist WhatsApp credentials");
       });
@@ -106,7 +122,10 @@ export class BaileysProvider implements WhatsAppProvider {
 
     socket.ev.on("connection.update", (update) => {
       void (async () => {
-        const { connection, lastDisconnect, qr } = update;
+        const { connection, lastDisconnect, qr, isNewLogin } = update;
+        if (pairingPhone && isNewLogin) {
+          logger.info({ accountId }, "pairing: WhatsApp confirmed the new device");
+        }
 
         if (qr && pairingPhone) {
           // No QR is shown in pairing mode: the user is typing a code, and a
@@ -115,7 +134,9 @@ export class BaileysProvider implements WhatsAppProvider {
           if (pairingRequested || state.creds.registered) return;
           pairingRequested = true;
           try {
+            logger.info({ accountId }, "pairing: requesting a code");
             const code = await socket.requestPairingCode(pairingPhone);
+            logger.info({ accountId }, "pairing: code issued");
             live.status = "PAIRING_CODE_READY";
             await events.onPairingCode(code);
             await events.onStatus("PAIRING_CODE_READY");
@@ -166,6 +187,12 @@ export class BaileysProvider implements WhatsAppProvider {
           // come back in QR mode the user never asked for. Once the phone
           // has linked, WhatsApp closes the socket on purpose ("restart
           // required") and the normal reconnect below finishes the login.
+          if (pairingPhone) {
+            logger.info(
+              { accountId, statusCode: statusCodeOf(lastDisconnect?.error), registered: Boolean(state.creds.registered) },
+              "pairing: socket closed",
+            );
+          }
           if (pairingPhone && !state.creds.registered) {
             await events.onStatus("ERROR", { error: "The code expired before it was entered in WhatsApp. Get a new code." });
             return;

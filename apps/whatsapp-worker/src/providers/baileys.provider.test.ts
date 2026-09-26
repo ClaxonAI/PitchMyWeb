@@ -26,7 +26,7 @@ const socket = {
 vi.mock("baileys", async (importOriginal) => ({
   ...(await importOriginal<typeof import("baileys")>()),
   default: vi.fn(() => socket),
-  Browsers: { appropriate: () => ["PitchMyWeb", "Chrome", "1"] },
+  Browsers: { appropriate: (name: string) => ["Ubuntu", name, "6.1"], ubuntu: (name: string) => ["Ubuntu", name, "22.04.4"] },
   fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 1] }),
   jidNormalizedUser: (jid: string) => jid,
 }));
@@ -35,7 +35,9 @@ vi.mock("../session/auth-state.js", () => ({
   usePostgresAuthState: async () => ({ state: { creds, keys: {} }, saveCreds: async () => undefined, isFresh: true }),
 }));
 
-const { BaileysProvider } = await import("./baileys.provider.js");
+const { BaileysProvider, browserFor } = await import("./baileys.provider.js");
+const makeWASocket = (await import("baileys")).default as unknown as ReturnType<typeof vi.fn>;
+const realBaileys = await vi.importActual<typeof import("baileys")>("baileys");
 
 function recordingEvents() {
   const calls = {
@@ -68,6 +70,7 @@ beforeEach(() => {
   socket.requestPairingCode.mockClear();
   socket.requestPairingCode.mockImplementation(async () => "ABCD1234");
   socket.end.mockClear();
+  makeWASocket.mockClear();
   creds.registered = false;
 });
 
@@ -171,6 +174,27 @@ describe("BaileysProvider pairing mode", () => {
     await vi.advanceTimersByTimeAsync(150_000);
     expect(calls.status.map((s) => s.status)).not.toContain("ERROR");
     socket.user = undefined;
+  });
+});
+
+describe("browser identity", () => {
+  // The phone turns the browser name into a platform id when a device links
+  // by code. An unknown name made it answer "Couldn't link device".
+  it("links by phone number as Chrome, a platform the phone accepts", () => {
+    expect(realBaileys.getCompanionPlatformId(realBaileys.Browsers.ubuntu("Chrome"))).toBe("1");
+    expect(realBaileys.getCompanionPlatformId(realBaileys.Browsers.appropriate("PitchMyWeb"))).not.toBe("1");
+  });
+
+  it("uses Chrome for a pairing socket and keeps the PitchMyWeb name for QR", async () => {
+    expect(browserFor("pairing")).toEqual(["Ubuntu", "Chrome", "22.04.4"]);
+    expect(browserFor("qr")).toEqual(["Ubuntu", "PitchMyWeb", "6.1"]);
+
+    const provider = new BaileysProvider({} as never);
+    await provider.connect("acc-pair", recordingEvents().events, { pairingPhone: "919488329318" });
+    expect(makeWASocket.mock.calls.at(-1)?.[0]).toMatchObject({ browser: ["Ubuntu", "Chrome", "22.04.4"] });
+
+    await provider.connect("acc-qr", recordingEvents().events);
+    expect(makeWASocket.mock.calls.at(-1)?.[0]).toMatchObject({ browser: ["Ubuntu", "PitchMyWeb", "6.1"] });
   });
 });
 
