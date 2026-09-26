@@ -7,8 +7,8 @@ name: Deploy
 # session on the pitchmyweb-github-deploy role, which only this repository's
 # main branch may assume and which can only upload the deploy package and run
 # the deploy on the app server. infrastructure/aws/setup-github-deploy.ps1
-# creates the role; its ARN goes in the repository variable
-# AWS_DEPLOY_ROLE_ARN. Until that is set, this workflow skips.
+# creates the role. Its ARN is below; the repository variable
+# AWS_DEPLOY_ROLE_ARN overrides it (e.g. after moving to another account).
 
 on:
   workflow_run:
@@ -30,7 +30,6 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      vars.AWS_DEPLOY_ROLE_ARN != '' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-latest
@@ -52,7 +51,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         if: steps.current.outputs.skip != 'true'
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN || 'arn:aws:iam::491521241125:role/pitchmyweb-github-deploy' }}
           aws-region: ap-south-1
 
       - name: Deploy
