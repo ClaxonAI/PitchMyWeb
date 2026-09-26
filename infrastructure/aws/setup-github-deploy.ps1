@@ -24,6 +24,11 @@ param(
   [string]$Region = "ap-south-1",
   [string]$Bucket = "pitchmyweb-prod-recordings-claxonai",
   [string]$Repo = "ClaxonAI/PitchMyWeb",
+  # GitHub's numeric ids for the owner and the repository. Tokens from this
+  # repository name them in their subject (repo:Owner@id/Repo@id:...), so a
+  # repository deleted and recreated under the same name cannot use the role.
+  [string]$OwnerId = "319520783",
+  [string]$RepoId = "1371187260",
   [string]$RoleName = "pitchmyweb-github-deploy"
 )
 
@@ -88,12 +93,13 @@ $trust = @'
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:__REPO__:ref:refs/heads/main"
+        "token.actions.githubusercontent.com:sub": "repo:__OWNER__@__OWNERID__/__NAME__@__REPOID__:ref:refs/heads/main"
       }
     }
   }]
 }
-'@ -replace "__PROVIDER__", $provider -replace "__REPO__", $Repo
+'@ -replace "__PROVIDER__", $provider -replace "__OWNERID__", $OwnerId -replace "__REPOID__", $RepoId `
+  -replace "__OWNER__", $Repo.Split("/")[0] -replace "__NAME__", $Repo.Split("/")[1]
 $trustFile = Write-JsonFile $trust
 try {
   if (Test-Aws iam get-role --role-name $RoleName) {
