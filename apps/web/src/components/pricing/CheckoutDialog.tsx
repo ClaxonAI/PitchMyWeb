@@ -7,6 +7,7 @@ import type { Country, Market, Plan } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { ApiError, checkoutApi } from "@/lib/api-client";
 import { loadRazorpayCheckout } from "@/lib/checkout/razorpay-loader";
+import { useBackToClose } from "@/lib/use-back-to-close";
 
 export type CheckoutOrder = {
   plan: Plan;
@@ -40,6 +41,8 @@ function successUrl(orderId: string, claimed: boolean | undefined): string {
  */
 export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // The phone's Back button closes the order summary instead of leaving /pricing.
+  const dismiss = useBackToClose(order !== null, onClose);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -174,9 +177,9 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
           handingOff.current = false;
           return;
         }
-        onClose();
+        dismiss();
       }}
-      onClick={(e) => e.target === ref.current && onClose()}
+      onClick={(e) => e.target === ref.current && dismiss()}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-panel bg-white p-0 text-ink shadow-lift backdrop:bg-ink/40 backdrop:backdrop-blur-sm open:animate-pop"
     >
       {order && (
@@ -190,7 +193,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={dismiss}
               aria-label="Close"
               className="-mt-1 -mr-2 rounded-lg p-2 text-ink/60 hover:bg-ink/5 hover:text-ink"
             >

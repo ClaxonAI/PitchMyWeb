@@ -7,6 +7,8 @@ import { Container } from "@/components/ui/Container";
 import { ApiError, authApi } from "@/lib/api-client";
 import { ClerkProviderButtons } from "./ClerkProviderButtons";
 import { deviceFingerprint } from "@/lib/device-fingerprint";
+import { afterSignIn } from "@/lib/safe-next";
+import { clearSignInIntent, readSignInIntent, type SignInIntent } from "@/lib/sign-in-intent";
 
 // Shared by /login and /register. Email/password plus Google OAuth (proxied
 // through /api/auth/google → apps/api).
@@ -51,13 +53,16 @@ export function AuthForm({ mode }: { mode: Mode }) {
   // to ship with no form at all and a phone saw an empty page until the
   // JavaScript arrived. Neither value is needed for the first paint.
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [next, setNext] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setOrderId(params.get("orderId"));
+    const intent = readSignInIntent();
+    setOrderId(intent.orderId);
+    setNext(intent.next);
     const oauthError = params.get("error");
     // "session" belongs to the social buttons, which show their own message.
     if (oauthError && oauthError !== "session") setError(googleErrors[oauthError] ?? "Sign-in failed. Please try again.");
@@ -88,8 +93,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
       }
       // A full navigation: the dashboard reads the session on the server, and
       // this guarantees it sees the cookie the API just set (no cached RSC
-      // payload from before sign-in).
-      window.location.assign("/dashboard");
+      // payload from before sign-in). replace, not assign: Back from the page
+      // they land on must not return to this form.
+      clearSignInIntent();
+      window.location.replace(afterSignIn(next));
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -163,7 +170,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         <p className="mt-6 text-[13px] text-ink/60">
           {text.altText}{" "}
           <Link
-            href={orderId ? `${text.altHref}?orderId=${encodeURIComponent(orderId)}` : text.altHref}
+            href={withIntent(text.altHref, { next, orderId })}
             className="text-primary underline underline-offset-2"
           >
             {text.altLabel}
@@ -172,4 +179,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </div>
     </Container>
   );
+}
+
+/** The login <-> register link keeps where the visitor is going and the order they are claiming. */
+function withIntent(href: string, intent: SignInIntent): string {
+  const params = new URLSearchParams();
+  if (intent.next) params.set("next", intent.next);
+  if (intent.orderId) params.set("orderId", intent.orderId);
+  const query = params.toString();
+  return query ? `${href}?${query}` : href;
 }

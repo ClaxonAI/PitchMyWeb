@@ -4,13 +4,28 @@ import { NextResponse } from "next/server";
 import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../../lib/db/client";
 import { SESSION_COOKIE_NAME, createSession } from "../../../../../lib/auth/session";
-import { claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.service";
+import { claimOrder, claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice, DeviceAccountLimitError } from "../../../../../lib/auth/trial-device";
 
 // The browser's FingerprintJS visitor id, sent by apps/web's
 // exchangeClerkSession so Google/GitHub sign-up counts against the same
 // per-device account limit as email sign-up.
 const FINGERPRINT_HEADER = "x-device-fingerprint";
+
+/**
+ * The paid order this sign-in should claim, sent by apps/web after a checkout
+ * (the email form sends the same field to /api/auth/login). Optional; anything
+ * that is not a plausible order id is ignored rather than rejected.
+ */
+async function orderIdFromBody(request: NextRequest): Promise<string | null> {
+  try {
+    const body = (await request.json()) as { orderId?: unknown } | null;
+    const orderId = body?.orderId;
+    return typeof orderId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(orderId) ? orderId : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function handleClerkSession(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
   const secretKey = process.env.CLERK_SECRET_KEY?.trim();
@@ -55,6 +70,10 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
       ? await db.user.update({ where: { id: existing.id }, data: { lastLoginAt: new Date(), ...(existing.googleId ? {} : { googleId: verified.sub }) } })
       : await db.user.create({ data: { email, googleId: verified.sub, passwordHash: null, name: clerkUser.firstName ? `${clerkUser.firstName}${clerkUser.lastName ? ` ${clerkUser.lastName}` : ""}` : null, imageUrl: clerkUser.imageUrl } });
 
+    // The order just paid for, whatever email Razorpay recorded; then any
+    // other paid orders under this verified email.
+    const orderId = await orderIdFromBody(request);
+    if (orderId) await claimOrder(db, orderId, user.id);
     await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
     await claimTrialDevice(db, user.id, fingerprintId);
     const session = await createSession(db, user.id);

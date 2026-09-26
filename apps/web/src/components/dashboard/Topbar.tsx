@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/dashboard-ui/avatar";
 import { Button } from "@/components/dashboard-ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/dashboard-ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/dashboard-ui/sheet";
+import { useBackToClose } from "@/lib/use-back-to-close";
 import { SidebarNav } from "./Sidebar";
 import { useSession } from "./SessionProvider";
 import { Badge } from "@/components/dashboard-ui/badge";
@@ -25,6 +26,8 @@ export function Topbar() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The phone's Back button closes the drawer instead of leaving the page.
+  const dismissMenu = useBackToClose(mobileOpen, () => setMobileOpen(false));
   const [loggingOut, setLoggingOut] = useState(false);
   // next-themes only knows the real theme on the client (it reads
   // localStorage) — the server always renders as if no theme were chosen
@@ -53,7 +56,7 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-dash-border bg-dash-card px-4">
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+      <Sheet open={mobileOpen} onOpenChange={(next) => (next ? setMobileOpen(true) : dismissMenu())}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden">
             <Menu className="h-4 w-4" />

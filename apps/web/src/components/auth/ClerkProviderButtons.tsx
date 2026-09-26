@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
 import { exchangeClerkSession } from "@/lib/clerk-session";
+import { afterSignIn } from "@/lib/safe-next";
+import { clearSignInIntent, parkSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
 import { Github } from "lucide-react";
 
 type AuthMode = "sign-in" | "sign-up";
@@ -41,10 +43,13 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || pending) return;
     let active = true;
-    void exchangeClerkSession(getToken).then(async (ok) => {
+    const intent = readSignInIntent();
+    void exchangeClerkSession(getToken, intent.orderId).then(async (ok) => {
       if (!active) return;
       if (ok === true) {
-        window.location.assign("/dashboard");
+        // replace: Back from the destination must not come back to this form.
+        clearSignInIntent();
+        window.location.replace(afterSignIn(intent.next));
         return;
       }
       if (ok !== false) {
@@ -81,10 +86,12 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
       // Clerk already has a session (e.g. the app cookie expired): starting a
       // new sign-in would be rejected with "already signed in", so just
       // re-create the app session and continue.
+      const intent = readSignInIntent();
       if (isSignedIn) {
-        const exchanged = await exchangeClerkSession(getToken);
+        const exchanged = await exchangeClerkSession(getToken, intent.orderId);
         if (exchanged === true) {
-          window.location.assign("/dashboard");
+          clearSignInIntent();
+          window.location.replace(afterSignIn(intent.next));
           return;
         }
         if (exchanged !== false) {
@@ -101,7 +108,8 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
         throw new Error("Your previous session has expired. Please sign in again.");
       }
       const strategy = `oauth_${provider}` as const;
-      // Left pointing at /dashboard deliberately. Clerk only routes through
+      // Left pointing at the destination page deliberately (the dashboard
+      // unless the visitor was headed somewhere else). Clerk only routes through
       // redirectCallbackUrl when it needs more input, so landing on
       // /dashboard without the app's cookie is the ordinary case, not a
       // failure — the dashboard sends those visitors to /login, and the
@@ -111,13 +119,17 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
       // starting at all, and a relative one was no better in testing. The
       // recovery above is what makes the destination not matter.
       const redirectCallbackUrl = `${window.location.origin}/sso-callback`;
+      // Clerk drops our query string on the way back, so where the visitor was
+      // going and the order they are claiming ride along in sessionStorage.
+      parkSignInIntent(intent);
+      const redirectUrl = afterSignIn(intent.next);
       if (mode === "sign-in") {
         if (signInFetchStatus === "fetching") return;
-        const result = await signIn.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl });
+        const result = await signIn.sso({ strategy, redirectUrl, redirectCallbackUrl });
         if (result.error) throw new Error(result.error.message);
       } else {
         if (signUpFetchStatus === "fetching") return;
-        const result = await signUp.sso({ strategy, redirectUrl: "/dashboard", redirectCallbackUrl });
+        const result = await signUp.sso({ strategy, redirectUrl, redirectCallbackUrl });
         if (result.error) throw new Error(result.error.message);
       }
     } catch (caught) {
