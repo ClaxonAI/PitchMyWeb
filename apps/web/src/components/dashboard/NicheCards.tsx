@@ -2,14 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Check, MapPin, Sofa } from "lucide-react";
+import { Check, ExternalLink, MapPin, Sofa, Sparkles } from "lucide-react";
 import { ApiError, nichesApi, type NicheAvailability } from "@/lib/api-client";
+import { NICHE_CARDS, SAMPLE_DESIGN, UPCOMING_NICHES } from "@/data/niches";
+import { sampleDemoUrl } from "@/data/sampleSites";
 import { cn } from "@/lib/utils";
+import type { SampleSite } from "@/types";
 
 // "What can I pitch near <city>?" — one card per niche that has a ready
-// website template, with how many businesses without a website are nearby.
-// Tapping a card fills the campaign form. Counts come from a (cached) paid
-// search, so they load after the cards and never hold the form up.
+// website template, with its sample site and how many businesses without a
+// website are nearby. Tapping a card fills the campaign form. The cards are
+// known up front and render at once; counts come from a (cached) paid search
+// once a city is picked, and never hold the form up.
 
 const POPULAR_CITIES = ["Chennai", "Bengaluru", "Mumbai", "Hyderabad", "Delhi", "Pune", "Coimbatore", "Kochi"];
 
@@ -79,8 +83,11 @@ export function NicheCards({
     return () => clearTimeout(timer);
   }, [key, trimmed]);
 
-  const counting = trimmed.length >= 3 && loadedKey !== key;
-  const niches = result?.niches ?? null;
+  const hasCity = trimmed.length >= 3;
+  const counting = hasCity && loadedKey !== key;
+  // Counts only apply to the city they were fetched for.
+  const counts = new Map((loadedKey === key ? (result?.niches ?? []) : []).map((n) => [n.slug, n]));
+  const niches: NicheAvailability[] = NICHE_CARDS.map((card) => counts.get(card.slug) ?? { ...card, available: null, more: false });
 
   return (
     <section aria-labelledby="niches-heading" className="flex flex-col gap-3">
@@ -90,9 +97,9 @@ export function NicheCards({
             Niches with a website ready to pitch
           </h2>
           <p className="text-xs text-dash-muted-foreground">
-            {trimmed.length >= 3
+            {hasCity
               ? `Businesses without a website near ${trimmed} that nobody on PitchMyWeb is already pitching.`
-              : "Pick a city to see how many businesses without a website are near it."}
+              : "Tap a niche to use its ready-made site. Pick a city to see how many businesses near it have no website."}
           </p>
         </div>
       </div>
@@ -120,22 +127,23 @@ export function NicheCards({
       {error && <p className="text-xs text-dash-muted-foreground">{error}</p>}
 
       <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-        {(niches ?? Array.from({ length: 8 }, () => null)).map((niche, index) => {
-          if (!niche) {
-            return <li key={index} className="h-[132px] animate-pulse rounded-dash-lg border border-dash-border bg-dash-muted" aria-hidden />;
-          }
+        {niches.map((niche) => {
           const selected = selectedCategory?.trim().toLowerCase() === niche.category.toLowerCase();
           const preview = PREVIEW[niche.template];
+          const design = SAMPLE_DESIGN[niche.template] ?? "classic";
           return (
-            <li key={niche.slug}>
+            <li
+              key={niche.slug}
+              className={cn(
+                "group relative flex flex-col overflow-hidden rounded-dash-lg border bg-dash-card transition",
+                selected ? "border-dash-primary ring-2 ring-dash-primary/30" : "border-dash-border hover:border-dash-primary/50",
+              )}
+            >
               <button
                 type="button"
                 onClick={() => onPick(niche, trimmed)}
                 aria-pressed={selected}
-                className={cn(
-                  "group flex h-full w-full flex-col overflow-hidden rounded-dash-lg border bg-dash-card text-left transition active:scale-[0.98]",
-                  selected ? "border-dash-primary ring-2 ring-dash-primary/30" : "border-dash-border hover:border-dash-primary/50",
-                )}
+                className="flex flex-1 flex-col text-left transition active:scale-[0.98]"
               >
                 <span className="relative block h-[68px] w-full overflow-hidden bg-dash-muted">
                   {preview ? (
@@ -151,13 +159,13 @@ export function NicheCards({
                     </span>
                   )}
                 </span>
-                <span className="flex flex-1 flex-col gap-0.5 px-3 py-2">
+                <span className="flex flex-1 flex-col gap-0.5 px-3 pt-2">
                   <span className="text-[13px] font-semibold text-dash-foreground">{niche.label}</span>
                   <span className="text-[11.5px] leading-snug text-dash-muted-foreground">
                     {counting ? (
                       <span className="inline-block h-3 w-20 animate-pulse rounded bg-dash-muted align-middle" aria-label="Counting" />
                     ) : niche.available === null ? (
-                      "Site template ready"
+                      "Sample site ready"
                     ) : niche.available === 0 && !niche.more ? (
                       "None free nearby"
                     ) : (
@@ -172,9 +180,36 @@ export function NicheCards({
                   </span>
                 </span>
               </button>
+              <a
+                href={sampleDemoUrl({ template: niche.template as SampleSite["template"], design })}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-8 items-center gap-1 px-3 pb-2 text-[11.5px] font-medium text-dash-primary hover:underline"
+              >
+                View sample site
+                <ExternalLink className="h-3 w-3" aria-hidden />
+                <span className="sr-only">for {niche.label} (opens in a new tab)</span>
+              </a>
             </li>
           );
         })}
+        <li
+          className="col-span-full flex flex-col gap-2 rounded-dash-lg border border-dashed border-dash-border bg-dash-muted/40 px-3 py-3"
+          data-testid="upcoming-niches"
+        >
+          <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-dash-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-dash-primary" aria-hidden />
+            Coming soon
+          </span>
+          <ul className="flex flex-wrap gap-1">
+            {UPCOMING_NICHES.map((name) => (
+              <li key={name} className="rounded-full border border-dash-border bg-dash-card px-2 py-0.5 text-[11px] text-dash-muted-foreground">
+                {name}
+              </li>
+            ))}
+          </ul>
+          <span className="text-[11px] leading-snug text-dash-muted-foreground">New templates appear here as soon as they are ready.</span>
+        </li>
       </ul>
     </section>
   );

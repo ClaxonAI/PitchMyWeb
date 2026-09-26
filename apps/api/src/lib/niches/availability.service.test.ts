@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { NICHES, pickPreviewTemplate } from "@pitchmyweb/templates";
 import { prisma } from "../db/client";
@@ -64,5 +65,20 @@ describe("nicheAvailability", () => {
     });
     expect(flaky.niches.find((n) => n.slug === "gyms")!.available).toBeNull();
     expect(flaky.niches.find((n) => n.slug === "salons")!.available).toBe(0);
+  });
+});
+
+describe("the New campaign cards", () => {
+  // apps/web renders the cards from its own copy (apps/web/src/data/niches.ts)
+  // so they appear before any request; it must list the same niches.
+  it("list exactly the niches the API counts", () => {
+    const web = readFileSync(new URL("../../../../web/src/data/niches.ts", import.meta.url), "utf8");
+    const listed = [...web.matchAll(/slug: "([^"]+)", label: "([^"]+)", category: "([^"]+)", template: "([^"]+)"/g)].map((m) => ({
+      slug: m[1],
+      label: m[2],
+      category: m[3],
+      template: m[4],
+    }));
+    expect(listed).toEqual(NICHES.map(({ slug, label, category, template }) => ({ slug, label, category, template })));
   });
 });
