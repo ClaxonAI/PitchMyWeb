@@ -1,6 +1,14 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { buildDentalContent, buildPreviewContent, dentalContentSchema, pickPreviewTemplate, PREVIEW_TEMPLATE_CODES } from "@pitchmyweb/templates";
+import {
+  buildDentalContent,
+  buildPreviewContent,
+  dentalContentSchema,
+  designsFor,
+  pickPreviewTemplate,
+  PREVIEW_TEMPLATE_CODES,
+  rotatePreviewDesign,
+} from "@pitchmyweb/templates";
 import { prisma } from "../db/client";
 import { createTestUser, deleteTestUsers } from "../testing/db-test-helpers";
 import { createCampaign, markCampaignReady, updateCampaignMessage } from "../campaigns/campaign.service";
@@ -291,6 +299,15 @@ describe("selection", () => {
       const recording = await prisma.demoRecording.findUniqueOrThrow({ where: { id: pipeline.recordingId! } });
       expect(recording.status).toBe("QUEUED");
     }
+
+    // The two clinics in one campaign get different site designs.
+    const designs = await Promise.all(
+      pipelines.map(async (pipeline) => {
+        const project = await prisma.websiteProject.findUniqueOrThrow({ where: { id: pipeline.websiteProjectId! } });
+        return (project.contentJSON as { design?: string }).design;
+      }),
+    );
+    expect(new Set(designs).size).toBe(2);
   });
 
   it("manual selection enforces ownership, eligibility and the target count", async () => {
@@ -937,10 +954,33 @@ describe("preview design selection", () => {
     expect(seen).toEqual(new Set(["classic", "studio"]));
   });
 
-  it("honours an explicit design and keeps the dental clinic on the classic layout", () => {
+  it("honours an explicit design, and gives the dental clinic all four of its designs", () => {
     expect(buildPreviewContent(business, {}, { design: "classic", random: () => 0.99 }).design).toBe("classic");
-    const dental = buildPreviewContent({ name: "Smile", category: "Dentist" }, {}, { random: () => 0.99 });
-    expect(dental.design).toBe("classic");
+    const dental = { name: "Smile", category: "Dentist" };
+    expect(buildPreviewContent(dental, {}, { random: () => 0 }).design).toBe("classic");
+    expect(buildPreviewContent(dental, {}, { random: () => 0.99 }).design).toBe("atelier");
+    expect(buildPreviewContent(dental, {}, { design: "editorial" }).design).toBe("editorial");
+    expect(designsFor("dental-clinic")).toEqual(["classic", "studio", "editorial", "atelier"]);
+  });
+
+  it("rotates a campaign's businesses through the template's designs in turn", () => {
+    expect(Array.from({ length: 6 }, (_, i) => rotatePreviewDesign("dental-clinic", i))).toEqual([
+      "classic",
+      "studio",
+      "editorial",
+      "atelier",
+      "classic",
+      "studio",
+    ]);
+    for (const template of PREVIEW_TEMPLATE_CODES) {
+      const designs = designsFor(template);
+      // Neighbours never share a design when a template has more than one.
+      for (let i = 0; i < 8; i++) {
+        if (designs.length > 1) expect(rotatePreviewDesign(template, i)).not.toBe(rotatePreviewDesign(template, i + 1));
+        expect(designs).toContain(rotatePreviewDesign(template, i));
+      }
+    }
+    expect(rotatePreviewDesign("gym", -1)).toBe("classic");
   });
 
   it("still accepts previously stored content that has no design", () => {

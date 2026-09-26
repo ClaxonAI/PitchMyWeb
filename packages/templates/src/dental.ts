@@ -34,23 +34,56 @@ export function isPreviewTemplate(code: string): code is PreviewTemplateCode {
 }
 
 /**
- * Visual layouts a preview template can be rendered in. `classic` is the
- * original shared layout; `studio` is the set of standalone sachu45 designs
- * (one per vertical). Both render the same content contract. Content stored
- * before this field existed has no `design` and renders as `classic`.
+ * Visual layouts a preview template can be rendered in. Every template is
+ * meant to have all four, each a separate design drawn for that vertical:
+ * `classic` is the original shared layout; `studio`, `editorial` and
+ * `atelier` are standalone per-vertical designs. All render the same content
+ * contract. Content stored before this field existed has no `design` and
+ * renders as `classic`.
  */
-export const PREVIEW_DESIGNS = ["classic", "studio"] as const;
+export const PREVIEW_DESIGNS = ["classic", "studio", "editorial", "atelier"] as const;
 export type PreviewDesign = (typeof PREVIEW_DESIGNS)[number];
 
-/** Verticals that have a studio design. The dental clinic only has the classic one. */
-export function hasStudioDesign(template: PreviewTemplateCode): boolean {
-  return template !== "dental-clinic";
+/** The designs actually built for each template, in rotation order. */
+const DESIGNS_BUILT: Record<PreviewTemplateCode, readonly PreviewDesign[]> = {
+  "dental-clinic": ["classic", "studio", "editorial", "atelier"],
+  clinic: ["classic", "studio"],
+  restaurant: ["classic", "studio"],
+  salon: ["classic", "studio"],
+  gym: ["classic", "studio"],
+  interiors: ["classic", "studio"],
+  event: ["classic", "studio"],
+  coaching: ["classic", "studio"],
+};
+
+export function designsFor(template: PreviewTemplateCode): readonly PreviewDesign[] {
+  return DESIGNS_BUILT[template];
 }
 
-/** Picks a design at random for a template. `random` is injectable so tests can be deterministic. */
+export function hasDesign(template: PreviewTemplateCode, design: PreviewDesign): boolean {
+  return DESIGNS_BUILT[template].includes(design);
+}
+
+/** Whether the template has its standalone studio design. */
+export function hasStudioDesign(template: PreviewTemplateCode): boolean {
+  return hasDesign(template, "studio");
+}
+
+/** Picks one of the template's designs at random. `random` is injectable so tests can be deterministic. */
 export function pickPreviewDesign(template: PreviewTemplateCode, random: () => number = Math.random): PreviewDesign {
-  if (!hasStudioDesign(template)) return "classic";
-  return PREVIEW_DESIGNS[Math.min(PREVIEW_DESIGNS.length - 1, Math.floor(random() * PREVIEW_DESIGNS.length))]!;
+  const designs = designsFor(template);
+  return designs[Math.min(designs.length - 1, Math.floor(random() * designs.length))]!;
+}
+
+/**
+ * The design for the `index`-th business of a campaign (0-based): the
+ * template's designs in turn, so neighbouring businesses in one campaign never
+ * get the same site.
+ */
+export function rotatePreviewDesign(template: PreviewTemplateCode, index: number): PreviewDesign {
+  const designs = designsFor(template);
+  const slot = Number.isFinite(index) && index >= 0 ? Math.floor(index) % designs.length : 0;
+  return designs[slot]!;
 }
 
 const HTML_LIKE_PATTERN = /<\/?[a-zA-Z][^>]*>/;
@@ -244,7 +277,12 @@ function buildFaqs(name: string, phone: string | undefined, address: string | un
   return faqs.map(clampFaq);
 }
 
-export type BuildDentalContentOptions = { now?: Date };
+export type BuildDentalContentOptions = {
+  now?: Date;
+  /** Force a design; when omitted one is picked at random. */
+  design?: PreviewDesign;
+  random?: () => number;
+};
 
 /**
  * Fills the dental template from what discovery actually found. Every
@@ -282,7 +320,7 @@ export function buildDentalContent(
 
   const content: DentalContent = {
     template: DENTAL_TEMPLATE_CODE,
-    design: "classic",
+    design: options.design ?? pickPreviewDesign(DENTAL_TEMPLATE_CODE, options.random),
     theme: pickTheme(businessName),
     businessName,
     ...(area ? { area } : {}),

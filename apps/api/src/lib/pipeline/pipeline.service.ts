@@ -1,5 +1,5 @@
 import type { LeadPipeline, Pitch, PipelineStage, Prisma, PrismaClient } from "@pitchmyweb/db";
-import { buildPreviewContent } from "@pitchmyweb/templates";
+import { buildPreviewContent, pickPreviewTemplate, rotatePreviewDesign } from "@pitchmyweb/templates";
 import { ConflictError, DomainError, NotFoundError, ValidationError } from "../errors";
 import { confirmBusinessClaim, releaseBusinessClaim, reserveBusiness } from "../leads/claims.service";
 import { isLeadTransitionAllowed, transitionLeadStatus } from "../leads/lifecycle";
@@ -288,6 +288,22 @@ async function claimReplacementLead(
   return null;
 }
 
+/**
+ * This pipeline's position among the campaign's pitches (0-based, oldest
+ * first; pipelines created together are ordered by id). Sites rotate through
+ * a template's designs by it, so neighbouring businesses in one campaign never
+ * get the same site. Stable across retries: it depends only on rows that
+ * already exist.
+ */
+async function pipelineIndexInCampaign(db: PrismaClient, pipeline: { id: string; campaignId: string; createdAt: Date }): Promise<number> {
+  return db.leadPipeline.count({
+    where: {
+      campaignId: pipeline.campaignId,
+      OR: [{ createdAt: { lt: pipeline.createdAt } }, { createdAt: pipeline.createdAt, id: { lt: pipeline.id } }],
+    },
+  });
+}
+
 async function loadPipeline(db: PrismaClient, pipelineId: string) {
   const pipeline = await db.leadPipeline.findUnique({
     where: { id: pipelineId },
@@ -435,10 +451,12 @@ export async function buildAndPublish(db: PrismaClient, pipelineId: string, deps
     }
     await currentPitch(db, pipeline);
 
-    const content = buildPreviewContent(pipeline.lead.business, {
-      summary: pipeline.lead.summary,
-      services: pipeline.lead.services,
-    });
+    const template = pickPreviewTemplate(pipeline.lead.business.category);
+    const content = buildPreviewContent(
+      pipeline.lead.business,
+      { summary: pipeline.lead.summary, services: pipeline.lead.services },
+      { template, design: rotatePreviewDesign(template, await pipelineIndexInCampaign(db, pipeline)) },
+    );
     const project = await createWebsiteProject(db, pipeline.campaign.userId, { leadId: pipeline.leadId, contentJSON: content });
     await publishWebsiteProject(db, pipeline.campaign.userId, project.id, { expiresAt: previewExpiry() });
 
