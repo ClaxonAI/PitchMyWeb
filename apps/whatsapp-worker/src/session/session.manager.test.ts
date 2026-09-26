@@ -333,6 +333,41 @@ describe("SessionManager", () => {
       expect(provider.connectedAccountIds).not.toContain(fixture.accountId);
       expect(await statusOf(fixture.accountId)).toBe("DISCONNECTED");
     });
+
+    it("an account deleted mid-restore is skipped, and the rest still restore", async () => {
+      const { fixture, provider } = await setup("restore-survivor");
+      await db.whatsAppAccount.update({ where: { id: fixture.accountId }, data: { status: "CONNECTED" } });
+      // The scan also returns an abandoned attempt whose row is gone by the
+      // time restore gets to it (the user deleted it in between).
+      const scanning = new Proxy(db, {
+        get(target, key, receiver) {
+          if (key !== "whatsAppAccount") return Reflect.get(target, key, receiver);
+          return new Proxy(target.whatsAppAccount, {
+            get(accounts, method, r) {
+              if (method !== "findMany") return Reflect.get(accounts, method, r);
+              return async (...args: Parameters<typeof accounts.findMany>) => [
+                { id: "deleted-account", status: "CONNECTING", _count: { authKeys: 0 } },
+                ...(await accounts.findMany(...args)),
+              ];
+            },
+          });
+        },
+      });
+      const manager = new SessionManager(
+        scanning,
+        redis,
+        redis,
+        provider,
+        new PostgresAuthStateRepository(db, config.authEncryptionKey, 1),
+        new InboundHandler(db),
+        recordingQueue,
+        config,
+      );
+
+      await manager.restoreAll();
+
+      expect(provider.connectedAccountIds).toContain(fixture.accountId);
+    });
   });
 
   describe("pairing code", () => {

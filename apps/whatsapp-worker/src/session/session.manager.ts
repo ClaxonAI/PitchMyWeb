@@ -390,8 +390,11 @@ export class SessionManager {
     const accounts: Array<{ id: string }> = [];
     for (const candidate of candidates) {
       if (candidate.status === "CONNECTING" && candidate._count.authKeys === 0) {
-        await this.db.whatsAppAccount.update({
-          where: { id: candidate.id },
+        // updateMany, not update: an account deleted since the scan above
+        // must be skipped, not abort the restore of every other session.
+        // The status guard also leaves alone an attempt that moved on.
+        await this.db.whatsAppAccount.updateMany({
+          where: { id: candidate.id, status: "CONNECTING" },
           data: { status: "DISCONNECTED" },
         });
         logger.info({ accountId: candidate.id }, "cleared an abandoned link attempt");
