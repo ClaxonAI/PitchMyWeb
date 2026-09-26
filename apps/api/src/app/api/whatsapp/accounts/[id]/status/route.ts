@@ -6,7 +6,7 @@ import { requireCurrentUser } from "../../../../../../lib/auth/current-user";
 import { errorResponse, jsonOk } from "../../../../../../lib/api/response";
 import { getAccount } from "../../../../../../lib/whatsapp/account.service";
 import { cuidSchema } from "../../../../../../lib/validation/common";
-import { readCachedQr } from "../../../../../../lib/whatsapp/qr-cache";
+import { readCachedPairingCode, readCachedQr } from "../../../../../../lib/whatsapp/qr-cache";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -37,6 +37,10 @@ export async function handleGetWhatsAppStatus(db: PrismaClient, request: NextReq
     // status — leaving a QR screen with no QR on it. Serving the parked copy
     // makes the poll a real fallback rather than a partial one.
     qrDataUrl: account.status === "QR_READY" ? await readCachedQr(account.id) : null,
+    // Same for a pairing code ("link with phone number").
+    ...(account.status === "PAIRING_CODE_READY"
+      ? await readCachedPairingCode(account.id).then((pairing) => ({ pairingCode: pairing?.code ?? null, pairingCodeExpiresAt: pairing?.expiresAt ?? null }))
+      : { pairingCode: null, pairingCodeExpiresAt: null }),
   });
 }
 

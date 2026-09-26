@@ -146,6 +146,8 @@ export const whatsappApi = {
       lastError: string | null;
       logoutReason: WhatsAppLogoutReason | null;
       qrDataUrl: string | null;
+      pairingCode?: string | null;
+      pairingCodeExpiresAt?: string | null;
     }>(`/api/whatsapp/accounts/${id}/status`),
   previewMessage: (input: { accountId: string; phoneNumber: string; body?: string; leadId?: string }) =>
     api.post<MessagePreview>("/api/whatsapp/messages/preview", input),

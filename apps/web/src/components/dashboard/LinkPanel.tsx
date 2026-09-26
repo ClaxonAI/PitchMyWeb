@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Laptop, RefreshCw, Smartphone } from "lucide-react";
+import { Check, Copy, Laptop, RefreshCw, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { PairingGuide } from "./PairingGuide";
 import type { SessionState } from "./useWhatsAppSession";
 
 // The real linking panel. It keeps the visual language of the marketing
@@ -14,6 +15,29 @@ import type { SessionState } from "./useWhatsAppSession";
 // never touches a Baileys token.
 
 type Tab = "qr" | "code";
+
+const COUNTRY_CODES = [
+  { code: "+91", label: "India +91" },
+  { code: "+971", label: "UAE +971" },
+  { code: "+1", label: "US/Canada +1" },
+  { code: "+44", label: "UK +44" },
+  { code: "+65", label: "Singapore +65" },
+  { code: "+61", label: "Australia +61" },
+  { code: "+94", label: "Sri Lanka +94" },
+  { code: "+977", label: "Nepal +977" },
+] as const;
+
+/** Seconds left until `iso`, ticking once a second; null without a deadline. */
+function useSecondsLeft(iso: string | null): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!iso) return;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [iso]);
+  if (!iso) return null;
+  return Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000));
+}
 
 export function LinkPanel({
   state,
@@ -28,6 +52,15 @@ export function LinkPanel({
 }) {
   const [tab, setTab] = useState<Tab>("qr");
   const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState<string>("+91");
+  const [requested, setRequested] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const secondsLeft = useSecondsLeft(state.pairingCodeExpiresAt);
+  const codeExpired = secondsLeft === 0;
+  // Between "Get code" and the code arriving (a few seconds): show progress
+  // instead of the form, so a second tap cannot start a second attempt.
+  const waitingForCode = requested && !state.pairingCode && (pending || state.status === "CONNECTING");
+  const fullNumber = phone.trim().startsWith("+") ? phone.trim() : `${country} ${phone.trim()}`;
 
   const linking = state.status === "CONNECTING" || state.status === "RECONNECTING";
 
@@ -112,42 +145,119 @@ export function LinkPanel({
             </div>
           </div>
         ) : (
-          <div className="max-w-md">
+          <div className="max-w-xl">
             <p className="text-sm font-semibold">Link with a code instead</p>
             <p className="mt-2 text-[13px] leading-relaxed text-ink/60">
-              Useful when you are reading this on the same phone. Enter the number you want to send from, including its country
-              code, and WhatsApp will show you where to type the code.
+              Useful when you are reading this on the same phone. Enter the WhatsApp number you want to send pitches from and tap Get
+              code.
             </p>
 
-            {state.pairingCode ? (
+            <p className="mt-3 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-[12.5px] leading-relaxed text-ink/80">
+              <span className="font-semibold text-ink">No SMS or OTP is sent.</span> Your code appears right here, on this page. You type it
+              into WhatsApp on your phone, as shown below.
+            </p>
+
+            {state.pairingCode && !codeExpired ? (
               <div className="mt-5 rounded-2xl border border-whatsapp/30 bg-whatsapp/8 px-5 py-4">
-                <p className="text-[11px] tracking-wide text-ink/60 uppercase">Your pairing code</p>
-                <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-ink">{state.pairingCode}</p>
-                <p className="mt-2 text-[12px] leading-snug text-ink/60">
-                  On your phone: Settings → Linked devices → Link a device → Link with phone number instead.
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] tracking-wide text-ink/70 uppercase">Your code</p>
+                  {secondsLeft !== null && (
+                    <p className="font-mono text-[11px] text-ink/70" aria-live="off">
+                      expires in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+                    </p>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <p className="font-mono text-[28px] font-semibold tracking-[0.25em] text-ink" data-testid="pairing-code">
+                    {state.pairingCode.slice(0, 4)}-{state.pairingCode.slice(4)}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(state.pairingCode ?? "").then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1_500);
+                      });
+                    }}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-[12px] leading-snug text-ink/70">
+                  Sent for {fullNumber}. Type it in WhatsApp on that phone within the time shown.
                 </p>
+                <button
+                  type="button"
+                  className="mt-2 text-[12px] font-semibold text-primary underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setRequested(true);
+                    onPairingCode(fullNumber);
+                  }}
+                >
+                  Get a new code
+                </button>
+              </div>
+            ) : waitingForCode ? (
+              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-ink/8 bg-mist-2 px-5 py-4 text-[13px] text-ink/70" role="status">
+                <RefreshCw size={18} strokeWidth={1.5} className="animate-spin" />
+                Asking WhatsApp for your code. This takes a few seconds…
               </div>
             ) : (
               <form
                 className="mt-5 flex flex-col gap-3 sm:flex-row"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  onPairingCode(phone);
+                  setRequested(true);
+                  onPairingCode(fullNumber);
                 }}
               >
-                <input
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="+91 98000 00001"
-                  className="h-11 flex-1 rounded-2xl border border-ink/12 bg-white px-4 text-sm outline-none transition focus:border-primary/50"
-                />
-                <Button type="submit" disabled={pending || phone.trim().length < 6} size="md">
-                  {pending ? "Requesting…" : "Get code"}
+                <div className="flex h-11 flex-1 overflow-hidden rounded-2xl border border-ink/12 bg-white transition focus-within:border-primary/50">
+                  <label className="sr-only" htmlFor="pairing-country">
+                    Country code
+                  </label>
+                  <select
+                    id="pairing-country"
+                    value={country}
+                    onChange={(event) => setCountry(event.target.value)}
+                    className="border-r border-ink/10 bg-transparent pr-1 pl-3 text-sm text-ink outline-none"
+                  >
+                    {COUNTRY_CODES.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="sr-only" htmlFor="pairing-phone">
+                    WhatsApp number
+                  </label>
+                  <input
+                    id="pairing-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    required
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="94883 29318"
+                    className="min-w-0 flex-1 bg-transparent px-3 text-sm text-ink outline-none"
+                  />
+                </div>
+                <Button type="submit" disabled={pending || phone.replace(/\D/g, "").length < 6} size="md">
+                  {pending ? "Requesting…" : codeExpired ? "Get a new code" : "Get code"}
                 </Button>
               </form>
             )}
+            {codeExpired && state.pairingCode && (
+              <p className="mt-2 text-[12px] text-ink/70">That code has expired. Get a new one to try again.</p>
+            )}
+
+            <div className="mt-6 border-t border-ink/6 pt-5">
+              <p className="mb-3 text-[12px] font-semibold tracking-wide text-ink/70 uppercase">Where the code goes</p>
+              <PairingGuide code={state.pairingCode && !codeExpired ? state.pairingCode : null} />
+            </div>
           </div>
         )}
 

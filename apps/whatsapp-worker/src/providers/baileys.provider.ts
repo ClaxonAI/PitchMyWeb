@@ -1,11 +1,12 @@
 import makeWASocket, { Browsers, fetchLatestBaileysVersion, jidNormalizedUser } from "baileys";
 import type { WASocket } from "baileys";
+import { WHATSAPP_PAIRING_TTL_SECONDS } from "@pitchmyweb/contracts";
 import type { WaStatus } from "@pitchmyweb/contracts";
 import { baileysLogger, logger, sanitizeError } from "../logger.js";
 import { usePostgresAuthState } from "../session/auth-state.js";
 import type { AuthStateRepository } from "../session/auth-state.repository.js";
 import { classifyDisconnect } from "../session/disconnect-reason.js";
-import type { ConnectResult, NumberCheck, ProviderEvents, SendTextResult, SendVideoInput, WhatsAppProvider } from "./whatsapp.provider.js";
+import type { ConnectOptions, ConnectResult, NumberCheck, ProviderEvents, SendTextResult, SendVideoInput, WhatsAppProvider } from "./whatsapp.provider.js";
 
 // The only file in the monorepo that imports `baileys`.
 //
@@ -21,6 +22,8 @@ type LiveSocket = {
   events: ProviderEvents;
   /** Set while we are tearing the socket down deliberately. */
   closing: boolean;
+  /** Closes an unfinished pairing attempt once its code has expired. */
+  pairingTimer?: ReturnType<typeof setTimeout>;
 };
 
 const MAX_QR_EMISSIONS = 1;
@@ -52,7 +55,7 @@ export class BaileysProvider implements WhatsAppProvider {
     return live;
   }
 
-  async connect(accountId: string, events: ProviderEvents): Promise<ConnectResult> {
+  async connect(accountId: string, events: ProviderEvents, options: ConnectOptions = {}): Promise<ConnectResult> {
     // Opening a second socket on top of an existing one would leave two
     // clients sharing one credential store — the exact thing the session
     // lock exists to prevent, so it is refused here too.
@@ -85,6 +88,15 @@ export class BaileysProvider implements WhatsAppProvider {
     this.sockets.set(accountId, live);
 
     let qrCount = 0;
+    // Pairing mode ("link with phone number"): the code must be requested
+    // on a socket that has finished its handshake and is waiting to register
+    // a new device. The first QR event is exactly that moment. Asking any
+    // earlier (as this used to, straight after makeWASocket) makes Baileys
+    // write the number into the stored credentials before the socket opens;
+    // the handshake then attempts a *login* with half-made credentials,
+    // WhatsApp answers 401, and the account ends up LOGGED OUT with no code.
+    const pairingPhone = options.pairingPhone;
+    let pairingRequested = false;
 
     socket.ev.on("creds.update", () => {
       void saveCreds().catch((error) => {
@@ -95,6 +107,26 @@ export class BaileysProvider implements WhatsAppProvider {
     socket.ev.on("connection.update", (update) => {
       void (async () => {
         const { connection, lastDisconnect, qr } = update;
+
+        if (qr && pairingPhone) {
+          // No QR is shown in pairing mode: the user is typing a code, and a
+          // QR event would replace it on screen. Later QR rotations are
+          // ignored; the code stays valid until the pairing timer below.
+          if (pairingRequested || state.creds.registered) return;
+          pairingRequested = true;
+          try {
+            const code = await socket.requestPairingCode(pairingPhone);
+            live.status = "PAIRING_CODE_READY";
+            await events.onPairingCode(code);
+            await events.onStatus("PAIRING_CODE_READY");
+            live.pairingTimer = setTimeout(() => {
+              void this.failExpired(accountId, "The code expired before it was entered in WhatsApp. Get a new code.");
+            }, WHATSAPP_PAIRING_TTL_SECONDS * 1000);
+          } catch (error) {
+            await this.failExpired(accountId, sanitizeError(error, "WhatsApp did not return a pairing code. Check the number and try again."));
+          }
+          return;
+        }
 
         if (qr) {
           qrCount += 1;
@@ -112,6 +144,7 @@ export class BaileysProvider implements WhatsAppProvider {
         }
 
         if (connection === "open") {
+          clearTimeout(live.pairingTimer);
           live.status = "CONNECTED";
           const me = socket.user;
           const phoneNumber = me?.id ? (jidNormalizedUser(me.id).split("@")[0]?.split(":")[0] ?? "") : "";
@@ -120,6 +153,7 @@ export class BaileysProvider implements WhatsAppProvider {
         }
 
         if (connection === "close") {
+          clearTimeout(live.pairingTimer);
           const outcome = classifyDisconnect(lastDisconnect?.error);
           this.sockets.delete(accountId);
           live.status = "DISCONNECTED";
@@ -127,6 +161,15 @@ export class BaileysProvider implements WhatsAppProvider {
           // meant; reporting it again would schedule a reconnect for a
           // session the user just asked us to close.
           if (live.closing) return;
+          // A pairing socket that closes before the phone linked has nothing
+          // to reconnect to: its code died with it, and a reconnect would
+          // come back in QR mode the user never asked for. Once the phone
+          // has linked, WhatsApp closes the socket on purpose ("restart
+          // required") and the normal reconnect below finishes the login.
+          if (pairingPhone && !state.creds.registered) {
+            await events.onStatus("ERROR", { error: "The code expired before it was entered in WhatsApp. Get a new code." });
+            return;
+          }
           if (outcome.action === "logged_out") {
             await events.onLoggedOut(outcome.reason);
           }
@@ -188,28 +231,21 @@ export class BaileysProvider implements WhatsAppProvider {
     return { restored: !isFresh };
   }
 
-  /** Closes a link attempt whose QR was never scanned. */
-  private async failExpired(accountId: string): Promise<void> {
+  /** Closes a link attempt whose QR was never scanned, or whose pairing code was never entered. */
+  private async failExpired(accountId: string, message = "The QR code expired before it was scanned"): Promise<void> {
     const live = this.sockets.get(accountId);
     if (!live) return;
+    clearTimeout(live.pairingTimer);
     live.closing = true;
     await this.closeSocket(live);
     this.sockets.delete(accountId);
-    await live.events.onStatus("ERROR", { error: "The QR code expired before it was scanned" });
-  }
-
-  async requestPairingCode(accountId: string, phoneNumber: string): Promise<string> {
-    const live = this.require(accountId);
-    const code = await live.socket.requestPairingCode(phoneNumber);
-    live.status = "PAIRING_CODE_READY";
-    await live.events.onPairingCode(code);
-    await live.events.onStatus("PAIRING_CODE_READY");
-    return code;
+    await live.events.onStatus("ERROR", { error: message });
   }
 
   async disconnect(accountId: string, options: { logout?: boolean } = {}): Promise<void> {
     const live = this.sockets.get(accountId);
     if (!live) return;
+    clearTimeout(live.pairingTimer);
     live.closing = true;
     if (options.logout) {
       try {

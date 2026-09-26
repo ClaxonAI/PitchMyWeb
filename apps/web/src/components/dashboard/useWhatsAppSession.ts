@@ -17,11 +17,15 @@ import { whatsappApi, type WaStatus, type WhatsAppLogoutReason } from "@/lib/api
 // that failure mode entirely.
 
 const POLL_INTERVAL_MS = 3_000;
+/** Matches WHATSAPP_PAIRING_TTL_SECONDS in @pitchmyweb/contracts. */
+const PAIRING_CODE_TTL_MS = 150_000;
 
 export type SessionState = {
   status: WaStatus;
   qrDataUrl: string | null;
   pairingCode: string | null;
+  /** When the pairing code stops working (ISO). */
+  pairingCodeExpiresAt: string | null;
   phoneNumber: string | null;
   lastSeenAt: string | null;
   error: string | null;
@@ -35,6 +39,7 @@ const INITIAL: SessionState = {
   status: "DISCONNECTED",
   qrDataUrl: null,
   pairingCode: null,
+  pairingCodeExpiresAt: null,
   phoneNumber: null,
   lastSeenAt: null,
   error: null,
@@ -84,7 +89,14 @@ export function useWhatsAppSession(
         case "QR_READY":
           return { ...current, status: "QR_READY", qrDataUrl: event.qrDataUrl, pairingCode: null, error: null };
         case "PAIRING_CODE":
-          return { ...current, status: "PAIRING_CODE_READY", pairingCode: event.code, qrDataUrl: null, error: null };
+          return {
+            ...current,
+            status: "PAIRING_CODE_READY",
+            pairingCode: event.code,
+            pairingCodeExpiresAt: new Date(Date.now() + PAIRING_CODE_TTL_MS).toISOString(),
+            qrDataUrl: null,
+            error: null,
+          };
         case "CONNECTED":
           return { ...current, status: "CONNECTED", phoneNumber: event.phoneNumber, qrDataUrl: null, pairingCode: null, error: null };
         case "LOGGED_OUT":
@@ -142,6 +154,17 @@ export function useWhatsAppSession(
           // no way to ask for it again. Never cleared here — a poll that
           // arrives without one must not blank a QR the stream delivered.
           qrDataUrl: status.qrDataUrl ?? current.qrDataUrl,
+          // The same for a pairing code, which is otherwise delivered only
+          // over the stream. Kept while the account still says a code is
+          // ready; dropped once it has moved on (linked, expired, failed).
+          ...(status.status === "PAIRING_CODE_READY"
+            ? {
+                pairingCode: status.pairingCode ?? current.pairingCode,
+                pairingCodeExpiresAt: status.pairingCodeExpiresAt ?? current.pairingCodeExpiresAt,
+              }
+            : status.status === "CONNECTING"
+              ? {}
+              : { pairingCode: null, pairingCodeExpiresAt: null }),
           phoneNumber: status.phoneNumber ?? current.phoneNumber,
           lastSeenAt: status.lastSeenAt ?? current.lastSeenAt,
           error: status.status === "ERROR" ? (status.lastError ?? current.error) : null,

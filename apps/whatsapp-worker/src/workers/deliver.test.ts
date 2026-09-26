@@ -6,7 +6,6 @@ import { OperationTimeoutError } from "./with-timeout.js";
 function provider(overrides: Partial<WhatsAppProvider> = {}): WhatsAppProvider {
   return {
     connect: vi.fn(),
-    requestPairingCode: vi.fn(),
     disconnect: vi.fn(),
     getStatus: vi.fn(() => "CONNECTED" as const),
     checkNumber: vi.fn(async () => ({ exists: true })),
