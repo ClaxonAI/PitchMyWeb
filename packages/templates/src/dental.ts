@@ -47,9 +47,9 @@ export type PreviewDesign = (typeof PREVIEW_DESIGNS)[number];
 /** The designs actually built for each template, in rotation order. */
 const DESIGNS_BUILT: Record<PreviewTemplateCode, readonly PreviewDesign[]> = {
   "dental-clinic": ["classic", "studio", "editorial", "atelier"],
-  clinic: ["classic", "studio"],
-  restaurant: ["classic", "studio"],
-  salon: ["classic", "studio"],
+  clinic: ["classic", "studio", "editorial", "atelier"],
+  restaurant: ["classic", "studio", "editorial", "atelier"],
+  salon: ["classic", "studio", "editorial", "atelier"],
   gym: ["classic", "studio"],
   interiors: ["classic", "studio"],
   event: ["classic", "studio"],

@@ -1,0 +1,18 @@
+/* "The Menu" restaurant design — styled with Tailwind in RestaurantEditorial.tsx. */
+
+body:has(.menu-card) { background: #f7f1e3; }
+.menu-card { -webkit-tap-highlight-color: rgba(122, 32, 32, .15); }
+.menu-card ::selection { background: #7a2020; color: #f7f1e3; }
+.menu-card :focus-visible { outline: 2px solid #7a2020; outline-offset: 3px; }
+.menu-card [class*="--font-fraunces"] { font-variation-settings: "WONK" 0, "SOFT" 60; }
+
+/* The printed card: a double rule with a little air between the lines. */
+.menu-frame {
+  border: 1px solid rgba(122, 32, 32, .45);
+  outline: 1px solid rgba(122, 32, 32, .25);
+  outline-offset: -8px;
+  background: #fbf7ec;
+}
+
+/* Dotted leader from a menu line to its ornament. */
+.menu-leader { height: 1px; transform: translateY(-.25em); background-image: radial-gradient(circle, rgba(42, 31, 26, .45) 1px, transparent 1.2px); background-size: 7px 3px; background-repeat: repeat-x; }

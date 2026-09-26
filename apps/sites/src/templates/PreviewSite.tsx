@@ -2,8 +2,14 @@ import type { ComponentType } from "react";
 import type { DentalContent, PreviewDesign, PreviewTemplateCode } from "@pitchmyweb/templates";
 import { hasDesign } from "@pitchmyweb/templates";
 import { DentalClinicSite } from "./dental-clinic/DentalClinicSite";
+import { ClinicAtelier } from "./atelier/ClinicAtelier";
 import { DentalAtelier } from "./atelier/DentalAtelier";
+import { RestaurantAtelier } from "./atelier/RestaurantAtelier";
+import { SalonAtelier } from "./atelier/SalonAtelier";
+import { ClinicEditorial } from "./editorial/ClinicEditorial";
 import { DentalEditorial } from "./editorial/DentalEditorial";
+import { RestaurantEditorial } from "./editorial/RestaurantEditorial";
+import { SalonEditorial } from "./editorial/SalonEditorial";
 import { ClinicStudio } from "./studio/ClinicStudio";
 import { CoachingStudio } from "./studio/CoachingStudio";
 import { DentalStudio } from "./studio/DentalStudio";
@@ -20,9 +26,9 @@ type Design = ComponentType<{ content: DentalContent }>;
 // stored before designs existed, or naming a design a template lacks.
 const DESIGNS: { [T in PreviewTemplateCode]?: Partial<Record<Exclude<PreviewDesign, "classic">, Design>> } = {
   "dental-clinic": { studio: DentalStudio, editorial: DentalEditorial, atelier: DentalAtelier },
-  clinic: { studio: ClinicStudio },
-  restaurant: { studio: RestaurantStudio },
-  salon: { studio: SalonStudio },
+  clinic: { studio: ClinicStudio, editorial: ClinicEditorial, atelier: ClinicAtelier },
+  restaurant: { studio: RestaurantStudio, editorial: RestaurantEditorial, atelier: RestaurantAtelier },
+  salon: { studio: SalonStudio, editorial: SalonEditorial, atelier: SalonAtelier },
   gym: { studio: GymStudio },
   interiors: { studio: InteriorsStudio },
   event: { studio: EventStudio },

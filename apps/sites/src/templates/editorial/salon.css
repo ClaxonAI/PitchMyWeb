@@ -1,0 +1,13 @@
+/* "Cover Story" salon design — styled with Tailwind in SalonEditorial.tsx. */
+
+body:has(.salon-vogue) { background: #f6e3dc; }
+.salon-vogue { -webkit-tap-highlight-color: rgba(208, 52, 44, .15); }
+.salon-vogue ::selection { background: #d0342c; color: #f6e3dc; }
+.salon-vogue :focus-visible { outline: 2px solid #d0342c; outline-offset: 3px; }
+.salon-vogue summary { list-style: none; }
+.salon-vogue summary::-webkit-details-marker { display: none; }
+
+/* The cover's discs drift a few pixels, like a shoot being arranged. */
+@keyframes vogue-drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(6px, -8px); } }
+.vogue-disc { animation: vogue-drift 9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .vogue-disc { animation: none; } }

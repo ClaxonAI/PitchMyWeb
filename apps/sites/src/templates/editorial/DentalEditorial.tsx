@@ -125,7 +125,7 @@ export function DentalEditorial({ content }: StudioProps) {
               <span>{chrome.noun}</span>
               <span className={MUTED}>{content.area ?? "Notes on care"}</span>
             </div>
-            <h1 className={`${DISPLAY} mt-8 text-[clamp(3rem,9.5vw,8.6rem)] leading-[0.92] font-light tracking-[-0.045em]`} data-reveal style={revealDelay(80)}>
+            <h1 className={`${DISPLAY} mt-8 ${content.businessName.length > 26 ? "text-[clamp(2.4rem,5.8vw,5.2rem)]" : "text-[clamp(3rem,9.5vw,8.6rem)]"} leading-[0.92] font-light tracking-[-0.045em]`} data-reveal style={revealDelay(80)}>
               {content.businessName}
             </h1>
             <div className="mt-10 grid gap-10 md:grid-cols-[1fr_1.35fr] md:gap-16">
