@@ -239,6 +239,9 @@ as_app_path npx playwright install --with-deps chromium
 
 step "database"
 as_app npm run db:generate
+# A migration left failed (e.g. by an interrupted deploy) blocks every later
+# one; repair-migrations.sh finishes it when a repair script exists for it.
+as_app bash infrastructure/aws/repair-migrations.sh
 as_app npm run db:deploy
 # The service price list the AI analysis and pitch steps validate against.
 # Inserts only what is missing, so tuned prices survive every deploy; never
