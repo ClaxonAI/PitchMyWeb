@@ -399,6 +399,22 @@ export type CreditLedgerEntry = {
   createdAt: string;
 };
 
+export type NicheAvailability = {
+  slug: string;
+  label: string;
+  category: string;
+  template: string;
+  /** Businesses without a website this user could pitch; null when counts are unavailable. */
+  available: number | null;
+  /** The first search page was full, so there are more than `available`. */
+  more: boolean;
+};
+
+export const nichesApi = {
+  availability: (location: string) =>
+    api.get<{ location: string; configured: boolean; niches: NicheAvailability[] }>(`/api/niches/availability${toQueryString({ location })}`),
+};
+
 export const pitchCreditsApi = {
   ledger: (query: { page?: number; pageSize?: number } = {}) =>
     api.get<{

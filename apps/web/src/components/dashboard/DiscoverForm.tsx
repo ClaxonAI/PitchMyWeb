@@ -16,6 +16,7 @@ import { Input } from "@/components/dashboard-ui/input";
 import { Label } from "@/components/dashboard-ui/label";
 import { Select } from "@/components/dashboard-ui/select";
 import { MessageTemplateEditor } from "./MessageTemplateEditor";
+import { NicheCards } from "./NicheCards";
 import { useSession } from "./SessionProvider";
 import { WhatsAppCampaignStep } from "./WhatsAppCampaignStep";
 
@@ -39,6 +40,8 @@ export function DiscoverForm() {
     register,
     handleSubmit,
     setValue,
+    watch,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof campaignFormSchema>, unknown, z.output<typeof campaignFormSchema>>({
     resolver: zodResolver(campaignFormSchema),
@@ -110,6 +113,9 @@ export function DiscoverForm() {
     }
   }
 
+  const location = watch("location") ?? "";
+  const category = watch("category");
+
   if (!canDiscover) {
     return (
       <Card>
@@ -156,6 +162,25 @@ export function DiscoverForm() {
             Search fills the form from your sentence. Nothing is scraped until you press Find businesses and pitch.
           </p>
           {parseHint && <p className="text-xs text-dash-muted-foreground">{parseHint}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <NicheCards
+            city={location}
+            selectedCategory={category}
+            onCity={(name) => setValue("location", name, { shouldValidate: true })}
+            onPick={(niche, city) => {
+              setValue("category", niche.category, { shouldValidate: true });
+              if (!city) {
+                document.getElementById("location")?.focus();
+                return;
+              }
+              if (!getValues("name")?.trim()) setValue("name", `${niche.label} — ${city}`, { shouldValidate: true });
+              document.getElementById("targetCount")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
         </CardContent>
       </Card>
 
