@@ -285,9 +285,9 @@ to AWS through GitHub's OIDC token, so no AWS key is stored in GitHub. One-time 
    (AWS CLI configured). It creates the `pitchmyweb-github-deploy` role, which
    only this repository's main branch can assume and which can only upload
    `deploy/*` to the bucket and run commands on the app server. It prints the role ARN.
-2. Set that ARN as the repository variable `AWS_DEPLOY_ROLE_ARN`
-   (Settings → Secrets and variables → Actions → Variables). Until it is set
-   the workflow skips.
+2. The workflow names that role (account 491521241125). For a different
+   account, set the repository variable `AWS_DEPLOY_ROLE_ARN` to the ARN the
+   script printed (Settings → Secrets and variables → Actions → Variables).
 
 Re-run step 1 if the app server is replaced: the permission names the instance.
 
