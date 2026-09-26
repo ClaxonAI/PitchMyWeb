@@ -40,15 +40,13 @@ export type CampaignLeadRow = {
   hasValidPhone: boolean;
   pitch: string | null;
   /**
-   * videoReady: the phone demo video can be watched/downloaded right now.
-   * laptopVideoReady: the laptop-size one is too (older recordings only have the phone one).
+   * videoReady: the demo video can be watched/downloaded right now.
    * videoExpiresAt: when that stops (VIDEO_RETENTION_DAYS after recording).
    * videoExpired: there was a video, and its download window has closed.
    */
   pipeline:
     | (Pick<LeadPipeline, "id" | "stage" | "failureReason" | "replacedById" | "creditOutcome" | "updatedAt"> & {
         videoReady: boolean;
-        laptopVideoReady: boolean;
         videoExpiresAt: Date | null;
         videoExpired: boolean;
       })
@@ -109,18 +107,17 @@ async function loadCampaignLeadRows(db: PrismaClient, campaign: Pick<Campaign, "
   const recordings = recordingIds.length
     ? await db.demoRecording.findMany({
         where: { id: { in: recordingIds } },
-        select: { id: true, status: true, storageKey: true, desktopStorageKey: true, expiresAt: true, failureReason: true },
+        select: { id: true, status: true, storageKey: true, expiresAt: true, failureReason: true },
       })
     : [];
   const recordingById = new Map(recordings.map((recording) => [recording.id, recording]));
   const videoFor = (recordingId: string | null) => {
     const recording = recordingId ? recordingById.get(recordingId) : undefined;
-    if (!recording) return { videoReady: false, laptopVideoReady: false, videoExpiresAt: null, videoExpired: false };
+    if (!recording) return { videoReady: false, videoExpiresAt: null, videoExpired: false };
     const expired = Boolean(recording.expiresAt && recording.expiresAt.getTime() <= now.getTime()) || recording.failureReason === "expired";
     const ready = !expired && recording.status === "READY" && recording.storageKey !== null;
     return {
       videoReady: ready,
-      laptopVideoReady: ready && recording.desktopStorageKey !== null,
       videoExpiresAt: recording.expiresAt,
       videoExpired: expired,
     };

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check, CircleAlert, Clapperboard, Globe, Laptop, Pause, Send, Smartphone } from "lucide-react";
+import { Check, CircleAlert, Clapperboard, Globe, Laptop, Pause, Send } from "lucide-react";
 import { campaignsApi, type CampaignLeadRow, type PipelineStage } from "@/lib/api-client";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
@@ -18,7 +18,7 @@ type Row = CampaignLeadRow & { pipeline: NonNullable<CampaignLeadRow["pipeline"]
 // for the half-second before recording starts.
 const STEPS = [
   { key: "site", label: "Website", icon: Globe },
-  { key: "videos", label: "Videos", icon: Clapperboard },
+  { key: "videos", label: "Video", icon: Clapperboard },
   { key: "send", label: "Sending", icon: Send },
   { key: "done", label: "Delivered", icon: Check },
 ] as const;
@@ -54,7 +54,7 @@ function liveLine(row: Row, paused: boolean): string {
     case "RECORDING":
       return "Recording on a phone and a laptop…";
     case "VIDEO_UPLOADED":
-      return paused ? "Ready — waiting while sending is paused" : "Videos ready, handing to WhatsApp…";
+      return paused ? "Ready — waiting while sending is paused" : "Video ready, handing to WhatsApp…";
     case "DELIVERY_QUEUED":
       return "Sending on WhatsApp…";
     case "SENT":
@@ -159,18 +159,8 @@ function PitchCard({ row, paused }: { row: Row; paused: boolean }) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent max-md:min-h-11 max-md:px-3.5"
           >
-            <Smartphone className="size-3.5" /> Phone video
+            <Laptop className="size-3.5" /> Laptop video
           </a>
-          {row.pipeline.laptopVideoReady && (
-            <a
-              href={`/api/pipelines/${row.pipeline.id}/video?view=laptop`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-dash-sm border border-dash-border px-2.5 py-1 text-xs text-dash-foreground hover:bg-dash-accent max-md:min-h-11 max-md:px-3.5"
-            >
-              <Laptop className="size-3.5" /> Laptop video
-            </a>
-          )}
         </div>
       )}
     </li>

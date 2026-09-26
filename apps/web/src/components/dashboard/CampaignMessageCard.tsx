@@ -53,7 +53,7 @@ export function CampaignMessageCard({ campaignId, messageTemplate }: { campaignI
       <CardContent className="flex flex-col gap-3">
         {editing ? (
           <>
-            <MessageTemplateEditor value={value} onChange={setValue} label="Message sent with both videos" />
+            <MessageTemplateEditor value={value} onChange={setValue} label="Message sent with the video" />
             {error && <p className="text-sm text-dash-destructive">{error}</p>}
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void save()} disabled={saving}>

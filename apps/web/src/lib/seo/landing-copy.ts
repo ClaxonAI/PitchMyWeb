@@ -8,7 +8,7 @@ import type { Industry } from "@/data/industries";
 export const HOW_IT_WORKS_STEPS = [
   "Pick a trade and an area. PitchMyWeb finds businesses there with a phone number but no website, and checks each one really has no site.",
   "Every lead gets its own sample website built from its name, category and location, recorded as a short video on a phone screen and a laptop screen.",
-  "Link your WhatsApp for the campaign. Your message and both videos go out from your own number, at a safe pace, with opt-outs respected.",
+  "Link your WhatsApp for the campaign. Your message and the demo video go out from your own number, at a safe pace, with opt-outs respected.",
   "Owners reply to you directly. You close the sale; the sample site is already built.",
 ];
 

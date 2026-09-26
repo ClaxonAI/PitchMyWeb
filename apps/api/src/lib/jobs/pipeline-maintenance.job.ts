@@ -199,7 +199,7 @@ export async function deleteExpiredRecordings(db: PrismaClient, now = new Date()
         id: { notIn: [...failed] },
         OR: [{ expiresAt: { lte: now } }, { websiteProject: { expiresAt: { lte: now } } }],
       },
-      select: { id: true, storageKey: true, posterKey: true, desktopStorageKey: true, desktopPosterKey: true },
+      select: { id: true, storageKey: true, posterKey: true },
       orderBy: { expiresAt: "asc" },
       take: EXPIRE_BATCH,
     });
@@ -209,11 +209,18 @@ export async function deleteExpiredRecordings(db: PrismaClient, now = new Date()
       try {
         await storage.delete(recording.storageKey!);
         if (recording.posterKey) await storage.delete(recording.posterKey);
-        if (recording.desktopStorageKey) await storage.delete(recording.desktopStorageKey);
-        if (recording.desktopPosterKey) await storage.delete(recording.desktopPosterKey);
+        // Recorded while pitches sent a phone video too: the laptop video was
+        // moved into storageKey (migration 20260926200000_laptop_video_only)
+        // and the phone one still sits beside it, without "-laptop". Remove
+        // once every such recording has expired (7 days after that deploy).
+        const legacyPhone = recording.storageKey!.match(/^(.*)-laptop\.mp4$/);
+        if (legacyPhone) {
+          await storage.delete(`${legacyPhone[1]}.mp4`);
+          await storage.delete(`${legacyPhone[1]}.jpg`);
+        }
         await db.demoRecording.update({
           where: { id: recording.id },
-          data: { storageKey: null, posterKey: null, desktopStorageKey: null, desktopPosterKey: null, status: "FAILED", failureReason: "expired" },
+          data: { storageKey: null, posterKey: null, status: "FAILED", failureReason: "expired" },
         });
         deleted += 1;
       } catch (error) {

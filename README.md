@@ -104,7 +104,7 @@ number to start. For privacy the number is signed out (device unlinked, stored s
 campaign has finished sending, so each campaign starts with a fresh link; see
 [Session lifetime](docs/whatsapp/architecture.md#session-lifetime).
 
-Demo videos (a phone and a laptop recording per pitch) stay downloadable for `VIDEO_RETENTION_DAYS` (7 by default) and are
+Demo videos (one laptop-screen recording per pitch) stay downloadable for `VIDEO_RETENTION_DAYS` (7 by default) and are
 then deleted from object storage by
 the `pipeline-maintenance` job.
 

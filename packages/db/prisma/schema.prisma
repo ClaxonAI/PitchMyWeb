@@ -965,11 +965,6 @@ model WhatsAppMessage {
   mediaKind                WaMediaKind?
   mediaStorageKey          String?
   mediaMimeType            String?
-  // A second attachment sent right after the first, in the same send job
-  // (the laptop walkthrough after the phone one). Receipts track the first.
-  secondaryMediaStorageKey String?
-  secondaryMediaMimeType   String?
-  secondaryCaption         String?
   status                   WaMessageStatus @default(QUEUED)
   // The WhatsApp message id, used to match delivery/read receipts back to
   // this row.
@@ -1178,16 +1173,10 @@ model DemoRecording {
   durationMs        Int?
   sizeBytes         Int?
   mimeType          String?
-  // The same walkthrough recorded at laptop size. storageKey/posterKey above
-  // are the phone recording; a pitch sends both.
-  desktopStorageKey String?
-  desktopPosterKey  String?
-  desktopDurationMs Int?
-  desktopSizeBytes  Int?
   failureReason     String?
   attempts          Int             @default(0)
-  // When the videos stop being downloadable and their objects (both sizes)
-  // are deleted from storage (VIDEO_RETENTION_DAYS after it became READY,
+  // When the video stops being downloadable and its objects are deleted
+  // from storage (VIDEO_RETENTION_DAYS after it became READY,
   // see @pitchmyweb/storage videoExpiry). Null until the recording is READY.
   expiresAt         DateTime?
   createdAt         DateTime        @default(now())

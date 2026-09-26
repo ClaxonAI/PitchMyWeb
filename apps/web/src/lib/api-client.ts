@@ -324,9 +324,9 @@ export type CampaignLeadRow = {
   hasValidPhone: boolean;
   pitch: string | null;
   /**
-   * videoReady: the phone demo video can be watched/downloaded now;
-   * laptopVideoReady: the laptop one too. videoExpiresAt: when that stops (it
-   * is then deleted from storage). videoExpired: it did.
+   * videoReady: the demo video (the laptop walkthrough) can be watched or
+   * downloaded now. videoExpiresAt: when that stops (it is then deleted from
+   * storage). videoExpired: it did.
    */
   pipeline: {
     id: string;
@@ -337,7 +337,6 @@ export type CampaignLeadRow = {
     creditOutcome: "CONSUMED" | "REFUNDED" | "REPLACED" | null;
     updatedAt: string;
     videoReady: boolean;
-    laptopVideoReady: boolean;
     videoExpiresAt: string | null;
     videoExpired: boolean;
   } | null;

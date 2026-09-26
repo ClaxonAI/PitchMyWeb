@@ -81,7 +81,7 @@ export function MessageTemplateEditor({
           />
           <div id={`${id}-help`} className="flex flex-wrap justify-between gap-2 text-xs">
             <span className={problem ? "text-dash-destructive" : "text-dash-muted-foreground"}>
-              {problem ?? "Each business gets its own name and site link. Both videos are attached automatically."}
+              {problem ?? "Each business gets its own name and site link. The laptop video is attached automatically."}
             </span>
             <span className={value.length > MAX_MESSAGE_TEMPLATE_CHARS ? "text-dash-destructive" : "text-dash-muted-foreground"}>
               {value.length}/{MAX_MESSAGE_TEMPLATE_CHARS}

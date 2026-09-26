@@ -10,7 +10,7 @@ import { createWebsiteProject, publishWebsiteProject } from "../websites/website
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
 import { settleWhatsAppSession } from "../whatsapp/session-policy";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
-import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, LAPTOP_VIDEO_CAPTION, previewExpiry, videoPageUrl } from "./links";
+import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
 import { CAMPAIGN_TEMPLATE_PROMPT_VERSION, renderMessageTemplate } from "./message-template";
 import { enqueueRecording } from "./recording-queue";
 
@@ -511,7 +511,7 @@ export async function onRecordingFinished(db: PrismaClient, recordingId: string,
       data: { stage: "VIDEO_UPLOADED" },
     });
     if (claimed.count === 0) return { pipelineId: pipeline.id, stage: pipeline.stage };
-    emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "READY", durationMs: recording.durationMs, sizeBytes: recording.sizeBytes, laptopVideo: Boolean(recording.desktopStorageKey) });
+    emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "READY", durationMs: recording.durationMs, sizeBytes: recording.sizeBytes });
     await prepareDelivery(db, pipeline.id, deps);
   } else if (recording.status === "FAILED") {
     emitEvent("recording.finished", { pipelineId: pipeline.id, recordingId, status: "FAILED" }, { level: "warn" });
@@ -537,7 +537,7 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string, deps
     if (!recording || recording.status !== "READY" || !recording.storageKey) {
       throw new PipelineStepError("no_recording", "The walkthrough video is not ready");
     }
-    // Paused: everything up to here (site, both videos) is ready, and the
+    // Paused: everything up to here (site, video) is ready, and the
     // pitch waits at VIDEO_UPLOADED with its credit still reserved until the
     // campaign is resumed. Nothing is failed and nothing is refunded.
     if (pipeline.campaign.sendingPaused) {
@@ -593,14 +593,8 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string, deps
         leadId: pipeline.leadId,
         body: fillSiteLink(pitch.content, project.publishedUrl),
       },
-      {
-        media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" },
-        // The laptop-size walkthrough goes right after the phone one, in the
-        // same send. Recordings made before laptop videos existed have none.
-        ...(recording.desktopStorageKey
-          ? { secondaryMedia: { kind: "VIDEO" as const, storageKey: recording.desktopStorageKey, mimeType: "video/mp4", caption: LAPTOP_VIDEO_CAPTION } }
-          : {}),
-      },
+      // The laptop walkthrough, with the pitch as its caption.
+      { media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" } },
     );
     await setStage(db, pipeline, "DELIVERY_QUEUED", { whatsappMessageId: message.id });
   } catch (error) {
