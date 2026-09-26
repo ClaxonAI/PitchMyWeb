@@ -180,7 +180,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
         dismiss();
       }}
       onClick={(e) => e.target === ref.current && dismiss()}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-panel bg-white p-0 text-ink shadow-lift backdrop:bg-ink/40 backdrop:backdrop-blur-sm open:animate-pop"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto overscroll-contain rounded-panel bg-white p-0 text-ink shadow-lift backdrop:bg-ink/40 backdrop:backdrop-blur-sm open:animate-pop"
     >
       {order && (
         <div className="p-6 sm:p-8">

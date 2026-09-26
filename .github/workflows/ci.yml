@@ -133,10 +133,30 @@ jobs:
       - name: Build
         env:
           # next.config.ts refuses to build without a Clerk publishable key.
-          # A pk_test_ key only warns while APP_ENV is not "production", so
-          # this dummy is enough to compile and is deliberately not a real
-          # key — nothing here signs in.
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktZHVtbXktbm90LWEtcmVhbC1rZXkk
-          CLERK_SECRET_KEY: sk_test_ci-dummy-not-a-real-key
+          # A placeholder, deliberately not a real key — nothing here signs in
+          # with Clerk. It is in the production-instance format (pk_live_) so
+          # the UX checks below can run on this build: with a pk_test_ key
+          # Clerk's middleware sends every page request through its
+          # development-instance handshake, which cannot be followed here.
+          # clerk.ci.invalid never resolves.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuY2kuaW52YWxpZCQ=
+          CLERK_SECRET_KEY: sk_live_ci-dummy-not-a-real-key
           NODE_ENV: production
         run: npm run build
+
+      # Phone and laptop checks on the production build: menus, the Back
+      # button, sign-in round trips, and the dashboard's fit on a phone.
+      - name: UX checks
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuY2kuaW52YWxpZCQ=
+          CLERK_SECRET_KEY: sk_live_ci-dummy-not-a-real-key
+          NODE_ENV: production
+          API_URL: http://localhost:4000
+        run: |
+          (cd apps/api && npx next start -p 4000 > "$RUNNER_TEMP/api.log" 2>&1 &)
+          (cd apps/web && npx next start -p 3000 > "$RUNNER_TEMP/web.log" 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:3000/login && curl -s -o /dev/null http://localhost:4000/api/auth/login && break
+            sleep 1
+          done
+          node apps/web/e2e/ux.mjs || { echo "--- api log"; tail -n 60 "$RUNNER_TEMP/api.log"; echo "--- web log"; tail -n 60 "$RUNNER_TEMP/web.log"; exit 1; }

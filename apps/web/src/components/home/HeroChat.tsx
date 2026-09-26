@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MapPin, Play, Star } from "lucide-react";
 import { Bubble, ChatHeader, TypingDots, chatWallpaper } from "@/components/mocks/ChatBits";
 import { SitePreview } from "@/components/mocks/SitePreview";
@@ -13,15 +13,28 @@ const STEP_DURATIONS = [900, 1400, 1300, 1600, 4200];
 
 export function HeroChat() {
   const [step, setStep] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  // The loop only runs while the chat is on screen: scrolled past it, it
+  // stops re-rendering and animating, which a phone otherwise pays for the
+  // whole time the visitor reads the rest of the page.
+  const [onScreen, setOnScreen] = useState(true);
+  useEffect(() => {
+    const node = root.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setOnScreen(entry?.isIntersecting ?? true));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!onScreen) return;
     const t = setTimeout(() => setStep((s) => (s + 1) % STEP_DURATIONS.length), STEP_DURATIONS[step]);
     return () => clearTimeout(t);
-  }, [step]);
+  }, [step, onScreen]);
 
   return (
     // An illustration of the flow; the surrounding copy says the same in words.
-    <div aria-hidden className="relative mx-auto w-full max-w-[400px]">
+    <div ref={root} aria-hidden className="relative mx-auto w-full max-w-[400px]">
       {/* The lead, as found on Maps */}
       <div className="absolute -top-6 -left-4 z-20 w-[210px] -rotate-3 rounded-2xl border border-ink/8 bg-white p-3.5 shadow-soft sm:-left-14">
         <div className="flex items-center gap-1.5 font-mono text-[9px] tracking-wider text-ink/60 uppercase">

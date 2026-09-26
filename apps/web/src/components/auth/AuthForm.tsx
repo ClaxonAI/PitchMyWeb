@@ -67,6 +67,24 @@ export function AuthForm({ mode }: { mode: Mode }) {
     // "session" belongs to the social buttons, which show their own message.
     if (oauthError && oauthError !== "session") setError(googleErrors[oauthError] ?? "Sign-in failed. Please try again.");
   }, []);
+  // Back to this page after signing in can show it from the browser's cache
+  // (this page is static) without asking the server, which would have moved a
+  // signed-in visitor on. Do that here instead of showing them the form again.
+  // Not for a post-payment sign-in (orderId) or an expired session, which the
+  // server lets through on purpose.
+  useEffect(() => {
+    const moveOnIfSignedIn = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("orderId") || params.has("expired") || params.has("error")) return;
+      if (document.cookie.split("; ").includes("pmw_signed_in=1")) window.location.replace(afterSignIn(readSignInIntent().next));
+    };
+    moveOnIfSignedIn();
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) moveOnIfSignedIn();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
   const [pending, setPending] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>();
   const text = copy[mode];

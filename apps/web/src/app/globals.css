@@ -137,6 +137,15 @@
   button:not(:disabled) {
     cursor: pointer;
   }
+  /* No double-tap-to-zoom wait on things people tap: the tap fires at once. */
+  a, button, input, select, textarea, label, summary, [role="button"] {
+    touch-action: manipulation;
+  }
+  /* The page behind an open modal <dialog> (checkout) stays put instead of
+     scrolling under the visitor's finger. */
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
 }
 
 @layer components {
