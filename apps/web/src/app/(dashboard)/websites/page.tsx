@@ -39,7 +39,7 @@ export default async function WebsitesPage() {
           No demo sites yet — generate one from a lead&apos;s detail page.
         </p>
       ) : (
-        <Table>
+        <Table stacked>
           <TableHeader>
             <TableRow>
               <TableHead>Template</TableHead>
@@ -52,17 +52,17 @@ export default async function WebsitesPage() {
           <TableBody>
             {websites.map((project) => (
               <TableRow key={project.id}>
-                <TableCell className="font-medium">
+                <TableCell primary className="font-medium">
                   <Link href={`/websites/${project.id}`} className="hover:underline">
                     {project.template}
                   </Link>
                 </TableCell>
-                <TableCell>
+                <TableCell label="Status">
                   <StatusBadge status={project.status} />
                 </TableCell>
-                <TableCell className="font-mono text-xs">{project.slug}</TableCell>
-                <TableCell className="text-dash-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</TableCell>
-                <TableCell className="text-right">
+                <TableCell label="Slug" className="font-mono text-xs">{project.slug}</TableCell>
+                <TableCell label="Updated" className="text-dash-muted-foreground">{new Date(project.updatedAt).toLocaleDateString()}</TableCell>
+                <TableCell label="Download" className="text-right">
                   {project.status === "PUBLISHED" ? (
                     <Button asChild variant="ghost" size="sm" title="Download this website as a ZIP (HTML, CSS, fonts and images)">
                       <a href={`/api/websites/${project.id}/download`} download>

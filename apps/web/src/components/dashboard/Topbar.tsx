@@ -55,7 +55,7 @@ export function Topbar() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-dash-border bg-dash-card px-4">
+    <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-dash-border bg-dash-card px-4 pt-[env(safe-area-inset-top)] max-md:gap-1 max-md:pr-2">
       <Sheet open={mobileOpen} onOpenChange={(next) => (next ? setMobileOpen(true) : dismissMenu())}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden">
@@ -89,7 +89,7 @@ export function Topbar() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="flex items-center gap-2 rounded-dash-md px-1.5 py-1 transition-colors hover:bg-dash-accent">
+          <button type="button" className="flex items-center gap-2 rounded-dash-md px-1.5 py-1 transition-colors hover:bg-dash-accent max-md:h-11 max-md:min-w-11 max-md:justify-center">
             <Avatar className="h-7 w-7">
               <AvatarFallback>{initialsOf(session.name, session.email)}</AvatarFallback>
             </Avatar>

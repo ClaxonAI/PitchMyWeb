@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 import { siteUrl } from "@/lib/seo/site-url";
 import "./globals.css";
@@ -19,6 +19,10 @@ const fraunces = Fraunces({
   adjustFontFallback: false,
   fallback: ["Fraunces Fallback Tuned", "Georgia", "serif"],
 });
+
+// viewport-fit=cover lets the fixed bars reach the screen edges on phones
+// with a notch or home indicator; they pad themselves with env(safe-area-*).
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export const metadata: Metadata = {
   // Absolute-URL base for every canonical, og:image and og:url below. Read
