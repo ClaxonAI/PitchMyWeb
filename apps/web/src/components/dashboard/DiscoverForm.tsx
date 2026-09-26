@@ -245,7 +245,7 @@ export function DiscoverForm() {
               </Button>
               <p className="mt-2 text-xs text-dash-muted-foreground">
                 {whatsappReady
-                  ? "We find businesses without a website, build each one a sample site, record it on a phone and a laptop, and send your message with both videos from your WhatsApp. You can pause sending at any time."
+                  ? "We find businesses without a website, build each one a sample site, record a laptop walkthrough of it, and send your message with that video from your WhatsApp. You can pause sending at any time."
                   : "Link your WhatsApp above first — the pitches are sent from your number."}
               </p>
             </div>

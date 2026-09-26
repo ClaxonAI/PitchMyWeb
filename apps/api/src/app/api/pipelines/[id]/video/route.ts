@@ -15,10 +15,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function handlePipelineVideo(db: PrismaClient, request: NextRequest, params: { id: string }): Promise<NextResponse> {
   const user = await requireCurrentUser(db, request);
   const id = cuidSchema.parse(params.id);
-  const params_ = new URL(request.url).searchParams;
-  const download = params_.get("download") === "1";
-  const view = params_.get("view") === "laptop" ? "laptop" : "phone";
-  const url = await getPipelineVideoUrl(db, user.id, id, { download, view });
+  const download = new URL(request.url).searchParams.get("download") === "1";
+  const url = await getPipelineVideoUrl(db, user.id, id, { download });
   const response = NextResponse.redirect(url, 302);
   response.headers.set("Cache-Control", "private, no-store");
   return response;

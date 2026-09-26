@@ -19,7 +19,7 @@ export const MAX_MESSAGE_TEMPLATE_CHARS = 800;
 export const DEFAULT_MESSAGE_TEMPLATE = [
   `Hi ${BUSINESS_NAME_PLACEHOLDER} team,`,
   `I noticed ${BUSINESS_NAME_PLACEHOLDER} doesn't have a website yet, so I put together a free sample site to show what it could look like: ${SITE_LINK_PLACEHOLDER}`,
-  "I've attached two short videos of it — one on a phone, one on a laptop. If you like it, I can make it live with your photos, timings and booking details. Happy to share more?",
+  "I've attached a short video of it on a laptop screen. If you like it, I can make it live with your photos, timings and booking details. Happy to share more?",
 ].join("\n\n");
 
 const TAG_PATTERN = /<\/?[a-zA-Z][^>]*>/;

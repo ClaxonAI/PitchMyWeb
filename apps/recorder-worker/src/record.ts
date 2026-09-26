@@ -4,52 +4,25 @@ import path from "node:path";
 import { chromium, type Browser } from "playwright";
 import { videoSeconds } from "./transcode.js";
 
-// Records a scripted walkthrough of a preview page, as a portrait phone video
-// and as a laptop-screen video: every pitch sends both, so the owner sees the
-// site the way their customers will on either.
+// Records a scripted walkthrough of a preview page at laptop size: the video
+// every pitch sends, showing the owner the full desktop layout of their site.
 //
 // The tour: hold on the hero, then glide through each [data-section] with an
 // eased scroll, pausing briefly at each section so its reveal animation
 // plays on camera, and finish on the closing call-to-action.
 
-export type RecordingDevice = "phone" | "laptop";
-
-type DeviceProfile = {
-  viewport: { width: number; height: number };
-  deviceScaleFactor: number;
-  isMobile: boolean;
-  userAgent: string;
+// The desktop layout at 720p landscape: what a business owner sees on a
+// laptop, and a 16:9 frame every player shows without letterboxing.
+export const LAPTOP = {
+  viewport: { width: 1280, height: 720 },
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 PitchMyWebRecorder",
   /** Height of the sticky header, so a section is not scrolled under it. */
-  headerOffset: number;
+  headerOffset: 88,
 };
-
-export const DEVICES: Record<RecordingDevice, DeviceProfile> = {
-  phone: {
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    isMobile: true,
-    userAgent:
-      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 PitchMyWebRecorder",
-    headerOffset: 72,
-  },
-  // The desktop layout at 720p landscape: what a business owner sees on a
-  // laptop, and a 16:9 frame every player shows without letterboxing.
-  laptop: {
-    viewport: { width: 1280, height: 720 },
-    deviceScaleFactor: 1,
-    isMobile: false,
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 PitchMyWebRecorder",
-    headerOffset: 88,
-  },
-};
-
-/** The phone viewport, kept under its old name for existing callers. */
-export const VIEWPORT = DEVICES.phone.viewport;
 
 export type RecordOptions = {
   tourSeconds: number;
   navigationTimeoutMs: number;
-  device?: RecordingDevice;
 };
 
 export type RawRecording = {
@@ -83,15 +56,13 @@ export async function closeBrowser(): Promise<void> {
 }
 
 export async function recordTour(url: string, options: RecordOptions): Promise<RawRecording> {
-  const device = DEVICES[options.device ?? "phone"];
+  const device = LAPTOP;
   const workDir = await mkdtemp(path.join(os.tmpdir(), "pmw-rec-"));
   const browser = await getBrowser();
   const contextStartedAt = Date.now();
   const context = await browser.newContext({
     viewport: device.viewport,
-    deviceScaleFactor: device.deviceScaleFactor,
-    isMobile: device.isMobile,
-    hasTouch: device.isMobile,
+    deviceScaleFactor: 1,
     locale: "en-IN",
     colorScheme: "light",
     reducedMotion: "no-preference",

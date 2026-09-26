@@ -24,7 +24,7 @@ export function GET(): Response {
   const body = [
     "# PitchMyWeb",
     "",
-    "> PitchMyWeb finds local businesses that have no website, builds each one a real sample website and a short demo video (phone and laptop views), and pitches it to the owner from the user's own WhatsApp. It is for freelancers, web designers and agencies who sell websites to small businesses.",
+    "> PitchMyWeb finds local businesses that have no website, builds each one a real sample website and a short laptop-screen demo video, and pitches it to the owner from the user's own WhatsApp. It is for freelancers, web designers and agencies who sell websites to small businesses.",
     "",
     "Searching for businesses is free; pitches are bought in batches. On the Auto plan the user links WhatsApp for each campaign and is signed out when it finishes; on the Direct plan they get one-tap wa.me links to send themselves. Numbers not on WhatsApp are replaced with the next lead instead of wasting the credit.",
     "",

@@ -128,7 +128,7 @@ async function postDiscoveryResults(executionId: string, businesses: unknown[]) 
   return handleDiscoveryResults(prisma, request, JOB_SECRET);
 }
 
-async function readyRecording(recordingId: string, options: { laptop?: boolean } = {}) {
+async function readyRecording(recordingId: string) {
   await prisma.demoRecording.update({
     where: { id: recordingId },
     data: {
@@ -137,7 +137,6 @@ async function readyRecording(recordingId: string, options: { laptop?: boolean }
       mimeType: "video/mp4",
       durationMs: 22000,
       sizeBytes: 3_000_000,
-      ...(options.laptop ? { desktopStorageKey: `recordings/test/${recordingId}-laptop.mp4`, desktopDurationMs: 22000, desktopSizeBytes: 4_000_000 } : {}),
     },
   });
 }
@@ -585,18 +584,17 @@ describe("recording hand-off and delivery", () => {
     expect(message.body).not.toContain("{{");
   });
 
-  it("Auto: sends the phone video with the pitch and the laptop video after it", async () => {
-    const { user, pipeline } = await recordingStage("two-videos", "AUTO");
+  it("Auto: sends one video, the laptop walkthrough, with the pitch as its caption", async () => {
+    const { user, pipeline } = await recordingStage("one-video", "AUTO");
     await connectWhatsApp(user.id);
-    await readyRecording(pipeline.recordingId!, { laptop: true });
+    await readyRecording(pipeline.recordingId!);
     await onRecordingFinished(prisma, pipeline.recordingId!);
 
     const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
     const message = await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: queued.whatsappMessageId! } });
     expect(message.mediaKind).toBe("VIDEO");
     expect(message.mediaStorageKey).toBe(`recordings/test/${pipeline.recordingId}.mp4`);
-    expect(message.secondaryMediaStorageKey).toBe(`recordings/test/${pipeline.recordingId}-laptop.mp4`);
-    expect(message.secondaryCaption).toContain("laptop");
+    expect(message.body).not.toContain("two short videos");
   });
 
   it("Direct: prepares a wa.me link with the site and video links, then marks SENT on confirmation", async () => {
@@ -938,6 +936,39 @@ describe("demo video retention", () => {
       expect((await getPublicSite(prisma, project.slug)).hasVideo).toBe(false);
       const after = (await listCampaignLeads(prisma, user.id, campaign.id)).items[0]!;
       expect(after.pipeline).toMatchObject({ videoReady: false, videoExpired: true });
+    } finally {
+      g.objectStorage = previous;
+    }
+  });
+
+  it("also deletes the phone video left beside a laptop video from before pitches went laptop-only", async () => {
+    const deleted: string[] = [];
+    const previous = g.objectStorage;
+    g.objectStorage = { delete: async (key: string) => void deleted.push(key), signedGetUrl: async (key: string) => `https://storage.test/${key}` };
+    try {
+      const { pipeline } = await recordingStage("legacy-phone-video", "DIRECT");
+      const recordingId = pipeline.recordingId!;
+      // What migration 20260926200000_laptop_video_only leaves: the laptop
+      // video moved into storageKey, the phone one still in the bucket.
+      await prisma.demoRecording.update({
+        where: { id: recordingId },
+        data: {
+          status: "READY",
+          storageKey: `recordings/test/${recordingId}-laptop.mp4`,
+          posterKey: `recordings/test/${recordingId}-laptop.jpg`,
+          expiresAt: new Date(Date.now() - 1000),
+        },
+      });
+      const { deleteExpiredRecordings } = await import("../jobs/pipeline-maintenance.job");
+      await deleteExpiredRecordings(prisma);
+      expect(deleted).toEqual(
+        expect.arrayContaining([
+          `recordings/test/${recordingId}-laptop.mp4`,
+          `recordings/test/${recordingId}-laptop.jpg`,
+          `recordings/test/${recordingId}.mp4`,
+          `recordings/test/${recordingId}.jpg`,
+        ]),
+      );
     } finally {
       g.objectStorage = previous;
     }

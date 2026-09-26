@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { Activity, Building2, Download, Laptop, ListChecks, Search, Send, Smartphone } from "lucide-react";
+import { Activity, Building2, Download, Laptop, ListChecks, Search, Send } from "lucide-react";
 import type { CampaignLeadRow, CampaignOverview, PitchBatch } from "@/lib/api-client";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Button } from "@/components/dashboard-ui/button";
@@ -237,21 +237,13 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                     <TableCell label="Demo video">
                       {row.pipeline?.videoReady ? (
                         <span className="inline-flex flex-wrap items-center justify-end gap-1 sm:justify-start">
-                          <Button asChild variant="ghost" size="sm" title="Watch the phone video">
+                          <Button asChild variant="ghost" size="sm" title="Watch the laptop video">
                             <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer">
-                              <Smartphone />
-                              Phone
+                              <Laptop />
+                              Laptop video
                             </a>
                           </Button>
-                          {row.pipeline.laptopVideoReady && (
-                            <Button asChild variant="ghost" size="sm" title="Watch the laptop video">
-                              <a href={`/api/pipelines/${row.pipeline.id}/video?view=laptop`} target="_blank" rel="noopener noreferrer">
-                                <Laptop />
-                                Laptop
-                              </a>
-                            </Button>
-                          )}
-                          <Button asChild variant="ghost" size="sm" title="Download the phone video as MP4">
+                          <Button asChild variant="ghost" size="sm" title="Download the video as MP4">
                             <a href={`/api/pipelines/${row.pipeline.id}/video?download=1`}>
                               <Download />
                               <span className="sr-only">Download</span>
