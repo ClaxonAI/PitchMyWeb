@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
 import { exchangeClerkSession } from "@/lib/clerk-session";
 import { afterSignIn } from "@/lib/safe-next";
-import { clearSignInIntent, parkSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
-import { Github } from "lucide-react";
+import { CLERK_RETURN, clearSignInIntent, isReturningFromProvider, parkSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
+import { Github, LoaderCircle } from "lucide-react";
 
 type AuthMode = "sign-in" | "sign-up";
 type Provider = "google" | "github";
@@ -25,6 +25,21 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
   const { isSignedIn, isLoaded, getToken, signOut } = useAuth();
   const [pending, setPending] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Back from Google/GitHub: cover the form with "Signing you in…" until the
+  // session is exchanged and the next page opens. On a phone, Clerk's script
+  // takes a moment to load, and meanwhile the sign-in form they just completed
+  // looked like the sign-in had not worked.
+  const [returning, setReturning] = useState(false);
+  useEffect(() => {
+    if (!isReturningFromProvider()) return;
+    setReturning(true);
+    // Never a permanent cover: if nothing has happened by now, show the form.
+    const timer = window.setTimeout(() => setReturning(false), 20_000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) setReturning(false);
+  }, [isLoaded, isSignedIn]);
 
   // Read after mount (not useSearchParams) so the sign-in form stays in the
   // static HTML; see AuthForm.
@@ -52,6 +67,7 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
         window.location.replace(afterSignIn(intent.next));
         return;
       }
+      setReturning(false);
       if (ok !== false) {
         // A new account this device may not create (three already exist on
         // it). Drop the Clerk session so the visitor can sign in to one of
@@ -108,21 +124,16 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
         throw new Error("Your previous session has expired. Please sign in again.");
       }
       const strategy = `oauth_${provider}` as const;
-      // Left pointing at the destination page deliberately (the dashboard
-      // unless the visitor was headed somewhere else). Clerk only routes through
-      // redirectCallbackUrl when it needs more input, so landing on
-      // /dashboard without the app's cookie is the ordinary case, not a
-      // failure — the dashboard sends those visitors to /login, and the
-      // effect above completes the exchange there and returns them.
-      //
-      // Do not "fix" this to /sso-callback: an absolute URL stops the flow
-      // starting at all, and a relative one was no better in testing. The
-      // recovery above is what makes the destination not matter.
+      // Back to /login, relative: the effect above exchanges the Clerk session
+      // for the app's there and opens the destination. Pointing Clerk at the
+      // destination itself (it used to be /dashboard) cost a phone a server
+      // round trip that bounced back to /login anyway. Not /sso-callback, and
+      // not absolute: an absolute URL stops the flow starting at all.
       const redirectCallbackUrl = `${window.location.origin}/sso-callback`;
       // Clerk drops our query string on the way back, so where the visitor was
       // going and the order they are claiming ride along in sessionStorage.
       parkSignInIntent(intent);
-      const redirectUrl = afterSignIn(intent.next);
+      const redirectUrl = CLERK_RETURN;
       if (mode === "sign-in") {
         if (signInFetchStatus === "fetching") return;
         const result = await signIn.sso({ strategy, redirectUrl, redirectCallbackUrl });
@@ -140,6 +151,12 @@ export function ClerkProviderButtons({ mode }: { mode: AuthMode }) {
 
   return (
     <div className="flex flex-col gap-2">
+      {returning && !error ? (
+        <div role="status" className="fixed inset-0 z-[70] flex flex-col items-center justify-center gap-3 bg-paper text-ink">
+          <LoaderCircle aria-hidden className="size-7 animate-spin text-primary" />
+          <p className="text-[15px] font-medium">Signing you in…</p>
+        </div>
+      ) : null}
       {providers.map((provider) => (
         <button
           key={provider.id}

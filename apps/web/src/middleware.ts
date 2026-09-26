@@ -47,6 +47,10 @@ function next(request: { headers: Headers; nextUrl: { pathname: string; search: 
   return NextResponse.next({ request: { headers } });
 }
 
+function hasClerkSession(cookies: Array<{ name: string; value: string }>): boolean {
+  return cookies.some(({ name, value }) => (name === "__client_uat" || name.startsWith("__client_uat_")) && Number(value) > 0);
+}
+
 function clearSession(response: NextResponse): NextResponse {
   response.cookies.delete(SESSION_COOKIE);
   response.cookies.delete(SIGNED_IN_HINT);
@@ -57,6 +61,16 @@ export default clerkMiddleware((_auth, request) => {
   const { pathname, searchParams } = request.nextUrl;
   const signedIn = request.cookies.has(SESSION_COOKIE);
   const hinted = request.cookies.get(SIGNED_IN_HINT)?.value === "1";
+
+  // Signed in with Clerk (Google/GitHub) but not yet with the app, on the
+  // landing page: Clerk returned them there instead of to /login, which is
+  // where the sign-in is finished. Send them on rather than leaving them
+  // looking at a signed-out landing page. __client_uat is Clerk's
+  // "signed in since" cookie, 0 when signed out; every failed exchange signs
+  // out of Clerk, so this cannot loop.
+  if (pathname === "/" && !signedIn && hasClerkSession(request.cookies.getAll())) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   if (AUTH_FORMS.has(pathname)) {
     if (searchParams.get(EXPIRED_PARAM) === "1") {

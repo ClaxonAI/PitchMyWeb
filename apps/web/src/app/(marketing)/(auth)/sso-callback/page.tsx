@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { exchangeClerkSession } from "@/lib/clerk-session";
 import { afterSignIn } from "@/lib/safe-next";
-import { clearSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
+import { CLERK_RETURN, clearSignInIntent, readSignInIntent } from "@/lib/sign-in-intent";
 
 export default function SsoCallbackPage() {
   const router = useRouter();
@@ -39,6 +39,14 @@ export default function SsoCallbackPage() {
   }, [getToken, isLoaded, isSignedIn, router, signOut]);
 
   return (
-    <AuthenticateWithRedirectCallback />
+    // Every finish — sign-in, sign-up, and a sign-in Clerk turned into a
+    // sign-up — continues on /login, which completes the exchange if the
+    // effect above has not already.
+    <AuthenticateWithRedirectCallback
+      signInForceRedirectUrl={CLERK_RETURN}
+      signUpForceRedirectUrl={CLERK_RETURN}
+      signInFallbackRedirectUrl={CLERK_RETURN}
+      signUpFallbackRedirectUrl={CLERK_RETURN}
+    />
   );
 }

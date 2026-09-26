@@ -1,4 +1,5 @@
 import { ClerkProvider } from "@clerk/nextjs";
+import { CLERK_RETURN } from "@/lib/sign-in-intent";
 
 // Clerk is only needed where people actually sign in: social sign-in on
 // /login and /register, and the OAuth return on /sso-callback. Mounting it
@@ -9,6 +10,21 @@ import { ClerkProvider } from "@clerk/nextjs";
 //
 // No publishableKey prop: the SDK reads NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 // itself, and clerkMiddleware() reads that same variable and nothing else.
+//
+// Every way back from Google or GitHub lands on /login, which turns the Clerk
+// session into the app's own and moves on (ClerkProviderButtons). Clerk's own
+// defaults send some returns to "/" instead — notably a sign-in that Clerk
+// turns into a sign-up for a new account — and the landing page cannot finish
+// a sign-in, so those visitors sat there looking signed out.
 export default function AuthLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <ClerkProvider>{children}</ClerkProvider>;
+  return (
+    <ClerkProvider
+      signInForceRedirectUrl={CLERK_RETURN}
+      signUpForceRedirectUrl={CLERK_RETURN}
+      signInFallbackRedirectUrl={CLERK_RETURN}
+      signUpFallbackRedirectUrl={CLERK_RETURN}
+    >
+      {children}
+    </ClerkProvider>
+  );
 }
