@@ -41,7 +41,27 @@ function successUrl(orderId: string, claimed: boolean | undefined): string {
 export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set while this dialog steps aside for Razorpay, so that close is not
+  // taken as the buyer closing the order.
+  const handingOff = useRef(false);
+
+  // A modal <dialog> sits in the browser's top layer and makes everything
+  // else on the page inert, and Razorpay's checkout is an iframe appended to
+  // <body>: left open, this dialog would cover it and swallow every click,
+  // leaving the buyer staring at "Opening Razorpay…". So the dialog closes
+  // while Razorpay is up and comes back when Razorpay hands control back.
+  const stepAside = () => {
+    const dialog = ref.current;
+    if (!dialog?.open) return;
+    handingOff.current = true;
+    dialog.close();
+  };
+  const comeBack = () => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  };
 
   useEffect(() => {
     const dialog = ref.current;
@@ -51,6 +71,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
     if (order) {
       setError(null);
       setPending(false);
+      setConfirming(false);
     }
   }, [order]);
 
@@ -93,6 +114,8 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
           // Razorpay has charged the card, but this callback is client-side
           // and therefore not trustworthy on its own: the server re-derives
           // the signature before any order becomes PAID.
+          comeBack();
+          setConfirming(true);
           void (async () => {
             try {
               const verified = await checkoutApi.verify({
@@ -102,6 +125,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
               });
               if (verified.status !== "PAID") {
                 setError("We couldn't confirm that payment. Nothing has been charged twice — please contact support with your payment id.");
+                setConfirming(false);
                 setPending(false);
                 return;
               }
@@ -112,6 +136,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
                   ? verifyError.message
                   : "Your payment went through but we couldn't confirm it. Please contact support before paying again.",
               );
+              setConfirming(false);
               setPending(false);
             }
           })();
@@ -120,6 +145,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
           // Closing Razorpay's own modal is a cancellation, not a failure:
           // the local order stays PENDING and the buyer can simply pay again.
           ondismiss: () => {
+            comeBack();
             setPending(false);
           },
         },
@@ -130,6 +156,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
         setPending(false);
       });
 
+      stepAside();
       checkout.open();
     } catch (createError) {
       setError(createError instanceof ApiError ? createError.message : "We couldn't start the payment. Please try again.");
@@ -142,7 +169,13 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={() => {
+        if (handingOff.current) {
+          handingOff.current = false;
+          return;
+        }
+        onClose();
+      }}
       onClick={(e) => e.target === ref.current && onClose()}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-panel bg-white p-0 text-ink shadow-lift backdrop:bg-ink/40 backdrop:backdrop-blur-sm open:animate-pop"
     >
@@ -200,7 +233,7 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
 
           <Button onClick={confirm} disabled={pending} size="lg" className="mt-6 w-full">
             {pending ? <Lock size={15} /> : <Check size={15} />}
-            {pending ? "Opening Razorpay…" : "Pay with Razorpay"}
+            {confirming ? "Confirming payment…" : pending ? "Opening Razorpay…" : "Pay with Razorpay"}
           </Button>
           <p className="mt-3 text-center text-[11px] text-ink/60">You will be charged {formatPrice({ amount: total, currency: order.currency })}</p>
         </div>
