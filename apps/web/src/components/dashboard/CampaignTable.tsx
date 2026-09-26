@@ -13,7 +13,7 @@ export function CampaignTable({ campaigns }: { campaigns: Campaign[] }) {
   }
 
   return (
-    <Table>
+    <Table stacked>
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
@@ -38,11 +38,11 @@ export function CampaignTable({ campaigns }: { campaigns: Campaign[] }) {
               }
             }}
           >
-            <TableCell className="font-medium">{campaign.name}</TableCell>
-            <TableCell>{campaign.category}</TableCell>
-            <TableCell>{campaign.location}</TableCell>
-            <TableCell><StatusBadge status={campaign.status} /></TableCell>
-            <TableCell className="text-dash-muted-foreground">{new Date(campaign.createdAt).toLocaleDateString()}</TableCell>
+            <TableCell primary className="font-medium">{campaign.name}</TableCell>
+            <TableCell label="Category">{campaign.category}</TableCell>
+            <TableCell label="Location">{campaign.location}</TableCell>
+            <TableCell label="Status"><StatusBadge status={campaign.status} /></TableCell>
+            <TableCell label="Created" className="text-dash-muted-foreground">{new Date(campaign.createdAt).toLocaleDateString()}</TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -179,7 +179,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
         <CardHeader>
           <CardTitle>Discovered leads</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 max-sm:px-3 max-sm:pb-3">
           {leadRows.length === 0 ? (
             campaign.status === "RUNNING" || campaign.status === "PROCESSING" ? (
               <EmptyState
@@ -200,7 +200,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               />
             )
           ) : (
-            <Table className="border-0">
+            <Table stacked className="border-0">
               <TableHeader>
                 <TableRow>
                   <TableHead>Business</TableHead>
@@ -214,7 +214,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
               <TableBody>
                 {leadRows.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="font-medium">
+                    <TableCell primary className="font-medium">
                       <span className="inline-flex items-center gap-2">
                         <Link href={`/leads/${row.id}`} className="hover:underline">
                           {row.business.name}
@@ -222,21 +222,21 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
                         <WebsiteVerificationBadge status={row.business.websiteVerificationStatus} />
                       </span>
                     </TableCell>
-                    <TableCell>{row.business.website ?? "—"}</TableCell>
-                    <TableCell>{row.business.city ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell label="Website">{row.business.website ?? "—"}</TableCell>
+                    <TableCell label="City">{row.business.city ?? "—"}</TableCell>
+                    <TableCell label="Status">
                       <StatusBadge status={row.status} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell label="Pipeline">
                       {row.pipeline ? (
                         row.pipeline.stage === "FAILED" ? <FailedPipeline pipeline={row.pipeline} /> : <StatusBadge status={row.pipeline.stage} />
                       ) : (
                         <BlockedReason reason={row.blockedReason} standby={remainingSlots === 0} />
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell label="Demo video">
                       {row.pipeline?.videoReady ? (
-                        <span className="inline-flex flex-wrap items-center gap-1">
+                        <span className="inline-flex flex-wrap items-center justify-end gap-1 sm:justify-start">
                           <Button asChild variant="ghost" size="sm" title="Watch the phone video">
                             <a href={`/api/pipelines/${row.pipeline.id}/video`} target="_blank" rel="noopener noreferrer">
                               <Smartphone />

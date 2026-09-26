@@ -66,7 +66,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           )}
         </Card>
       ) : (
-        <Table>
+        <Table stacked>
           <TableHeader>
             <TableRow>
               <TableHead>Business</TableHead>
@@ -80,16 +80,16 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           <TableBody>
             {leads.map((lead) => (
               <TableRow key={lead.id}>
-                <TableCell className="font-medium">
+                <TableCell primary className="font-medium">
                   <Link href={`/leads/${lead.id}`} className="hover:underline">
                     {lead.business.name}
                   </Link>
                 </TableCell>
-                <TableCell>{lead.business.category}</TableCell>
-                <TableCell>{lead.business.city ?? "—"}</TableCell>
-                <TableCell>{lead.business.website ? "Has website" : "No website"}</TableCell>
-                <TableCell>{lead.score ?? "—"}</TableCell>
-                <TableCell>
+                <TableCell label="Category">{lead.business.category}</TableCell>
+                <TableCell label="City">{lead.business.city ?? "—"}</TableCell>
+                <TableCell label="Website">{lead.business.website ? "Has website" : "No website"}</TableCell>
+                <TableCell label="Score">{lead.score ?? "—"}</TableCell>
+                <TableCell label="Status">
                   <StatusBadge status={lead.status} />
                 </TableCell>
               </TableRow>

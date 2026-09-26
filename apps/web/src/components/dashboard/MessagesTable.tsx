@@ -50,10 +50,10 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
       <div className="border-b border-ink/6 px-5 py-3.5">
         <p className="text-[13px] font-semibold">Messages</p>
       </div>
-      {/* Tables are the one thing allowed to scroll sideways on a phone;
-          everything else in this page stacks instead. */}
-      <div className="relative overflow-x-auto">
-        <table className="w-full min-w-[520px] border-collapse text-left">
+      {/* On a phone each message stacks into a card (dash-table-stack)
+          instead of a table scrolling sideways. */}
+      <div className="dash-table-stack relative overflow-x-auto max-sm:p-3">
+        <table className="w-full border-collapse text-left sm:min-w-[520px]">
           <thead>
             <tr className="border-b border-ink/6 text-[11px] tracking-wide text-ink/60 uppercase">
               <th scope="col" className="px-5 py-2.5 font-medium">To</th>
@@ -65,15 +65,15 @@ export function MessagesTable({ messages }: { messages: WhatsAppMessage[] }) {
           <tbody>
             {messages.map((message) => (
               <tr key={message.id} className="border-b border-ink/5 last:border-0">
-                <td className="px-5 py-3 font-mono text-[12px] text-ink/70">+{message.phoneNumber}</td>
-                <td className="max-w-[280px] truncate px-5 py-3 text-[13px] text-ink/70">{message.body}</td>
-                <td className="px-5 py-3">
+                <td data-primary className="px-5 py-3 font-mono text-[12px] text-ink/70">+{message.phoneNumber}</td>
+                <td data-label="Message" className="px-5 py-3 text-[13px] text-ink/70 sm:max-w-[280px] sm:truncate">{message.body}</td>
+                <td data-label="Status" className="px-5 py-3">
                   <span className={cn("rounded-full px-2 py-0.5 font-mono text-[9px] tracking-wide", TONE[message.status])}>
                     {message.status}
                   </span>
                   {describe(message) && <span className="ml-2 text-[11px] text-ink/60">{describe(message)}</span>}
                 </td>
-                <td className="px-5 py-3 text-[12px] whitespace-nowrap text-ink/60">{time(message.queuedAt)}</td>
+                <td data-label="Queued" className="px-5 py-3 text-[12px] whitespace-nowrap text-ink/60">{time(message.queuedAt)}</td>
               </tr>
             ))}
           </tbody>
