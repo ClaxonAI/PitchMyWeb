@@ -8,7 +8,7 @@ const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken" })
 // were drawn in — are missing on Android and on the recorder's Linux box, so
 // the designs ship metric-compatible web fonts instead. Not preloaded: a
 // browser only downloads them on pages that use them.
-const gelasio = Gelasio({ subsets: ["latin"], weight: ["400", "500"], style: ["normal", "italic"], variable: "--font-gelasio", preload: false });
+const gelasio = Gelasio({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-gelasio", preload: false });
 const barlowCondensed = Barlow_Condensed({ subsets: ["latin"], weight: ["400", "800", "900"], variable: "--font-barlow-condensed", preload: false });
 // Studio, editorial and atelier designs. Same rule: only pages that use them download them.
 // Variable fonts where Google has them: one file per style instead of one per
