@@ -65,7 +65,7 @@ export function isDummyPaymentGateway(env: Env = process.env): boolean {
  * is always recomputed here from planId/market/couponCode — never trusted
  * from the client (see plan-pricing.ts's header comment).
  */
-export async function createOrder(db: Db, razorpay: RazorpayClient, input: CreateOrderInput): Promise<CreatedOrder> {
+export async function createOrder(db: Db, razorpay: RazorpayClient, input: CreateOrderInput, buyerId: string | null = null): Promise<CreatedOrder> {
   const { totalCents, currency } = await computeDbOrderAmount(db, input);
   if (totalCents < MIN_AMOUNT_CENTS) {
     throw new ValidationError(`Order amount is below the minimum payable amount (${MIN_AMOUNT_CENTS} cents)`);
@@ -80,6 +80,7 @@ export async function createOrder(db: Db, razorpay: RazorpayClient, input: Creat
       market: input.market,
       countryCode: input.countryCode ?? null,
       couponCode: input.couponCode ?? null,
+      buyerId,
       amount: totalCents,
       currency,
       // Frozen at creation from plan-pricing.ts, same as amount — a later
@@ -167,6 +168,36 @@ export async function verifyPayment(db: Db, keySecret: string, input: VerifyPaym
 }
 
 /**
+ * Marks an order PAID from Razorpay's signed webhook (payment.captured /
+ * order.paid), the path that does not depend on the buyer's browser: a buyer
+ * who pays and closes the tab before /api/checkout/verify runs is otherwise
+ * charged and never credited. The PAID transition is conditional, so racing
+ * the browser's own verify (or a repeated delivery) credits and redeems the
+ * coupon once. The payer's email is recorded for the verified-email claim
+ * (claimPaidOrdersForUser); a buyer who was signed in is credited at once.
+ */
+export async function markOrderPaidFromWebhook(
+  db: Db,
+  input: { razorpayOrderId: string; razorpayPaymentId: string; payerEmail: string | null },
+): Promise<"paid" | "already_paid" | "unknown_order"> {
+  const order = await db.order.findUnique({ where: { razorpayOrderId: input.razorpayOrderId } });
+  if (!order) return "unknown_order";
+  const payerEmail = input.payerEmail?.trim().toLowerCase() || null;
+  const changed = await db.order.updateMany({
+    where: { id: order.id, status: { not: "PAID" } },
+    data: { status: "PAID", razorpayPaymentId: input.razorpayPaymentId, ...(payerEmail ? { payerEmail } : {}) },
+  });
+  if (changed.count === 0) {
+    if (payerEmail && !order.payerEmail) await db.order.update({ where: { id: order.id }, data: { payerEmail } });
+    if (order.buyerId) await claimOrder(db, order.id, order.buyerId);
+    return "already_paid";
+  }
+  await redeemCoupon(db, order.couponCode);
+  if (order.buyerId) await claimOrder(db, order.id, order.buyerId);
+  return "paid";
+}
+
+/**
  * Attaches a PAID, unclaimed order to a newly-registered or newly-logged-in
  * user. Called from the register/login route handlers with whatever
  * `orderId` a post-payment redirect carried in the URL — best-effort by
@@ -180,9 +211,10 @@ export async function claimOrder(db: Db, orderId: string, userId: string): Promi
     where: { id: orderId, userId: null, status: "PAID" },
     data: { userId },
   });
-  if (result.count !== 1) return;
   const order = await db.order.findUnique({ where: { id: orderId } });
-  if (!order) return;
+  // Claimed just now, or already this user's (the webhook and the browser's
+  // verify can both get here; the grant below is idempotent per order).
+  if (!order || order.status !== "PAID" || (result.count !== 1 && order.userId !== userId)) return;
   // planId is kept on the user record for display/admin purposes only — it
   // no longer grants unlimited access on its own (see paid-access.ts). The
   // credits this specific order paid for are what actually unlocks pitching,

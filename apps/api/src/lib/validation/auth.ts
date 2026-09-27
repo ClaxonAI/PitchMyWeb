@@ -6,7 +6,8 @@ import { z } from "zod";
 // assumption.
 export const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8, "password must be at least 8 characters"),
+  // bcrypt reads only the first 72 bytes; a longer limit would silently ignore the rest.
+  password: z.string().min(8, "password must be at least 8 characters").max(72, "password must be at most 72 characters"),
   // Set when /register was reached via a post-payment redirect from
   // /pricing (lib/checkout/checkout.service.ts's claimOrder attaches it to
   // the new account if it's a PAID, unclaimed order — silently ignored
@@ -19,7 +20,7 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1, "password is required"),
+  password: z.string().min(1, "password is required").max(1024),
   // Same as registerSchema's orderId, for a buyer who already had an
   // account and chose to log in instead of registering after paying.
   orderId: z.string().min(1).optional(),

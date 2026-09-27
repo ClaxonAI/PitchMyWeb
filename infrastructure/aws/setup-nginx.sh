@@ -65,6 +65,20 @@ rm -f /etc/nginx/sites-enabled/default
 
 nginx -t
 systemctl enable --now nginx
+
+# The file just installed is plain :80 (certbot adds the TLS blocks), so
+# reloading it on its own would take HTTPS down until certbot runs below — and
+# certbot is skipped when the DNS check or CERTBOT_EMAIL fails, which left the
+# site on HTTP only. When a certificate already exists, put it straight back:
+# `certbot install` only edits the nginx config (no Let's Encrypt request, so
+# no rate limit), and the site is on HTTPS again before anything else runs.
+CERT_NAME=pitchmyweb.in
+if [ -d "/etc/letsencrypt/live/${CERT_NAME}" ]; then
+  step "re-apply existing certificate"
+  certbot install --nginx --cert-name "$CERT_NAME" --redirect --non-interactive \
+    || { echo "::error::could not re-apply the TLS certificate to nginx" >&2; exit 1; }
+fi
+nginx -t
 systemctl reload nginx
 
 step "dns check"

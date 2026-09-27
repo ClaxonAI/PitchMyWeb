@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../../lib/db/client";
 import { SESSION_COOKIE_NAME, createSession } from "../../../../../lib/auth/session";
+import { clientIp, rateLimit } from "../../../../../lib/api/rate-limit";
+import { errorResponse } from "../../../../../lib/api/response";
+import { takeOverUnverifiedAccount } from "../../../../../lib/auth/verified-email";
 import { claimOrder, claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice, DeviceAccountLimitError } from "../../../../../lib/auth/trial-device";
 
@@ -38,9 +41,13 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
     return NextResponse.json({ error: "Sign-in is not configured" }, { status: 503 });
   }
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await rateLimit(`clerk-session:ip:${clientIp(request)}`, 30, 15 * 60 * 1000);
 
   try {
-    const verified = await verifyToken(token, { secretKey });
+    // authorizedParties: a token Clerk issued for some other site that uses
+    // the same instance must not open a session here.
+    const appOrigin = appOriginFromEnv();
+    const verified = await verifyToken(token, { secretKey, ...(appOrigin ? { authorizedParties: [appOrigin] } : {}) });
     if (!verified.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const clerk = createClerkClient({ secretKey });
@@ -67,8 +74,11 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
     }
 
     const user = existing
-      ? await db.user.update({ where: { id: existing.id }, data: { lastLoginAt: new Date(), ...(existing.googleId ? {} : { googleId: verified.sub }) } })
-      : await db.user.create({ data: { email, googleId: verified.sub, passwordHash: null, name: clerkUser.firstName ? `${clerkUser.firstName}${clerkUser.lastName ? ` ${clerkUser.lastName}` : ""}` : null, imageUrl: clerkUser.imageUrl } });
+      ? await db.user.update({
+          where: { id: existing.id },
+          data: { lastLoginAt: new Date(), ...(existing.googleId ? {} : { googleId: verified.sub }), ...(await takeOverUnverifiedAccount(db, existing)) },
+        })
+      : await db.user.create({ data: { email, emailVerifiedAt: new Date(), googleId: verified.sub, passwordHash: null, name: clerkUser.firstName ? `${clerkUser.firstName}${clerkUser.lastName ? ` ${clerkUser.lastName}` : ""}` : null, imageUrl: clerkUser.imageUrl } });
 
     // The order just paid for, whatever email Razorpay recorded; then any
     // other paid orders under this verified email.
@@ -99,6 +109,18 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
   }
 }
 
+function appOriginFromEnv(): string | null {
+  try {
+    return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  return handleClerkSession(prisma, request);
+  try {
+    return await handleClerkSession(prisma, request);
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

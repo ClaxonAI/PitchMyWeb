@@ -69,6 +69,17 @@ describe("grantCredits", () => {
 });
 
 describe("ensureFreeGrant", () => {
+  it("gives an unverified email/password account nothing until its email is verified", async () => {
+    const user = await createTestUser("grant-unverified", { verified: false });
+    createdUserIds.push(user.id);
+    expect((await ensureFreeGrant(prisma, user.id)).availableCredits).toBe(0);
+    expect(await prisma.pitchCreditLedger.count({ where: { userId: user.id } })).toBe(0);
+
+    // Signing in with Google/GitHub verifies it; the grant follows on the next read.
+    await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+    expect((await ensureFreeGrant(prisma, user.id)).availableCredits).toBe(FREE_PITCH_ALLOWANCE);
+  });
+
   it("grants the free allowance exactly once, however many times it is called", async () => {
     const user = await newUser("free-grant-once");
     await ensureFreeGrant(prisma, user.id);

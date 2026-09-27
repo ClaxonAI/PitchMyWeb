@@ -31,9 +31,15 @@ const base = {
   instances: 1,
   autorestart: true,
   max_restarts: 10,
-  restart_delay: 4000,
+  // Crash loops back off (0.1s, 0.15s, … up to 15s) instead of burning through
+  // max_restarts in under a minute and then staying down for good.
+  exp_backoff_restart_delay: 100,
   merge_logs: true,
   time: true,
+  // This file only runs on the production box. Pinned here rather than left to
+  // SSM alone: without it the API would accept dummy (free) payments and keep
+  // rate limits per process — a missing setting must not fail open.
+  env: { APP_ENV: "production" },
 };
 
 const web = (name, cwd, maxMemory) => ({
@@ -45,6 +51,8 @@ const web = (name, cwd, maxMemory) => ({
   max_memory_restart: maxMemory,
 });
 
+// Workers handle SIGTERM by finishing the job in hand (a WhatsApp send, a
+// recording); PM2's default 1.6s would SIGKILL them mid-way on every deploy.
 const worker = (name, cwd, maxMemory, extra = {}) => ({
   ...base,
   name,
@@ -52,6 +60,7 @@ const worker = (name, cwd, maxMemory, extra = {}) => ({
   script: "npm",
   args: "start",
   max_memory_restart: maxMemory,
+  kill_timeout: 30000,
   ...extra,
 });
 

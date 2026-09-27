@@ -8,6 +8,7 @@ import { errorResponse, jsonOk } from "../../../../lib/api/response";
 import { changePassword } from "../../../../lib/users/me.service";
 import { changePasswordSchema } from "../../../../lib/validation/me";
 import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
+import { deleteOtherSessions, SESSION_COOKIE_NAME } from "../../../../lib/auth/session";
 
 const WINDOW_MS = 15 * 60 * 1000;
 
@@ -23,6 +24,9 @@ export async function handleChangePassword(db: PrismaClient, request: NextReques
 
   const body = await parseJsonBody(request, changePasswordSchema);
   await changePassword(db, user.id, body);
+  // A session someone else opened with the old password (a stolen one, the
+  // usual reason to change it) ends here; this device stays signed in.
+  await deleteOtherSessions(db, user.id, request.cookies.get(SESSION_COOKIE_NAME)?.value);
   return jsonOk({ success: true });
 }
 

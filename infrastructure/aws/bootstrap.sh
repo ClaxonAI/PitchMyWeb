@@ -206,7 +206,7 @@ fi
 cd "$APP_DIR"
 
 step "secrets from SSM"
-bash infrastructure/aws/load-secrets.sh
+APP_USER="$APP_USER" bash infrastructure/aws/load-secrets.sh
 
 # Sourced here, before the build. apps/web inlines NEXT_PUBLIC_* at build time,
 # so a build that runs without this produces a bundle with no Clerk key —
@@ -281,6 +281,8 @@ done
 
 step "swap in the new build"
 for app in web api sites; do
+  # The build being replaced is kept as .next-previous until the next deploy,
+  # so infrastructure/aws/rollback.sh can put it back in seconds.
   rm -rf "apps/$app/.next-previous"
   # A rename, so it is atomic and the running process keeps serving from the
   # old inode until pm2 restarts it.
@@ -300,11 +302,14 @@ fi
 app_pm2 save
 env PATH="$PATH" pm2 startup systemd -u "$APP_USER" --hp "/home/$APP_USER" | tail -1 | bash || true
 
-# Only once the new build is being served: until pm2 has restarted, the old
-# processes are still reading from these inodes.
-for app in web api sites; do
-  rm -rf "apps/$app/.next-previous"
-done
+# Log rotation: PM2 otherwise appends to its logs forever and fills the disk.
+# Best-effort — a registry hiccup here must not fail an otherwise good deploy.
+if ! app_pm2 describe pm2-logrotate >/dev/null 2>&1; then
+  app_pm2 install pm2-logrotate || echo "::warning::pm2-logrotate could not be installed"
+fi
+app_pm2 set pm2-logrotate:max_size 10M >/dev/null 2>&1 || true
+app_pm2 set pm2-logrotate:retain 7 >/dev/null 2>&1 || true
+app_pm2 set pm2-logrotate:compress true >/dev/null 2>&1 || true
 
 step "nginx + tls"
 # After pm2, so the backends are already listening when the redirect to HTTPS
@@ -319,12 +324,27 @@ free -m
 step "health"
 # What the deploy actually serves, straight from each backend (nginx aside),
 # so the log says whether the release came up — not only that pm2 started it.
-sleep 5
-for target in "web http://127.0.0.1:3000/" "api http://127.0.0.1:4000/api/me" "sites http://127.0.0.1:3200/"; do
+# The deploy fails (and the GitHub run goes red) when the release is not
+# actually up, instead of reporting success over a crash-looping process.
+sleep 10
+healthy=1
+for target in "web http://127.0.0.1:3000/ 200" "api http://127.0.0.1:4000/api/health 200" "sites http://127.0.0.1:3200/robots.txt 200"; do
   set -- $target
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$2" || true)"
+  code="000"
+  for _ in 1 2 3 4 5 6; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$2" || true)"
+    [ "$code" = "$3" ] && break
+    sleep 5
+  done
   echo "$1: HTTP $code"
+  [ "$code" = "$3" ] || healthy=0
 done
+down="$(app_pm2 jlist 2>/dev/null | python3 -c 'import json,sys; print(" ".join(p["name"] for p in json.load(sys.stdin) if p["name"].startswith("pmw-") and p["pm2_env"]["status"] != "online"))' || echo "unknown")"
+if [ -n "$down" ]; then echo "not online: $down"; healthy=0; fi
+if [ "$healthy" -ne 1 ]; then
+  echo "::error::release is not healthy — see above. Roll back with: sudo bash infrastructure/aws/rollback.sh"
+  exit 1
+fi
 
 echo
 echo "=== bootstrap finished $(date -Is) ==="

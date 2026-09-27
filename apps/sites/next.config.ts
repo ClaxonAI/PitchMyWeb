@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+          // Only this app and the dashboard may frame a preview (clickjacking).
+          { key: "Content-Security-Policy", value: `frame-ancestors ${frameAncestors}` },
         ],
       },
       {

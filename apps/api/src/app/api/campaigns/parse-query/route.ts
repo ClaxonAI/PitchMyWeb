@@ -4,6 +4,7 @@ import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../lib/db/client";
 import { requireCurrentUser } from "../../../../lib/auth/current-user";
 import { parseJsonBody } from "../../../../lib/api/request";
+import { rateLimit } from "../../../../lib/api/rate-limit";
 import { errorResponse, jsonOk } from "../../../../lib/api/response";
 import { parseCampaignQueryRequestSchema } from "../../../../lib/validation/campaign-query";
 import { parseCampaignQuery, resolveCampaignQueryParser } from "../../../../lib/ai/parse-campaign-query.service";
@@ -14,7 +15,9 @@ export async function handleParseCampaignQuery(
   request: NextRequest,
   parser: CampaignQueryParser | null = resolveCampaignQueryParser(),
 ): Promise<NextResponse> {
-  await requireCurrentUser(db, request);
+  const user = await requireCurrentUser(db, request);
+  // Every call is a paid model request.
+  await rateLimit(`parse-query:user:${user.id}`, 30, 10 * 60 * 1000);
   const body = await parseJsonBody(request, parseCampaignQueryRequestSchema);
   const result = await parseCampaignQuery(body.query, parser);
   return jsonOk(result);

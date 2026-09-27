@@ -54,10 +54,15 @@ export function uniqueBusinessName(base: string): string {
 
 export type TestUser = { id: string; email: string; role: UserRole };
 
-export async function createTestUser(prefix: string, options?: { role?: UserRole }): Promise<TestUser> {
+/**
+ * Verified by default (as if signed in with Google once), so it receives the
+ * free credits; `verified: false` for an email/password-only account.
+ */
+export async function createTestUser(prefix: string, options?: { role?: UserRole; verified?: boolean }): Promise<TestUser> {
   const email = uniqueEmail(prefix);
   const passwordHash = await hashPassword("Test1234!Strong");
-  const user = await prisma.user.create({ data: { email, passwordHash, role: options?.role ?? "USER" } });
+  const emailVerifiedAt = options?.verified === false ? null : new Date();
+  const user = await prisma.user.create({ data: { email, passwordHash, emailVerifiedAt, role: options?.role ?? "USER" } });
   return { id: user.id, email: user.email, role: user.role };
 }
 
