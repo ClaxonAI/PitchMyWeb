@@ -160,8 +160,8 @@ export const whatsappApi = {
 export const authApi = {
   login: (email: string, password: string, orderId?: string | null, fingerprintId?: string) =>
     api.post<{ id: string; email: string }>("/api/auth/login", { email, password, ...(orderId ? { orderId } : {}), ...(fingerprintId ? { fingerprintId } : {}) }),
-  register: (email: string, password: string, orderId?: string | null, fingerprintId?: string) =>
-    api.post<{ id: string; email: string }>("/api/auth/register", { email, password, ...(orderId ? { orderId } : {}), ...(fingerprintId ? { fingerprintId } : {}) }),
+  register: (email: string, password: string, orderId?: string | null, fingerprintId?: string, turnstileToken?: string | null) =>
+    api.post<{ id: string; email: string }>("/api/auth/register", { email, password, ...(orderId ? { orderId } : {}), ...(fingerprintId ? { fingerprintId } : {}), ...(turnstileToken ? { turnstileToken } : {}) }),
   logout: () => api.post<unknown>("/api/auth/logout", {}),
 };
 

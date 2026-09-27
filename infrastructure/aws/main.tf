@@ -85,6 +85,16 @@ resource "aws_route_table_association" "public" {
 }
 
 # Security Group for EC2
+# Web traffic: from anywhere, or only from Cloudflare's edge once every app
+# hostname is proxied (infrastructure/cloudflare/sync-dns.sh). The instance's
+# address has been public in DNS, so without this anyone can go around
+# Cloudflare — and its WAF, rate limit and DDoS protection — by sending
+# requests straight to it. Turn it on only after the proxy is: a grey-clouded
+# hostname sends visitors here directly, and they would be refused.
+locals {
+  web_ingress_cidrs = var.origin_cloudflare_only ? var.cloudflare_ipv4_cidrs : ["0.0.0.0/0"]
+}
+
 resource "aws_security_group" "ec2" {
   name        = "pitchmyweb-ec2"
   description = "Security group for PitchMyWeb EC2 instance"
@@ -94,14 +104,14 @@ resource "aws_security_group" "ec2" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.web_ingress_cidrs
   }
 
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = local.web_ingress_cidrs
   }
 
   dynamic "ingress" {

@@ -24,6 +24,10 @@ export default defineConfig({
       // ever seeing each other's jobs.
       WA_QUEUE_PREFIX: "bull-test",
       LEAD_PROVIDER: "demo",
+      // A Turnstile secret in a local .env would make every sign-up in the
+      // route tests need a real Cloudflare token. lib/auth/turnstile.test.ts
+      // passes its secret explicitly.
+      TURNSTILE_SECRET_KEY: "",
     },
   },
 });

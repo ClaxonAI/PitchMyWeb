@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { ApiError, authApi } from "@/lib/api-client";
 import { ClerkProviderButtons } from "./ClerkProviderButtons";
+import { TurnstileWidget } from "./TurnstileWidget";
 import { deviceFingerprint } from "@/lib/device-fingerprint";
 import { afterSignIn } from "@/lib/safe-next";
 import { clearSignInIntent, readSignInIntent, type SignInIntent } from "@/lib/sign-in-intent";
@@ -14,6 +15,11 @@ import { clearSignInIntent, readSignInIntent, type SignInIntent } from "@/lib/si
 // through /api/auth/google → apps/api).
 
 type Mode = "login" | "register";
+
+// Cloudflare Turnstile on password sign-up; inlined at build time, and absent
+// (no check at all) wherever it is not set. apps/api verifies the token.
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null;
+const TURNSTILE_UNAVAILABLE = "The verification check could not load, so password sign-up is unavailable. Check your connection and reload, or continue with Google or GitHub above.";
 
 const copy: Record<Mode, { title: string; subtitle: string; action: string; altText: string; altLabel: string; altHref: string }> = {
   login: {
@@ -87,6 +93,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }, []);
   const [pending, setPending] = useState(false);
   const [fingerprintId, setFingerprintId] = useState<string>();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+  const turnstileSiteKey = mode === "register" ? TURNSTILE_SITE_KEY : null;
   const text = copy[mode];
 
   useEffect(() => {
@@ -101,13 +110,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (turnstileSiteKey && !turnstileToken) {
+      setError("Still checking that you're not a bot. Give it a second, then press Create account again.");
+      return;
+    }
     setError(null);
     setPending(true);
     try {
       if (mode === "login") {
         await authApi.login(email, password, orderId, fingerprintId);
       } else {
-        await authApi.register(email, password, orderId, fingerprintId);
+        await authApi.register(email, password, orderId, fingerprintId, turnstileToken);
       }
       // A full navigation: the dashboard reads the session on the server, and
       // this guarantees it sees the cookie the API just set (no cached RSC
@@ -125,6 +138,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
               : caught.message
           : "Something went wrong. Please try again.",
       );
+      // Tokens are single-use; get a fresh one for the retry.
+      if (turnstileSiteKey) {
+        setTurnstileToken(null);
+        setTurnstileReset((count) => count + 1);
+      }
     } finally {
       setPending(false);
     }
@@ -183,6 +201,16 @@ export function AuthForm({ mode }: { mode: Mode }) {
             <p className="-mt-1 text-[12px] leading-relaxed text-ink/60">
               Your free pitches come with Google or GitHub sign-up, which confirms your email. Signed up with a password? Continue with Google or GitHub later to unlock them.
             </p>
+          )}
+
+          {turnstileSiteKey && (
+            <TurnstileWidget
+              siteKey={turnstileSiteKey}
+              action="register"
+              resetKey={turnstileReset}
+              onToken={setTurnstileToken}
+              onUnavailable={() => setError(TURNSTILE_UNAVAILABLE)}
+            />
           )}
 
           {error && (
