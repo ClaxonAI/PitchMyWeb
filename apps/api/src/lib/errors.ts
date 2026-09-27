@@ -251,3 +251,11 @@ export class InsufficientPitchCreditsError extends DomainError {
     );
   }
 }
+
+// Password reset: the code or reset token is wrong, used up or expired. One
+// message for every case, so a caller learns nothing about which.
+export class InvalidResetCodeError extends DomainError {
+  constructor(message = "That code is incorrect or has expired. Check the latest email, or ask for a new code.") {
+    super(message, "INVALID_RESET_CODE", 400);
+  }
+}

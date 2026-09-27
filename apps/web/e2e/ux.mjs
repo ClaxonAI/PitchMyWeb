@@ -39,6 +39,7 @@ const PUBLIC_PAGES = [
   "/pricing",
   "/login",
   "/register",
+  "/forgot-password",
   "/how-it-works",
   "/contact",
   "/privacy",
@@ -118,6 +119,16 @@ for (const [device, theme, options] of runs) {
   check(`${tag}: /contact shows Claxon AI, address and phone`, /Claxon AI/.test(contact) && /Chennai, Tamil Nadu 600119/.test(contact) && (await page.locator('a[href="tel:+919176274991"]').count()) > 0);
   await page.goto(`${WEB}/privacy`, { waitUntil: "networkidle" });
   check(`${tag}: /privacy names the Grievance Officer`, /Grievance Officer is Nitin P/.test(await page.evaluate(() => document.body.innerText)));
+
+  // Forgot password: sign-in links to it, and asking for a code moves to the
+  // code step with the same answer for any address.
+  await page.goto(`${WEB}/login`, { waitUntil: "networkidle" });
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await page.waitForURL("**/forgot-password");
+  await page.getByLabel("Email").fill(`nobody-${Date.now()}@example.test`);
+  await page.getByRole("button", { name: "Send code" }).click();
+  const codeStep = await page.getByLabel("Digit 1").waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check(`${tag}: forgot password reaches the code step`, codeStep);
 
   // Coupons are checked with the server: a code nobody created in
   // /admin/coupons shows as invalid instead of a discount checkout won't give.

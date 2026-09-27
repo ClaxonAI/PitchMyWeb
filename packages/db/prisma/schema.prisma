@@ -228,6 +228,9 @@ model User {
   // decides whether a social sign-in may keep an existing password
   // (lib/auth/verified-email.ts).
   emailVerifiedAt DateTime?
+  // Set when the welcome email is claimed for sending (lib/email/welcome.ts),
+  // so a user is welcomed once however many sign-in paths run.
+  welcomeEmailSentAt DateTime?
   // Set by an admin; login and requireCurrentUser both refuse a non-null value.
   suspendedAt  DateTime?
   lastLoginAt  DateTime?
@@ -239,6 +242,7 @@ model User {
 
   campaigns         Campaign[]
   sessions          Session[]
+  passwordResetCodes PasswordResetCode[]
   whatsappAccounts  WhatsAppAccount[]
   whatsappMessages  WhatsAppMessage[]
   orders            Order[]
@@ -1334,4 +1338,26 @@ model BusinessClaim {
   @@index([userId])
   @@index([status, expiresAt])
   @@map("business_claims")
+}
+
+// A password reset in two steps (lib/auth/password-reset.ts): a 6-digit code
+// emailed to the account's address, then a single-use reset token issued once
+// that code is entered. Only hashes are stored. A code allows 5 attempts and
+// lasts 10 minutes; the token lasts 15 minutes. Requesting a new code
+// replaces every earlier one.
+model PasswordResetCode {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash            String
+  expiresAt           DateTime
+  attempts            Int       @default(0)
+  verifiedAt          DateTime?
+  resetTokenHash      String?   @unique
+  resetTokenExpiresAt DateTime?
+  consumedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("password_reset_codes")
 }

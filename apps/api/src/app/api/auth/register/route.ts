@@ -12,6 +12,8 @@ import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
 import { claimOrder, claimPaidOrdersForUser } from "../../../../lib/checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice } from "../../../../lib/auth/trial-device";
 import { REGISTER_ACTION, assertHuman } from "../../../../lib/auth/turnstile";
+import { runAfterResponse, type DeferTask } from "../../../../lib/api/after-response";
+import { sendWelcomeEmail } from "../../../../lib/email/welcome";
 
 // Not one of the 8 endpoints listed in this phase's scope, but a direct
 // prerequisite of every other one: section 4 requires every user-owned
@@ -19,7 +21,7 @@ import { REGISTER_ACTION, assertHuman } from "../../../../lib/auth/turnstile";
 // in the repository at all before this phase (see the Phase 4 report).
 // Registration/login/logout are the minimum surface needed to obtain and
 // test a real session.
-export async function handleRegister(db: PrismaClient, request: NextRequest): Promise<NextResponse> {
+export async function handleRegister(db: PrismaClient, request: NextRequest, defer: DeferTask = runAfterResponse): Promise<NextResponse> {
   // Phase 4 code-review finding #12: bounds registration spam from a single
   // source (bcrypt hashing is itself CPU-expensive, so this also protects
   // against a cheap resource-exhaustion attempt).
@@ -43,6 +45,8 @@ export async function handleRegister(db: PrismaClient, request: NextRequest): Pr
   }
 
   await claimTrialDevice(db, user.id, body.fingerprintId);
+  const newUserId = user.id;
+  defer(() => sendWelcomeEmail(db, newUserId));
 
   if (body.orderId) await claimOrder(db, body.orderId, user.id);
   await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: false });

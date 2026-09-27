@@ -8,6 +8,8 @@ import { clientIp, rateLimit } from "../../../../../lib/api/rate-limit";
 import { errorResponse } from "../../../../../lib/api/response";
 import { takeOverUnverifiedAccount } from "../../../../../lib/auth/verified-email";
 import { claimOrder, claimPaidOrdersForUser } from "../../../../../lib/checkout/checkout.service";
+import { runAfterResponse } from "../../../../../lib/api/after-response";
+import { sendWelcomeEmail } from "../../../../../lib/email/welcome";
 import { assertDeviceCanCreateAccount, claimTrialDevice, DeviceAccountLimitError } from "../../../../../lib/auth/trial-device";
 
 // The browser's FingerprintJS visitor id, sent by apps/web's
@@ -86,6 +88,7 @@ export async function handleClerkSession(db: PrismaClient, request: NextRequest)
     if (orderId) await claimOrder(db, orderId, user.id);
     await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
     await claimTrialDevice(db, user.id, fingerprintId);
+    if (!existing) runAfterResponse(() => sendWelcomeEmail(db, user.id));
     const session = await createSession(db, user.id);
     const response = NextResponse.json({ id: user.id, email: user.email });
     response.cookies.set(SESSION_COOKIE_NAME, session.token, {

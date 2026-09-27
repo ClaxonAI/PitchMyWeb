@@ -179,7 +179,14 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-medium text-ink/70">Password</span>
+            <span className="flex items-baseline justify-between text-[13px] font-medium text-ink/70">
+              Password
+              {mode === "login" && (
+                <Link href="/forgot-password" className="-my-3 py-3 text-[12px] font-normal text-primary underline-offset-2 hover:underline">
+                  Forgot password?
+                </Link>
+              )}
+            </span>
             <input
               type="password"
               required
@@ -193,11 +200,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             />
           </label>
 
-          {mode === "login" ? (
-            <p className="-mt-1 text-[12px] leading-relaxed text-ink/60">
-              Forgot your password? Use Continue with Google or GitHub above with the same email — it signs you straight in.
-            </p>
-          ) : (
+          {mode === "register" && (
             <p className="-mt-1 text-[12px] leading-relaxed text-ink/60">
               Your free pitches come with Google or GitHub sign-up, which confirms your email. Signed up with a password? Continue with Google or GitHub later to unlock them.
             </p>
