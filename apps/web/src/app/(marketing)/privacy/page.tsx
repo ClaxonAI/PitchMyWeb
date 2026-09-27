@@ -14,7 +14,6 @@ export const metadata: Metadata = pageMetadata({
     "What PitchMyWeb collects, why we collect it, how long we keep it, and the choices you have. We never sell your data.",
 });
 
-// DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function PrivacyPage() {
   return (
     <>
