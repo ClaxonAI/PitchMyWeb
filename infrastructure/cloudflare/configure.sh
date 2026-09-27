@@ -38,12 +38,15 @@
 #              API_INTERNAL_URL (loopback). Needs the AWS CLI; secrets go
 #              through a private temp file, never argv or the screen.
 #
-# The token needs, on zone pitchmyweb.in: Zone Settings Edit, Zone WAF Edit,
-# DNS Edit (DNSSEC), Email Routing Rules Edit, Bot Management Edit; on the
-# account: Access: Apps and Policies Edit, Access: Organizations, Identity
-# Providers, and Groups Edit, Turnstile Sites Edit, Email Routing Addresses
-# Edit, Account Settings Edit (Web Analytics). A section whose permission is
-# missing fails with Cloudflare's message and the rest carry on.
+# The token needs (Cloudflare dashboard > My Profile > API Tokens > Create
+# Custom Token):
+#   Zone, pitchmyweb.in: Zone Read, Zone Settings Edit, Zone WAF Edit,
+#     DNS Edit, Email Routing Rules Edit, Bot Management Edit
+#   Account: Access: Apps and Policies Edit, Access: Organizations, Identity
+#     Providers, and Groups Edit, Turnstile Edit, Email Routing Addresses
+#     Edit, Account Settings Edit (Web Analytics)
+# The same token serves sync-dns.sh. A section whose permission is missing
+# fails with Cloudflare's message, in the dry run too, and the rest carry on.
 #
 # After --apply, redeploy: the web app inlines the Turnstile site key at build
 # time, and the API only turns the check on once it restarts with the secret.
@@ -391,8 +394,10 @@ section_turnstile() {
 # --- analytics ------------------------------------------------------------------
 section_analytics() {
   local sites
-  if sites="$(cf GET "/accounts/${ACCOUNT_ID}/rum/site_info/list?per_page=100" 2>/dev/null)" &&
-     jq -e --arg z "$ZONE_ID" --arg n "$ZONE_NAME" '.result[]? | select(.ruleset.zone_tag == $z or .host == $n)' <<<"$sites" >/dev/null; then
+  # A failed read fails the section, so a token without the permission shows
+  # up in the dry run rather than half-way through --apply.
+  sites="$(cf GET "/accounts/${ACCOUNT_ID}/rum/site_info/list?per_page=100")" || return 1
+  if jq -e --arg z "$ZONE_ID" --arg n "$ZONE_NAME" '.result[]? | select(.ruleset.zone_tag == $z or .host == $n)' <<<"$sites" >/dev/null; then
     ok "Web Analytics on for ${ZONE_NAME}"
     return 0
   fi
