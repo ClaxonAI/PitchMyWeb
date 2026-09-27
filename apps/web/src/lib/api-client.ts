@@ -163,6 +163,10 @@ export const authApi = {
   register: (email: string, password: string, orderId?: string | null, fingerprintId?: string, turnstileToken?: string | null) =>
     api.post<{ id: string; email: string }>("/api/auth/register", { email, password, ...(orderId ? { orderId } : {}), ...(fingerprintId ? { fingerprintId } : {}), ...(turnstileToken ? { turnstileToken } : {}) }),
   logout: () => api.post<unknown>("/api/auth/logout", {}),
+  // Password reset by emailed code (apps/api lib/auth/password-reset.ts).
+  requestPasswordReset: (email: string) => api.post<{ ok: true }>("/api/auth/password-reset/request", { email }),
+  verifyPasswordReset: (email: string, code: string) => api.post<{ resetToken: string }>("/api/auth/password-reset/verify", { email, code }),
+  completePasswordReset: (resetToken: string, password: string) => api.post<{ email: string }>("/api/auth/password-reset/complete", { resetToken, password }),
 };
 
 // --- Pricing-page checkout (Razorpay Standard Checkout) ---------------------

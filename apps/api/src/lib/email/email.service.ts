@@ -11,7 +11,7 @@ import { resendTransport, type EmailTransport } from "./transport";
 // the caller's reference (an order id). Never the recipient, the subject or
 // body, or anything from the API key.
 
-export type EmailCategory = "payment_receipt";
+export type EmailCategory = "payment_receipt" | "welcome" | "password_reset_code" | "password_changed";
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 

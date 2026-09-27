@@ -32,3 +32,18 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// Password reset by emailed code (lib/auth/password-reset.ts).
+export const passwordResetRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+
+export const passwordResetVerifySchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code from the email"),
+});
+
+export const passwordResetCompleteSchema = z.object({
+  resetToken: z.string().trim().min(20).max(200),
+  password: z.string().min(8, "password must be at least 8 characters").max(72, "password must be at most 72 characters"),
+});

@@ -3,6 +3,8 @@ import type { PrismaClient, User } from "@pitchmyweb/db";
 import { AccountSuspendedError, ConflictError, ValidationError } from "../errors";
 import { claimOrder, claimPaidOrdersForUser } from "../checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice } from "./trial-device";
+import { runAfterResponse } from "../api/after-response";
+import { sendWelcomeEmail } from "../email/welcome";
 import { takeOverUnverifiedAccount } from "./verified-email";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "pmw_google_oauth";
@@ -203,5 +205,6 @@ export async function upsertGoogleUser(
   if (orderId) await claimOrder(db, orderId, user.id);
   await claimPaidOrdersForUser(db, user.id, user.email, { emailVerified: true });
   await claimTrialDevice(db, user.id, fingerprintId ?? undefined);
+  runAfterResponse(() => sendWelcomeEmail(db, user.id));
   return user;
 }
