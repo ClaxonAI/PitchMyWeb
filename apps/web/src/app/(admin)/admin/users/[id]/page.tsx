@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { adminFetch } from "@/lib/admin-fetch";
-import { requireAdminSession } from "@/lib/auth/require-admin";
+import type { SessionUser } from "@/lib/auth/require-session";
 import { Badge } from "@/components/dashboard-ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/dashboard-ui/card";
 import { AdminUserControls } from "@/components/admin/AdminUserControls";
@@ -21,7 +21,8 @@ type AdminUserDetail = {
 };
 
 export default async function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const viewer = await requireAdminSession();
+  const viewer = await adminFetch<SessionUser>("/api/admin/me");
+  if (!viewer) notFound();
   const { id } = await params;
   const user = await adminFetch<AdminUserDetail>(`/api/admin/users/${id}`);
   if (!user) notFound();
