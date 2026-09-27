@@ -12,7 +12,6 @@ export const metadata: Metadata = pageMetadata({
     "The terms you agree to when you buy a batch or use PitchMyWeb — what the product does, what you are responsible for, and how accounts end.",
 });
 
-// DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function TermsPage() {
   return (
     <>

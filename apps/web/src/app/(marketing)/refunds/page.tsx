@@ -12,7 +12,6 @@ export const metadata: Metadata = pageMetadata({
     "When a batch is refunded or re-run, how to ask, and how long the money takes to come back. A batch that comes up short is on us.",
 });
 
-// DRAFT copy. Have this reviewed by a lawyer before launch.
 export default function RefundsPage() {
   return (
     <>
