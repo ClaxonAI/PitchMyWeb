@@ -221,13 +221,15 @@ npm run email:test -w apps/api -- delivered@resend.dev     # Resend's test inbox
 There is no staging environment; one would get its own key and its own SSM
 path, never production's.
 
-**DNS.** The domain is already set up in DNS for Resend: DKIM at
-`resend._domainkey.pitchmyweb.in` (TXT) and the bounce/SPF subdomain
-`send.pitchmyweb.in` (CNAME to Resend). SPF lives on `send.`, so the apex has
-no SPF record to merge with, and the existing DMARC record
-(`p=quarantine`, relaxed alignment) already covers it — do not add a second.
-These records must stay DNS only; `sync-dns.sh` never touches them. Check with
-`resend domains list` (Resend CLI) that the domain reads *verified*.
+**DNS.** Resend's records for the domain (region `ap-northeast-1`): DKIM at
+`resend._domainkey` (TXT) and two SPF/bounce subdomains, `send` and `rsend`
+(CNAMEs to Resend). SPF lives on those subdomains, so the apex has no SPF
+record to merge with, and the existing DMARC record (`p=quarantine`, relaxed
+alignment) already covers them — do not add a second. They must stay DNS
+only. `infrastructure/cloudflare/sync-resend-dns.sh` makes Cloudflare match
+what `resend domains get` lists, touching no other record (dry run unless
+`--apply`; needs `resend login` and the Cloudflare token), then asks Resend
+to re-verify. `resend domains list` should read *verified*.
 
 **Logs.** Each send logs `email.sent` (with Resend's email id) or
 `email.failed` (Resend's error code, whether it is retryable, attempts), plus
