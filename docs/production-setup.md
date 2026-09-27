@@ -154,11 +154,14 @@ aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/PAYMENT_GATEWA
   --type String --value razorpay --overwrite
 ```
 
-Payment is confirmed when the browser returns to /api/checkout/verify with
-Razorpay's signed response. There is no webhook yet, so a buyer who closes the
-tab after paying but before that call is charged without the order being
-marked paid; until a webhook exists, find such payments in the Razorpay
-dashboard and grant the credits by hand.
+Payment is confirmed by whichever arrives first: the browser returning to
+/api/checkout/verify with Razorpay's signed response, or Razorpay's own
+webhook, `POST /api/checkout/webhook` (Settings → Webhooks in the Razorpay
+dashboard, events `payment.captured` and `order.paid`, secret in
+`RAZORPAY_WEBHOOK_SECRET`). The webhook is what covers a buyer who closes the
+tab after paying; without the secret it answers 503 and Razorpay keeps
+retrying. Register it on either host — the Cloudflare WAF lets this one path
+through on `api.pitchmyweb.in`.
 
 Then reload secrets on the box and restart the API (or simply redeploy, which
 does both):
@@ -316,11 +319,12 @@ The order matters, because each step leans on the one before:
 What each piece is for, and what not to switch on:
 
 - **WAF.** Scanner paths (`/.env`, `/.git`, `*.php`, `/wp-admin`…) are
-  blocked, and `api.pitchmyweb.in` answers only `/api/health` and ACME
-  challenges. Nothing legitimate calls it from outside: browsers go through
-  the web app's `/api` proxy, and every process on the box uses loopback.
-  The first webhook that needs a public endpoint (Razorpay, when it comes)
-  needs a skip for its path in `configure.sh`.
+  blocked, and `api.pitchmyweb.in` answers only `/api/health`, ACME
+  challenges and Razorpay's webhook (`/api/checkout/webhook`). Nothing else
+  legitimate calls it from outside: browsers go through the web app's `/api`
+  proxy, and every process on the box uses loopback. A new inbound webhook
+  on that hostname needs its path added to the `pmw_api_private` rule in
+  `configure.sh`.
 - **Rate limit.** 10 requests per 10 seconds per address on sign-in, sign-up
   and checkout, at the edge, ahead of the API's own per-address limits.
 - **Access** is the only way into `/admin` (and `/api/admin`); the API still

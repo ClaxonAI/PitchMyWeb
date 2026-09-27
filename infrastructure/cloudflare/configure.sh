@@ -22,7 +22,8 @@
 #   waf        Custom rules, ours identified by ref so rules made by hand
 #              stay: block scanner paths; close api.<zone> to the public
 #              (browsers reach the API through the web app's /api proxy and
-#              everything else runs on the box over loopback).
+#              everything else runs on the box over loopback) except the
+#              health check, ACME challenges and Razorpay's payment webhook.
 #   ratelimit  Sign-in, sign-up and checkout: 10 requests per 10s per address,
 #              ahead of the app's own per-address limits.
 #   dnssec     Signs the zone and prints the DS record for the registrar.
@@ -231,10 +232,10 @@ section_waf() {
     },
     {
       ref: "pmw_api_private",
-      description: "PitchMyWeb: api hostname closed to the public (health check and ACME challenges excepted)",
+      description: "PitchMyWeb: api hostname closed to the public (health check, ACME challenges and Razorpay webhook excepted)",
       action: "block",
       enabled: true,
-      expression: ("(http.host eq \"" + $api + "\" and http.request.uri.path ne \"/api/health\" and not http.request.uri.path contains \"/.well-known/acme-challenge/\")")
+      expression: ("(http.host eq \"" + $api + "\" and http.request.uri.path ne \"/api/health\" and http.request.uri.path ne \"/api/checkout/webhook\" and not http.request.uri.path contains \"/.well-known/acme-challenge/\")")
     }
   ]')"
   sync_phase http_request_firewall_custom "$rules"
