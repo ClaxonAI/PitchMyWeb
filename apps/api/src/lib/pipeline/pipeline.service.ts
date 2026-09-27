@@ -10,7 +10,7 @@ import { createWebsiteProject, publishWebsiteProject } from "../websites/website
 import { enqueueMessage, OutreachBlockedError } from "../whatsapp/message.service";
 import { settleWhatsAppSession } from "../whatsapp/session-policy";
 import { consumeReservedCredit, refundReservedCredit } from "../checkout/wallet.service";
-import { directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, fillSiteLink, previewExpiry, videoPageUrl } from "./links";
+import { autoPitchMessage, directMessage, fallbackPitch, FALLBACK_PITCH_PROMPT_VERSION, previewExpiry, videoPageUrl } from "./links";
 import { CAMPAIGN_TEMPLATE_PROMPT_VERSION, renderMessageTemplate } from "./message-template";
 import { enqueueRecording } from "./recording-queue";
 
@@ -591,7 +591,7 @@ export async function prepareDelivery(db: PrismaClient, pipelineId: string, deps
         // end up as digits, but only one of them was parsed.
         phoneNumber: pipeline.lead.business.normalizedPhone ?? pipeline.lead.business.phone ?? "",
         leadId: pipeline.leadId,
-        body: fillSiteLink(pitch.content, project.publishedUrl),
+        body: autoPitchMessage(pitch.content, project.publishedUrl),
       },
       // The laptop walkthrough, with the pitch as its caption.
       { media: { kind: "VIDEO", storageKey: recording.storageKey, mimeType: recording.mimeType ?? "video/mp4" } },

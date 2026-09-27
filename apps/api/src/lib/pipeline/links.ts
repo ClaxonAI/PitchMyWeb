@@ -46,6 +46,20 @@ export function fillSiteLink(template: string, siteUrl: string, max = MAX_DELIVE
   return capWithLink(text, `\n\n${siteUrl}`, max);
 }
 
+/**
+ * How a business stops further messages. Auto pitches are sent by the worker,
+ * which honours a STOP reply (whatsapp-worker inbound.handler.ts), so they say
+ * so; a message that already mentions STOP is left as the user wrote it.
+ */
+export const OPT_OUT_LINE = "Reply STOP to opt out.";
+
+/** An Auto pitch: the filled message plus the opt-out line, within the limit. */
+export function autoPitchMessage(template: string, siteUrl: string): string {
+  if (/\bstop\b/i.test(template)) return fillSiteLink(template, siteUrl);
+  const suffix = `\n\n${OPT_OUT_LINE}`;
+  return `${fillSiteLink(template, siteUrl, MAX_DELIVERY_MESSAGE_CHARS - suffix.length)}${suffix}`;
+}
+
 /** Direct plan: the pitch with the preview link, plus the video page. */
 export function directMessage(template: string, siteUrl: string, videoUrl: string | null): string {
   const suffix = videoUrl ? `\n\nVideo walkthrough: ${videoUrl}` : "";

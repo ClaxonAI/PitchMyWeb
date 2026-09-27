@@ -22,7 +22,16 @@ const fraunces = Fraunces({
 
 // viewport-fit=cover lets the fixed bars reach the screen edges on phones
 // with a notch or home indicator; they pad themselves with env(safe-area-*).
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  // Browser chrome (Android address bar, iOS status area) matches the page.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b12" },
+  ],
+};
 
 export const metadata: Metadata = {
   // Absolute-URL base for every canonical, og:image and og:url below. Read

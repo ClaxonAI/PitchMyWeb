@@ -580,7 +580,7 @@ describe("recording hand-off and delivery", () => {
     const queued = await prisma.leadPipeline.findUniqueOrThrow({ where: { id: pipeline!.id } });
     const message = await prisma.whatsAppMessage.findUniqueOrThrow({ where: { id: queued.whatsappMessageId! } });
     const project = await prisma.websiteProject.findUniqueOrThrow({ where: { id: queued.websiteProjectId! } });
-    expect(message.body).toBe(`Hi Template Dental, take a look: ${project.publishedUrl} — thanks!`);
+    expect(message.body).toBe(`Hi Template Dental, take a look: ${project.publishedUrl} — thanks!\n\nReply STOP to opt out.`);
     expect(message.body).not.toContain("{{");
   });
 

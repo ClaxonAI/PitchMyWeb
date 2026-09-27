@@ -34,6 +34,23 @@ if (!register.ok) {
   process.exit(1);
 }
 
+const PUBLIC_PAGES = [
+  "/",
+  "/pricing",
+  "/login",
+  "/register",
+  "/how-it-works",
+  "/contact",
+  "/privacy",
+  "/terms",
+  "/refunds",
+  "/guides",
+  "/guides/find-local-businesses-without-a-website",
+  "/for",
+  "/for/dental-clinics",
+  "/in/chennai",
+];
+
 const DASHBOARD_PAGES = ["/dashboard", "/campaigns", "/leads", "/websites", "/settings", "/whatsapp", "/campaigns/new"];
 
 // Layout facts about the current page, measured in the browser.
@@ -85,11 +102,20 @@ for (const [device, theme, options] of runs) {
   // that is expected here and not what this suite checks.
   page.on("pageerror", (error) => { if (!/clerk/i.test(`${error.message} ${error.stack}`)) errors.push(error.message); });
 
-  for (const path of ["/", "/pricing", "/login"]) {
-    await page.goto(WEB + path, { waitUntil: "networkidle" });
+  for (const path of PUBLIC_PAGES) {
+    const response = await page.goto(WEB + path, { waitUntil: "networkidle" });
+    check(`${tag} ${path}: loads`, response?.status() === 200, String(response?.status()));
     const { sideways } = await page.evaluate(measure);
     check(`${tag} ${path}: no sideways scroll`, sideways <= 0, `${sideways}px`);
+    // Nothing unfinished may reach a public page.
+    const leftover = await page.evaluate(() => /\bPLACEHOLDER\b|lorem ipsum|\bTODO\b/i.exec(document.body.innerText)?.[0] ?? null);
+    check(`${tag} ${path}: no placeholder text`, leftover === null, leftover ?? "");
   }
+
+  // A dead link: a real 404 with the site's navigation, not a bare page.
+  const missing = await page.goto(`${WEB}/this-page-does-not-exist`, { waitUntil: "networkidle" });
+  check(`${tag}: unknown page is a 404`, missing?.status() === 404, String(missing?.status()));
+  check(`${tag}: 404 keeps the navigation`, (await page.locator("header").count()) > 0 && (await page.locator("footer").count()) > 0);
 
   if (device === "phone") {
     // ☰ → Sign in: the menu is gone and the social buttons are in view.
