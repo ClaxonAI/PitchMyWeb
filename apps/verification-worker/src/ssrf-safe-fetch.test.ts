@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { ssrfSafeFetch, SsrfSafeFetchError, type ConnectParams, type ConnectResult, type ResolvedAddress } from "./ssrf-safe-fetch";
+import { hostIsPrivate, ssrfSafeFetch, SsrfSafeFetchError, type ConnectParams, type ConnectResult, type ResolvedAddress } from "./ssrf-safe-fetch";
 
 function textStream(text: string): NodeJS.ReadableStream {
   return Readable.from([Buffer.from(text)]);
@@ -134,5 +134,23 @@ describe("ssrfSafeFetch", () => {
     const error = new SsrfSafeFetchError("private_address", "nope");
     expect(error.reason).toBe("private_address");
     expect(error.message).toBe("nope");
+  });
+});
+
+describe("hostIsPrivate (the Playwright fallback's request filter)", () => {
+  it("refuses literal private, link-local, CGNAT and metadata addresses", async () => {
+    for (const host of ["127.0.0.1", "10.1.2.3", "169.254.169.254", "100.100.1.1", "198.18.0.1", "[::1]", "::ffff:10.0.0.1"]) {
+      expect(await hostIsPrivate(host)).toBe(true);
+    }
+  });
+
+  it("refuses a name that resolves inside the network, or does not resolve", async () => {
+    expect(await hostIsPrivate("internal.example", async () => [{ address: "10.0.0.5", family: 4 }])).toBe(true);
+    expect(await hostIsPrivate("gone.example", async () => { throw new Error("ENOTFOUND"); })).toBe(true);
+  });
+
+  it("allows a public address", async () => {
+    expect(await hostIsPrivate("8.8.8.8")).toBe(false);
+    expect(await hostIsPrivate("shop.example", async () => [{ address: "93.184.216.34", family: 4 }])).toBe(false);
   });
 });

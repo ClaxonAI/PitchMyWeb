@@ -22,7 +22,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return pageMetadata({
     path: `/for/${industry.slug}`,
     title: `Sell websites to ${industry.name.toLowerCase()}`,
-    description: `Find ${industry.name.toLowerCase()} with no website, send each a ready-made sample site and demo video on WhatsApp, and close the sale. ${industry.pitchAngle}`,
+    // Kept under ~155 characters so search results show it whole.
+    description: `Find ${industry.name.toLowerCase()} with no website, send each a ready-made sample site and demo video on WhatsApp, and close the sale.`,
   });
 }
 

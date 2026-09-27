@@ -5,6 +5,8 @@
 export type Guide = {
   slug: string;
   title: string;
+  /** A shorter <title> for search results when `title` runs past ~47 characters. */
+  seoTitle?: string;
   description: string;
   /** "YYYY-MM-DD": when the content last meaningfully changed (sitemap lastmod). */
   updated: string;
@@ -43,6 +45,7 @@ export const guides: Guide[] = [
   {
     slug: "pitch-a-website-on-whatsapp",
     title: "How to pitch a website to a business owner on WhatsApp",
+    seoTitle: "How to pitch a website on WhatsApp",
     description: "What to write, when to send it and why a finished sample beats a description of one.",
     updated: "2026-09-25",
     sections: [
@@ -70,6 +73,7 @@ export const guides: Guide[] = [
   {
     slug: "sample-website-before-selling",
     title: "Why you should build the sample website before you sell it",
+    seoTitle: "Build the sample website before you sell it",
     description: "The case for spending the effort before the sale, and how to do it without losing hours per lead.",
     updated: "2026-09-25",
     sections: [
@@ -97,6 +101,7 @@ export const guides: Guide[] = [
   {
     slug: "whatsapp-outreach-best-practices",
     title: "WhatsApp outreach best practices for web designers",
+    seoTitle: "WhatsApp outreach tips for web designers",
     description: "Keep your number healthy, respect opt-outs and get replies instead of blocks.",
     updated: "2026-09-25",
     sections: [
@@ -175,6 +180,7 @@ export const guides: Guide[] = [
   {
     slug: "local-seo-basics-for-small-businesses",
     title: "Local SEO basics to explain to small business clients",
+    seoTitle: "Local SEO basics for small business clients",
     description: "The few things that make a local business findable, in words an owner understands.",
     updated: "2026-09-25",
     sections: [
@@ -201,6 +207,7 @@ export const guides: Guide[] = [
   {
     slug: "start-a-web-design-side-business",
     title: "How to start a web design side business selling to local shops",
+    seoTitle: "Start a web design side business",
     description: "A practical path from zero clients to a steady pipeline of local businesses.",
     updated: "2026-09-25",
     sections: [
@@ -228,6 +235,7 @@ export const guides: Guide[] = [
   {
     slug: "auto-vs-direct-pitching",
     title: "Auto or Direct: choosing how your pitches are sent",
+    seoTitle: "Auto or Direct: how your pitches are sent",
     description: "The difference between PitchMyWeb's Auto and Direct plans, and which suits you.",
     updated: "2026-09-25",
     sections: [

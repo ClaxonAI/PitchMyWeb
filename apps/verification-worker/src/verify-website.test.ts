@@ -25,7 +25,7 @@ function fakeBrowser(page: {
     evaluate: vi.fn(async () => page.innerText ?? ""),
     content: vi.fn(page.content ?? (async () => "")),
   };
-  const context = { newPage: vi.fn(async () => fakePage), close: vi.fn(async () => undefined) };
+  const context = { route: vi.fn(async () => undefined), newPage: vi.fn(async () => fakePage), close: vi.fn(async () => undefined) };
   const newContext = vi.fn(async () => context);
   return { browser: { newContext } as unknown as Browser, newContext };
 }
@@ -147,5 +147,26 @@ describe("verifyWebsite", () => {
     const connect = vi.fn(async (): Promise<ConnectResult> => ({ status: 200, headers: {}, body: textBody("this domain is parked") }));
 
     expect(await verifyWebsite("https://not-ok.example/", { browser, fetchOptions: { resolveHost: resolveHost(), connect } })).toBe("UNREACHABLE");
+  });
+});
+
+describe("the Playwright fallback's request filter", () => {
+  it("installs a route handler that aborts requests to private addresses", async () => {
+    const { browser, newContext } = fakeBrowser({ goto: async () => ({ ok: () => true }), innerText: "A real business website with plenty of text on it." });
+    const connect = vi.fn(async (): Promise<ConnectResult> => ({ status: 200, headers: {}, body: textBody("this domain is parked, buy this domain today") }));
+    await verifyWebsite("https://shop.example/", { browser, fetchOptions: { resolveHost: resolveHost(), connect } });
+    const context = await newContext.mock.results[0]!.value;
+    expect(context.route).toHaveBeenCalledWith("**/*", expect.any(Function));
+    const handler = context.route.mock.calls[0][1] as (route: unknown) => Promise<unknown>;
+    const route = (url: string) => ({ request: () => ({ url: () => url }), abort: vi.fn(async () => "aborted"), continue: vi.fn(async () => "continued") });
+    const metadata = route("http://169.254.169.254/latest/meta-data/");
+    await handler(metadata);
+    expect(metadata.abort).toHaveBeenCalled();
+    const file = route("file:///etc/passwd");
+    await handler(file);
+    expect(file.abort).toHaveBeenCalled();
+    const inline = route("data:image/png;base64,AAAA");
+    await handler(inline);
+    expect(inline.continue).toHaveBeenCalled();
   });
 });

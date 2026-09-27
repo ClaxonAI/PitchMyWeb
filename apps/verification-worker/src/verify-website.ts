@@ -1,5 +1,5 @@
 import type { Browser } from "playwright";
-import { ssrfSafeFetch, SsrfSafeFetchError, type SsrfSafeFetchOptions } from "./ssrf-safe-fetch.js";
+import { hostIsPrivate, ssrfSafeFetch, SsrfSafeFetchError, type SsrfSafeFetchOptions } from "./ssrf-safe-fetch.js";
 
 // HTTP-first, Playwright-escalation website-liveness check (Phase 2C).
 // Never gates lead/campaign creation — this only ever runs after a Business
@@ -97,6 +97,27 @@ export async function verifyWebsite(website: string, options: VerifyWebsiteOptio
 async function verifyWithPlaywright(url: string, browser: Browser, timeoutMs: number): Promise<VerificationStatus> {
   const context = await browser.newContext();
   try {
+    // The page is the business's own, so it decides what Chromium fetches
+    // next: a redirect, an iframe, a script, a DNS answer that changed since
+    // the HTTP check. Every request is checked, so none reaches the cloud
+    // metadata endpoint or anything else inside the VPC.
+    const verdicts = new Map<string, Promise<boolean>>();
+    await context.route("**/*", async (route) => {
+      let target: URL;
+      try {
+        target = new URL(route.request().url());
+      } catch {
+        return route.abort();
+      }
+      if (target.protocol === "data:" || target.protocol === "blob:") return route.continue();
+      if (target.protocol !== "http:" && target.protocol !== "https:") return route.abort();
+      let verdict = verdicts.get(target.hostname);
+      if (!verdict) {
+        verdict = hostIsPrivate(target.hostname);
+        verdicts.set(target.hostname, verdict);
+      }
+      return (await verdict) ? route.abort("blockedbyclient") : route.continue();
+    });
     const page = await context.newPage();
     let response;
     try {

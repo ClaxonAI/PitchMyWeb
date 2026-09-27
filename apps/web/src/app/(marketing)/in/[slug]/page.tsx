@@ -15,13 +15,21 @@ export function generateStaticParams() {
   return cities.map((city) => ({ slug: city.slug }));
 }
 
+function cityDescription(city: (typeof cities)[number]): string {
+  const first = city.focus.map(findIndustry).find((industry) => industry !== undefined);
+  const lead = first ? `${first.name.toLowerCase()} and other businesses` : "local businesses";
+  return `Find ${lead} in ${city.name}, ${city.state} with no website, and pitch each a sample site and video on WhatsApp.`;
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const city = findCity((await params).slug);
   if (!city) return {};
   return pageMetadata({
     path: `/in/${city.slug}`,
-    title: `Find businesses without a website in ${city.name}`,
-    description: `Find local businesses in ${city.name} that have no website, send each a sample site and demo video on WhatsApp, and win them as web design clients.`,
+    // Short enough for search results even for Thiruvananthapuram, and each
+    // city's description names its own first trades, so no two read alike.
+    title: `${city.name} businesses with no website`,
+    description: cityDescription(city),
   });
 }
 
