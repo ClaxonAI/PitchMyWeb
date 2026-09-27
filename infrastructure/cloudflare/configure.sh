@@ -258,6 +258,17 @@ section_ratelimit() {
       ratelimit: { characteristics: ["cf.colo.id", "ip.src"], period: 10, requests_per_period: 10, mitigation_timeout: 10 }
     }
   ]')"
+  # The free plan allows a single rate limiting rule. One the zone already
+  # has (e.g. Cloudflare's leaked-credential check) is not ours to replace,
+  # so it is reported and ours is left out rather than failing the run.
+  local current others
+  if current="$(cf GET "/zones/${ZONE_ID}/rulesets/phases/http_ratelimit/entrypoint" 2>/dev/null)"; then
+    others="$(jq -r '[.result.rules[]? | select((.ref // "") != "pmw_auth_ratelimit") | (.description // .id)] | join(", ")' <<<"$current")"
+    if [ -n "$others" ]; then
+      note "the zone's rate limiting rule is already taken (${others}); PitchMyWeb's is not added — the API's own per-address limits still apply"
+      return 0
+    fi
+  fi
   sync_phase http_ratelimit "$rules"
 }
 
@@ -288,16 +299,24 @@ section_email() {
   if [ "$enabled" = "true" ]; then
     ok "Email Routing enabled"
   elif change "enable Email Routing (adds Cloudflare's MX and SPF records)"; then
-    cf POST "/zones/${ZONE_ID}/email/routing/dns" "$(jq -nc --arg n "$ZONE_NAME" '{name:$n}')" >/dev/null || failed=1
+    # No name: that field is for a subdomain, and the apex is refused with it.
+    cf POST "/zones/${ZONE_ID}/email/routing/dns" '{}' >/dev/null || failed=1
   fi
 
   addresses="$(cf GET "/accounts/${ACCOUNT_ID}/email/routing/addresses?per_page=50")" || return 1
+  verified=""
   if jq -e --arg e "$FORWARD_TO" '.result[] | select(.email == $e)' <<<"$addresses" >/dev/null; then
     verified="$(jq -r --arg e "$FORWARD_TO" '.result[] | select(.email == $e) | .verified // empty' <<<"$addresses")"
     if [ -n "$verified" ]; then ok "destination ${FORWARD_TO} verified"; else note "destination ${FORWARD_TO} is waiting for the link Cloudflare emailed to it"; fi
   elif change "add destination ${FORWARD_TO} (Cloudflare emails it a verification link)"; then
     cf POST "/accounts/${ACCOUNT_ID}/email/routing/addresses" "$(jq -nc --arg e "$FORWARD_TO" '{email:$e}')" >/dev/null || failed=1
     note "open the verification email at ${FORWARD_TO}; nothing is forwarded until then"
+  fi
+  # Cloudflare refuses a rule to an unverified destination, so the rules wait
+  # for the link to be clicked; running this section again then adds them.
+  if [ -z "$verified" ]; then
+    note "support@/grievance@ rules are added once ${FORWARD_TO} is verified: re-run with --only email"
+    return "$failed"
   fi
 
   rules="$(cf GET "/zones/${ZONE_ID}/email/routing/rules?per_page=50")" || return 1
@@ -434,6 +453,7 @@ section_ssm() {
   command -v aws >/dev/null || { echo "    aws CLI not found" >&2; return 1; }
   local failed=0
   put_param API_INTERNAL_URL String "http://127.0.0.1:4000" "http://127.0.0.1:4000" || failed=1
+  put_param API_URL String "http://127.0.0.1:4000" "http://127.0.0.1:4000" || failed=1
   if [ -n "$ACCESS_TEAM_DOMAIN" ] && [ -n "$ACCESS_AUD" ]; then
     put_param CF_ACCESS_TEAM_DOMAIN String "$ACCESS_TEAM_DOMAIN" "$ACCESS_TEAM_DOMAIN" || failed=1
     put_param CF_ACCESS_AUD String "$ACCESS_AUD" "$ACCESS_AUD" || failed=1

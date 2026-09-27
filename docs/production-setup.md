@@ -363,7 +363,7 @@ The order matters, because each step leans on the one before:
 
 1. **Deploy a release that trusts Cloudflare.** `setup-nginx.sh` writes
    Cloudflare's edge ranges to `/etc/nginx/pitchmyweb-trusted-proxies-cloudflare.conf`
-   and `bootstrap.sh` pins `API_INTERNAL_URL` to loopback. Proxying before
+   and `bootstrap.sh` pins `API_INTERNAL_URL` and `API_URL` to loopback (with `API_URL` still public, proxying `api.` blocked every POST the web app makes). Proxying before
    this makes every visitor share an edge address, and one rate limit.
 2. **`configure.sh --apply`.** It checks the origin's certificate before
    setting SSL to Full (strict), and writes `CF_ACCESS_*`, the Turnstile keys

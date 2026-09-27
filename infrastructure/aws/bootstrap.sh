@@ -217,12 +217,17 @@ set -a
 set +a
 
 # Everything that reads API_INTERNAL_URL (apps/sites, the workers, the job
-# scheduler) runs on this box beside pmw-api, so it goes over loopback. Through
-# api.pitchmyweb.in the call would leave the box, cross Cloudflare and come
-# back, where the WAF rule that keeps that hostname closed to the public would
-# refuse it — preview pages and the whole pipeline with it. Set after the SSM
-# values so an old public value there cannot route them out again.
+# scheduler) or API_URL (apps/web: its /api proxy, built into the rewrites
+# at `next build`, and the dashboard's server-side reads) runs on this box
+# beside pmw-api, so it goes over loopback. Through api.pitchmyweb.in the call
+# would leave the box, cross Cloudflare and come back, where the WAF rule that
+# keeps that hostname closed to the public refuses it. With API_URL still
+# public in SSM, turning the proxy on blocked every POST the web app made —
+# sign-in, sign-up and checkout — until the proxy was switched off again.
+# Set after the SSM values so an old public value there cannot route them
+# out again.
 export API_INTERNAL_URL=http://127.0.0.1:4000
+export API_URL=http://127.0.0.1:4000
 
 # Fail loudly here rather than letting `next build` fail with a stack trace.
 : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?not in SSM — next.config.ts refuses to build without it}"

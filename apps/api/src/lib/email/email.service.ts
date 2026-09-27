@@ -55,6 +55,17 @@ const recipientSchema = z.string().trim().toLowerCase().email().max(254);
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Resend's error message, safe to log: any email address in it replaced and
+ * the length capped. Without it a failure logged only as "400" (a send made
+ * while Resend was re-verifying the domain) could not be told apart from a
+ * real problem.
+ */
+export function scrubErrorMessage(message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  return message.replace(/[^\s@<>"'`:;,()]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<address>").slice(0, 200);
+}
+
 let reportedUnconfigured = false;
 
 /**
@@ -118,13 +129,15 @@ export async function sendEmail(input: SendEmailInput, deps: SendEmailDeps = {})
       return { status: "sent", id: result.id, attempts };
     }
 
-    const { name, statusCode } = result.error;
+    const { statusCode } = result.error;
+    // Resend has answered without an error code; name it by its status.
+    const name = result.error.name || `http_${statusCode ?? "unknown"}`;
     const retryable = TRANSIENT.has(name);
     if (retryable && attempts <= RETRY_DELAYS_MS.length) {
       await sleep(RETRY_DELAYS_MS[attempts - 1]!);
       continue;
     }
-    emitEvent("email.failed", { ...fields, error: name, statusCode, retryable, attempts }, { level: "error", alert: NEEDS_ATTENTION.has(name) });
+    emitEvent("email.failed", { ...fields, error: name, statusCode, detail: scrubErrorMessage(result.error.message), retryable, attempts }, { level: "error", alert: NEEDS_ATTENTION.has(name) });
     return { status: "failed", reason: name, retryable, attempts };
   }
 }
