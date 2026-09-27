@@ -54,6 +54,11 @@
 
 set -euo pipefail
 
+# The native Windows jq.exe ends every line it prints with CRLF. Command
+# substitution drops the CR, but `jq ... | while read` keeps it on the last
+# field, and from there it reaches comparisons and DNS record content.
+jq() { command jq "$@" | tr -d '\r'; }
+
 ZONE_NAME="${ZONE_NAME:-pitchmyweb.in}"
 TARGET_IP="${TARGET_IP:-13.207.140.42}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-claxonai@gmail.com}"

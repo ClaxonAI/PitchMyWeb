@@ -39,6 +39,11 @@
 
 set -euo pipefail
 
+# The native Windows jq.exe ends every line it prints with CRLF. Command
+# substitution drops the CR, but `jq ... | while read` keeps it on the last
+# field, and from there it reaches comparisons and DNS record content.
+jq() { command jq "$@" | tr -d '\r'; }
+
 ZONE_NAME="${ZONE_NAME:-pitchmyweb.in}"
 TARGET_IP="${TARGET_IP:-13.207.140.42}"
 API="https://api.cloudflare.com/client/v4"
@@ -73,6 +78,18 @@ for host in "$ZONE_NAME" "www.${ZONE_NAME}" "api.${ZONE_NAME}" "preview.${ZONE_N
 
   if [ -n "${id:-}" ] && [ "$type" = "A" ] && [ "$content" = "$TARGET_IP" ] && [ "$proxied" = "$PROXIED" ]; then
     echo "ok      ${host} -> A ${TARGET_IP} (proxied=${PROXIED})"
+    continue
+  fi
+  # A CNAME to the apex (how www is set up) follows the apex's A record, so
+  # it already points at the instance; only its proxy flag has to agree.
+  if [ -n "${id:-}" ] && [ "$host" != "$ZONE_NAME" ] && [ "$type" = "CNAME" ] && [ "${content%.}" = "$ZONE_NAME" ] && [ "$proxied" = "$PROXIED" ]; then
+    echo "ok      ${host} -> CNAME ${ZONE_NAME} (proxied=${PROXIED})"
+    continue
+  fi
+  if [ -n "${id:-}" ] && [ "$host" != "$ZONE_NAME" ] && [ "$type" = "CNAME" ] && [ "${content%.}" = "$ZONE_NAME" ]; then
+    echo "update  ${host}: CNAME ${ZONE_NAME} proxied=${proxied} -> proxied=${PROXIED}"
+    body="$(jq -nc --arg n "$host" --arg c "$ZONE_NAME" --argjson p "$PROXIED" '{type:"CNAME",name:$n,content:$c,ttl:1,proxied:$p}')"
+    [ "$APPLY" -eq 1 ] && cf -X PUT "${API}/zones/${ZONE_ID}/dns_records/${id}" --data "$body" >/dev/null
     continue
   fi
 
