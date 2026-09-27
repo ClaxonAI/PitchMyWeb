@@ -9,12 +9,14 @@ import { getCurrentUser } from "../../../../lib/auth/current-user";
 import { claimOrder, verifyPayment } from "../../../../lib/checkout/checkout.service";
 import { PaymentConfigurationError } from "../../../../lib/errors";
 import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
+import { runAfterResponse, type DeferTask } from "../../../../lib/api/after-response";
+import { sendOrderReceipt } from "../../../../lib/checkout/order-receipt";
 
 // POST /api/checkout/verify — public (no session, same reasoning as
 // create-order). `keySecret` is injectable for tests (never a real
 // Razorpay call here — this endpoint only does local HMAC math), defaults
 // to the env-configured secret in production.
-export async function handleVerifyPayment(db: PrismaClient, request: NextRequest, keySecret?: string): Promise<NextResponse> {
+export async function handleVerifyPayment(db: PrismaClient, request: NextRequest, keySecret?: string, defer: DeferTask = runAfterResponse): Promise<NextResponse> {
   // Rate limited by IP: this endpoint accepts a client-claimed signature, and
   // while a forged signature can't pass the HMAC check, this still bounds
   // how many attempts a single source gets to try.
@@ -34,6 +36,9 @@ export async function handleVerifyPayment(db: PrismaClient, request: NextRequest
   if (ownerId && order.status === "PAID") {
     await claimOrder(db, order.id, ownerId);
   }
+  // After the claim, so a signed-in buyer's email says the credits are in.
+  // Sent once per order however many times this or the webhook runs.
+  if (order.status === "PAID") defer(() => sendOrderReceipt(db, { id: order.id }));
   return jsonOk({ orderId: order.id, status: order.status, claimed: Boolean(ownerId) });
 }
 

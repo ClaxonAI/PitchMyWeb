@@ -69,6 +69,26 @@ describe("POST /api/checkout/webhook", () => {
     expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: "PAID", userId: null });
   });
 
+  it("schedules the payment email after a signed payment event, not for anything else", async () => {
+    const order = await pendingOrder(null);
+    const deferred: Array<() => Promise<unknown>> = [];
+    const defer = (task: () => Promise<unknown>) => void deferred.push(task);
+
+    await handleRazorpayWebhook(prisma, signed(event(order.razorpayOrderId)), SECRET, defer);
+    // A repeat still schedules it (the browser may have confirmed first without the payer's email);
+    // order-receipt.ts sends it once however often it runs.
+    await handleRazorpayWebhook(prisma, signed(event(order.razorpayOrderId, { type: "order.paid" })), SECRET, defer);
+    expect(deferred).toHaveLength(2);
+
+    await handleRazorpayWebhook(prisma, signed(event(order.razorpayOrderId), "bad"), SECRET, defer);
+    await handleRazorpayWebhook(prisma, signed(event("order_nope")), SECRET, defer);
+    await handleRazorpayWebhook(prisma, signed(event(order.razorpayOrderId, { type: "payment.failed", status: "failed" })), SECRET, defer);
+    expect(deferred).toHaveLength(2);
+    // No email is configured in tests: the task finishes without sending or touching the order.
+    await Promise.all(deferred.map((task) => task()));
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).receiptEmailSentAt).toBeNull();
+  });
+
   it("ignores events it does not act on, and unknown orders", async () => {
     const order = await pendingOrder(null);
     expect(await (await handleRazorpayWebhook(prisma, signed(event(order.razorpayOrderId, { type: "payment.failed", status: "failed" })), SECRET)).json()).toEqual({ ignored: true });

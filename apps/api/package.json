@@ -18,7 +18,8 @@
     "job:enqueue-website-verifications": "tsx scripts/enqueue-website-verifications.ts",
     "demo:preview": "tsx scripts/demo-preview.ts",
     "admin:promote": "tsx scripts/promote-admin.ts",
-    "credits:check": "tsx --env-file-if-exists=.env scripts/check-credits.ts"
+    "credits:check": "tsx --env-file-if-exists=.env scripts/check-credits.ts",
+    "email:test": "tsx --env-file-if-exists=.env scripts/send-test-email.ts"
   },
   "repository": {
     "type": "git",
@@ -58,6 +59,7 @@
     "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "resend": "^6.30.0",
     "zod": "^4.6.5"
   }
 }

@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import type { PrismaClient } from "@pitchmyweb/db";
 import { prisma } from "../../../../lib/db/client";
 import { markOrderPaidFromWebhook } from "../../../../lib/checkout/checkout.service";
+import { sendOrderReceipt } from "../../../../lib/checkout/order-receipt";
+import { runAfterResponse, type DeferTask } from "../../../../lib/api/after-response";
 
 // POST /api/checkout/webhook — Razorpay's server-to-server payment events.
 //
@@ -28,7 +30,12 @@ export function webhookSignatureValid(secret: string, rawBody: string, signature
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-export async function handleRazorpayWebhook(db: PrismaClient, request: NextRequest, secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim()): Promise<NextResponse> {
+export async function handleRazorpayWebhook(
+  db: PrismaClient,
+  request: NextRequest,
+  secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim(),
+  defer: DeferTask = runAfterResponse,
+): Promise<NextResponse> {
   if (!secret) {
     console.error("RAZORPAY_WEBHOOK_SECRET is not set: Razorpay payment webhooks are refused.");
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
@@ -49,12 +56,16 @@ export async function handleRazorpayWebhook(db: PrismaClient, request: NextReque
   const payment = event.payload?.payment?.entity;
   if (!payment?.id || !payment.order_id || payment.status !== "captured") return NextResponse.json({ ignored: true });
 
+  const razorpayOrderId = payment.order_id;
   const outcome = await markOrderPaidFromWebhook(db, {
-    razorpayOrderId: payment.order_id,
+    razorpayOrderId,
     razorpayPaymentId: payment.id,
     payerEmail: payment.email ?? null,
   });
   console.info(JSON.stringify({ event: "checkout.webhook", type: event.event, outcome }));
+  // Also on already_paid: the browser's verify may have got there first
+  // without knowing a guest's email, which only this event carries.
+  if (outcome !== "unknown_order") defer(() => sendOrderReceipt(db, { razorpayOrderId }));
   return NextResponse.json({ outcome });
 }
 
