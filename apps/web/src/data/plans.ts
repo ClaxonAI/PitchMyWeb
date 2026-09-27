@@ -60,8 +60,3 @@ export function getPrice(plan: Plan, market: Market): PlanPrice {
   return plan.prices.find((p) => p.market === market) ?? plan.prices[0];
 }
 
-/** Demo coupons for the checkout preview. Move validation server-side when payments are wired. */
-export const demoCoupons: Record<string, number> = {
-  FIRSTPITCH: 0.2,
-  LAUNCH50: 0.5,
-};

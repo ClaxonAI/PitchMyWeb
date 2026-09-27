@@ -29,14 +29,6 @@ const PLAN_PRICES: Record<PlanId, Record<Market, { amount: number; currency: Cur
   direct: { india: { amount: 289, currency: "INR", credits: 50 }, foreign: { amount: 489, currency: "INR", credits: 50 } },
 };
 
-// Demo coupons for the checkout preview (matches apps/web's demoCoupons).
-// Move to a real, server-validated coupon store before relying on this for
-// anything beyond the current fixed set.
-const COUPONS: Record<string, number> = {
-  FIRSTPITCH: 0.2,
-  LAUNCH50: 0.5,
-};
-
 export type OrderAmount = {
   subtotalCents: number;
   discountCents: number;
@@ -57,14 +49,14 @@ export function computeOrderAmountWithDiscount(planId: PlanId, market: Market, d
 /**
  * Computes the amount Razorpay will actually charge, in the currency's
  * smallest unit (cents for USD, paise for INR — both are amount * 100), from
- * a plan/market/coupon the client only names. Throws ValidationError for an
+ * a plan/market the client only names; coupons come only from the Coupon
+ * table (checkout.service.ts's findValidCoupon). Throws ValidationError for an
  * unknown planId/market — Zod already constrains these to the known enum
  * values before this is called, so this is a defense-in-depth check, not the
  * primary validation.
  */
-export function computeOrderAmount(planId: PlanId, market: Market, couponCode?: string | null): OrderAmount {
-  const discountRate = couponCode ? (COUPONS[couponCode.toUpperCase()] ?? 0) : 0;
-  return computeOrderAmountWithDiscount(planId, market, discountRate);
+export function computeOrderAmount(planId: PlanId, market: Market): OrderAmount {
+  return computeOrderAmountWithDiscount(planId, market, 0);
 }
 
 /**

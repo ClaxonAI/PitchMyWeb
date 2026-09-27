@@ -14,11 +14,23 @@ type Db = PrismaClient | Prisma.TransactionClient;
 // reject with a less legible error at order-creation time.
 const MIN_AMOUNT_CENTS = 100;
 
-async function computeDbOrderAmount(db: Db, input: CreateOrderInput) {
-  if (!input.couponCode) return computeOrderAmount(input.planId, input.market);
-  const coupon = await db.coupon.findUnique({ where: { code: input.couponCode.toUpperCase() } });
+/**
+ * A coupon a buyer can use right now: created in /admin/coupons, active, not
+ * expired and not used up. The pricing page asks for this (GET
+ * /api/checkout/coupon) before showing a discount, and create-order applies
+ * the same rule, so the price a buyer sees is the price Razorpay charges.
+ */
+export async function findValidCoupon(db: Db, code: string | null | undefined): Promise<{ code: string; discountPercent: number } | null> {
+  const normalized = code?.trim().toUpperCase();
+  if (!normalized) return null;
+  const coupon = await db.coupon.findUnique({ where: { code: normalized } });
   const valid = coupon?.active && (!coupon.expiresAt || coupon.expiresAt > new Date()) && (!coupon.maxRedemptions || coupon.redemptionCount < coupon.maxRedemptions);
-  if (!valid) return computeOrderAmount(input.planId, input.market);
+  return valid ? { code: coupon.code, discountPercent: coupon.discountPercent } : null;
+}
+
+async function computeDbOrderAmount(db: Db, input: CreateOrderInput) {
+  const coupon = await findValidCoupon(db, input.couponCode);
+  if (!coupon) return computeOrderAmount(input.planId, input.market);
   return computeOrderAmountWithDiscount(input.planId, input.market, coupon.discountPercent / 100);
 }
 

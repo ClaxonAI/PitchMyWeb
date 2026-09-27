@@ -111,6 +111,8 @@ export function CheckoutDialog({ order, onClose }: { order: CheckoutOrder | null
         currency: created.currency,
         order_id: created.razorpayOrderId,
         name: "PitchMyWeb",
+        // Shown at the top of Razorpay's window; it needs an absolute https URL.
+        image: `${window.location.origin}/images/FaviconLogo.png`,
         description: `${order.plan.name} · ${order.plan.batchSize} ${order.plan.unitLabel}`,
         theme: { color: "#4f39f6" },
         handler: (response) => {

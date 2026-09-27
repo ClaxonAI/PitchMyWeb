@@ -119,6 +119,15 @@ for (const [device, theme, options] of runs) {
   await page.goto(`${WEB}/privacy`, { waitUntil: "networkidle" });
   check(`${tag}: /privacy names the Grievance Officer`, /Grievance Officer is Nitin P/.test(await page.evaluate(() => document.body.innerText)));
 
+  // Coupons are checked with the server: a code nobody created in
+  // /admin/coupons shows as invalid instead of a discount checkout won't give.
+  await page.goto(`${WEB}/pricing`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Have a coupon/ }).first().click();
+  await page.getByLabel("Coupon code").fill("LAUNCH50");
+  await page.getByRole("button", { name: "Apply" }).click();
+  const couponRejected = await page.getByText("That code isn't valid or has expired.").waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check(`${tag}: /pricing rejects a coupon the server doesn't have`, couponRejected);
+
   // /admin is Cloudflare Access's to open: signed out it is a plain 404,
   // not a sign-in form or a "promote this account" page.
   const admin = await page.goto(`${WEB}/admin`, { waitUntil: "networkidle" });

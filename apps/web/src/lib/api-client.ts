@@ -184,7 +184,11 @@ export const checkoutApi = {
   createOrder: (input: CreateOrderInput) => api.post<CreatedOrder>("/api/checkout/create-order", input),
   verify: (input: { orderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
     api.post<VerifiedOrder>("/api/checkout/verify", input),
+  coupon: (code: string) => api.get<AppliedCoupon>(`/api/checkout/coupon?code=${encodeURIComponent(code)}`),
 };
+
+/** A coupon the server will honour at checkout, as created in /admin/coupons. */
+export type AppliedCoupon = { code: string; discountPercent: number };
 
 // --- Phase 1 dashboard resources --------------------------------------------
 
