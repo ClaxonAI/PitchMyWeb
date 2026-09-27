@@ -20,8 +20,18 @@ export function organizationSchema() {
     "@type": "Organization",
     "@id": ORGANIZATION_ID,
     name: siteConfig.name,
+    legalName: siteConfig.legalName,
     url: siteUrl,
     email: siteConfig.email,
+    telephone: siteConfig.phone,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: siteConfig.address.lines.join(", "),
+      addressLocality: siteConfig.address.locality,
+      addressRegion: siteConfig.address.region,
+      postalCode: siteConfig.address.postalCode,
+      addressCountry: siteConfig.address.country,
+    },
     logo: {
       "@type": "ImageObject",
       url: absoluteUrl("/images/FaviconLogo.png"),
