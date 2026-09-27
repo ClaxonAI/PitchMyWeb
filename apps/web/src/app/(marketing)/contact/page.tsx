@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Clock, Mail, MessageCircle } from "lucide-react";
+import { Building2, Clock, Mail, MessageCircle, Phone } from "lucide-react";
 import { ContactForm } from "@/components/contact/ContactForm";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Container } from "@/components/ui/Container";
-import { siteConfig } from "@/data/site";
+import { postalAddress, siteConfig } from "@/data/site";
 import { pageMetadata } from "@/lib/seo/metadata";
 import { simplePageSchema } from "@/lib/seo/structured-data";
 
@@ -16,6 +16,8 @@ export const metadata: Metadata = pageMetadata({
 
 const details = [
   { icon: Mail, label: "Email", value: siteConfig.email, href: `mailto:${siteConfig.email}` },
+  { icon: Phone, label: "Phone", value: siteConfig.phone, href: siteConfig.phoneHref },
+  { icon: Building2, label: siteConfig.legalName, value: postalAddress },
   { icon: Clock, label: "Replies", value: "Within one working day" },
   { icon: MessageCircle, label: "Quick answers", value: "Read the FAQ", href: "/#faq" },
 ];

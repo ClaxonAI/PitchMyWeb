@@ -3,6 +3,7 @@ import { LegalPage } from "@/components/layout/LegalPage";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { pageMetadata } from "@/lib/seo/metadata";
 import { simplePageSchema } from "@/lib/seo/structured-data";
+import { postalAddress, siteConfig } from "@/data/site";
 
 export const metadata: Metadata = pageMetadata({
   path: "/terms",
@@ -20,7 +21,7 @@ export default function TermsPage() {
         eyebrow="Legal"
         title="Terms of Service"
         updated="September 2026"
-        intro="These terms explain how you can use PitchMyWeb. By buying a batch or using the product, you agree to them."
+        intro={`PitchMyWeb is run by ${siteConfig.legalName}, ${postalAddress}. These terms explain how you can use it. By buying a batch or using the product, you agree to them.`}
         sections={[
           {
             heading: "What PitchMyWeb does",
@@ -51,8 +52,19 @@ export default function TermsPage() {
             ],
           },
           {
+            heading: "Cancelling",
+            body: [
+              "There is no subscription, so there is nothing to cancel between purchases. You can pause or stop a running campaign from your dashboard at any time; pitches already sent can't be recalled.",
+              `You can close your account at any time by emailing ${siteConfig.email}. Unused batches can be refunded as the Refund Policy describes.`,
+            ],
+          },
+          {
             heading: "Changes to these terms",
             body: ["We may update these terms. If a change is significant, we'll let you know before it takes effect."],
+          },
+          {
+            heading: "Contact",
+            body: [`${siteConfig.legalName}, ${postalAddress}. Email ${siteConfig.email} or call ${siteConfig.phone}.`],
           },
         ]}
       />

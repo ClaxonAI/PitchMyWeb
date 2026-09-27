@@ -60,7 +60,7 @@ export function Footer() {
 
       <div className="border-t border-white/6">
         <Container className="flex flex-col gap-2 py-5 font-mono text-[11px] tracking-wide text-white/60 sm:flex-row sm:justify-between">
-          <span>© {new Date().getFullYear()} PitchMyWeb</span>
+          <span>© {new Date().getFullYear()} {siteConfig.legalName} · Chennai</span>
           <span>Made for freelancers who would rather show than tell.</span>
         </Container>
       </div>

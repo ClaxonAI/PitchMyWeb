@@ -24,6 +24,13 @@ export default function RefundsPage() {
         intro="You shouldn't pay for a batch that didn't deliver. Here's how refunds work."
         sections={[
           {
+            heading: "Delivery",
+            body: [
+              "PitchMyWeb is a digital service; nothing is shipped. Your batch is added to your account the moment payment succeeds, and you'll see it on your dashboard.",
+              "When you start a campaign, leads, sample sites and demos are prepared and pitches go out over the following hours, at a pace that keeps your WhatsApp number safe.",
+            ],
+          },
+          {
             heading: "Batches that come up short",
             body: [
               "If a batch finds fewer valid leads than the plan promises, you can choose a free re-run or a full refund for that batch.",

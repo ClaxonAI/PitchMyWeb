@@ -112,6 +112,13 @@ for (const [device, theme, options] of runs) {
     check(`${tag} ${path}: no placeholder text`, leftover === null, leftover ?? "");
   }
 
+  // The business behind the site, as Razorpay and India's DPDP rules ask.
+  await page.goto(`${WEB}/contact`, { waitUntil: "networkidle" });
+  const contact = await page.evaluate(() => document.body.innerText);
+  check(`${tag}: /contact shows Claxon AI, address and phone`, /Claxon AI/.test(contact) && /Chennai, Tamil Nadu 600119/.test(contact) && (await page.locator('a[href="tel:+919176274991"]').count()) > 0);
+  await page.goto(`${WEB}/privacy`, { waitUntil: "networkidle" });
+  check(`${tag}: /privacy names the Grievance Officer`, /Grievance Officer is Nitin P/.test(await page.evaluate(() => document.body.innerText)));
+
   // A dead link: a real 404 with the site's navigation, not a bare page.
   const missing = await page.goto(`${WEB}/this-page-does-not-exist`, { waitUntil: "networkidle" });
   check(`${tag}: unknown page is a 404`, missing?.status() === 404, String(missing?.status()));
