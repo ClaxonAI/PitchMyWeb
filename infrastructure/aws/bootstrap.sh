@@ -216,6 +216,14 @@ set -a
 . /etc/pitchmyweb/env
 set +a
 
+# Everything that reads API_INTERNAL_URL (apps/sites, the workers, the job
+# scheduler) runs on this box beside pmw-api, so it goes over loopback. Through
+# api.pitchmyweb.in the call would leave the box, cross Cloudflare and come
+# back, where the WAF rule that keeps that hostname closed to the public would
+# refuse it — preview pages and the whole pipeline with it. Set after the SSM
+# values so an old public value there cannot route them out again.
+export API_INTERNAL_URL=http://127.0.0.1:4000
+
 # Fail loudly here rather than letting `next build` fail with a stack trace.
 : "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:?not in SSM — next.config.ts refuses to build without it}"
 : "${DATABASE_URL:?not in SSM}"

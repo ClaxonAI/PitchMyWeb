@@ -74,6 +74,20 @@ export class RateLimitUnavailableError extends DomainError {
   }
 }
 
+// Cloudflare Turnstile on password sign-up (lib/auth/turnstile.ts). The
+// messages are shown on the form as they are.
+export class HumanCheckFailedError extends DomainError {
+  constructor() {
+    super("The verification check did not pass. Please try again, or continue with Google or GitHub.", "HUMAN_CHECK_FAILED", 400);
+  }
+}
+
+export class HumanCheckUnavailableError extends DomainError {
+  constructor() {
+    super("The verification check is unavailable right now. Please try again in a minute, or continue with Google or GitHub.", "HUMAN_CHECK_UNAVAILABLE", 503);
+  }
+}
+
 export class InvalidLeadTransitionError extends ConflictError {
   constructor(
     public readonly currentStatus: string,

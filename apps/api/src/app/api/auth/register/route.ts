@@ -11,6 +11,7 @@ import { registerSchema } from "../../../../lib/validation/auth";
 import { clientIp, rateLimit } from "../../../../lib/api/rate-limit";
 import { claimOrder, claimPaidOrdersForUser } from "../../../../lib/checkout/checkout.service";
 import { assertDeviceCanCreateAccount, claimTrialDevice } from "../../../../lib/auth/trial-device";
+import { REGISTER_ACTION, assertHuman } from "../../../../lib/auth/turnstile";
 
 // Not one of the 8 endpoints listed in this phase's scope, but a direct
 // prerequisite of every other one: section 4 requires every user-owned
@@ -22,9 +23,12 @@ export async function handleRegister(db: PrismaClient, request: NextRequest): Pr
   // Phase 4 code-review finding #12: bounds registration spam from a single
   // source (bcrypt hashing is itself CPU-expensive, so this also protects
   // against a cheap resource-exhaustion attempt).
-  await rateLimit(`register:ip:${clientIp(request)}`, 10, 60 * 60 * 1000);
+  const ip = clientIp(request);
+  await rateLimit(`register:ip:${ip}`, 10, 60 * 60 * 1000);
 
   const body = await parseJsonBody(request, registerSchema);
+  // Ahead of the bcrypt hash, so a refused request costs no CPU.
+  await assertHuman(body.turnstileToken, ip, REGISTER_ACTION);
   const passwordHash = await hashPassword(body.password);
 
   let user;

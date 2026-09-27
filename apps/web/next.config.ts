@@ -36,7 +36,13 @@ if (clerkPublishableKey.startsWith("pk_test_")) {
 // Set CLERK_FRONTEND_API_URL (e.g. https://clerk.example.com) for a production
 // custom domain; the wildcard covers Clerk's development instances.
 const clerkHosts = ["https://*.clerk.accounts.dev", "https://*.clerk.com", process.env.CLERK_FRONTEND_API_URL?.trim()].filter(Boolean).join(" ");
-const scriptSources = `${process.env.NODE_ENV === "development" ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'"} ${clerkHosts} https://challenges.cloudflare.com`;
+// challenges.cloudflare.com serves Turnstile, both Clerk's bot check and the
+// one on the password sign-up form. Cloudflare Web Analytics is injected by
+// Cloudflare's proxy: its beacon loads from static.cloudflareinsights.com and
+// reports to cloudflareinsights.com, and without both here the browser blocks
+// it silently and the analytics dashboard simply stays empty.
+const cloudflareAnalytics = { script: "https://static.cloudflareinsights.com", connect: "https://cloudflareinsights.com" };
+const scriptSources = `${process.env.NODE_ENV === "development" ? "'self' 'unsafe-inline' 'unsafe-eval'" : "'self' 'unsafe-inline'"} ${clerkHosts} https://challenges.cloudflare.com ${cloudflareAnalytics.script}`;
 
 // The marketing page links and iframes demo sites from apps/sites, which is a
 // separate origin in production. It has to be named in frame-src or the
@@ -71,7 +77,7 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Content-Security-Policy", value: `default-src 'self'; script-src ${scriptSources} https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://img.clerk.com; font-src 'self' data:; connect-src 'self' https://checkout.razorpay.com https://api.razorpay.com ${clerkHosts} https://clerk-telemetry.com https://challenges.cloudflare.com; frame-src 'self' ${sitesOrigin} https://checkout.razorpay.com https://api.razorpay.com https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'` },
+          { key: "Content-Security-Policy", value: `default-src 'self'; script-src ${scriptSources} https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://img.clerk.com; font-src 'self' data:; connect-src 'self' https://checkout.razorpay.com https://api.razorpay.com ${clerkHosts} https://clerk-telemetry.com https://challenges.cloudflare.com ${cloudflareAnalytics.connect}; frame-src 'self' ${sitesOrigin} https://checkout.razorpay.com https://api.razorpay.com https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'` },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },

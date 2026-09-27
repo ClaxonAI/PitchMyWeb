@@ -3,9 +3,10 @@
 Target architecture, decided 2026-09-20:
 
 ```
-Cloudflare DNS (pitchmyweb.in)
+Cloudflare (pitchmyweb.in): proxy, WAF, rate limit, Access on /admin
   ├── @       →  EC2 elastic IP   →  nginx :443  →  pmw-web    :3000
-  ├── api     →  EC2 elastic IP   →  nginx :443  →  pmw-api    :4000
+  ├── www     →  EC2 elastic IP   →  nginx :443  →  301 to @
+  ├── api     →  EC2 elastic IP   →  nginx :443  →  pmw-api    :4000   (closed to the public at the edge)
   ├── preview →  EC2 elastic IP   →  nginx :443  →  pmw-sites  :3200
   └── clerk   →  Clerk (CNAME, DNS only — never proxied)
 
@@ -80,7 +81,7 @@ and apps/sites already need, so one SSM parameter serves all three.
 CLERK_SECRET_KEY=sk_live_...        # the SAME key as apps/web
 APP_URL=https://pitchmyweb.in
 SITES_PUBLIC_URL=https://preview.pitchmyweb.in
-API_INTERNAL_URL=https://api.pitchmyweb.in
+API_INTERNAL_URL=http://127.0.0.1:4000      # loopback; bootstrap.sh pins it
 APP_ENV=production
 DATABASE_URL=...                    # RDS, private subnet
 REDIS_URL=...                       # ElastiCache, private subnet
@@ -99,7 +100,7 @@ sign-in, sign-up, checkout, and the preview content apps/sites reads — answers
 
 ```
 SITES_PUBLIC_URL=https://preview.pitchmyweb.in   # absolute link-preview (og:image) URLs
-API_INTERNAL_URL=https://api.pitchmyweb.in       # where preview content is read from
+API_INTERNAL_URL=http://127.0.0.1:4000          # where preview content is read from
 APP_URL=https://pitchmyweb.in                    # may embed /demo pages in an iframe
 ```
 
@@ -266,12 +267,80 @@ Clerk generates its records per instance; copy them exactly off the Domains
 page. Three things reliably go wrong:
 
 1. **Cloudflare proxying.** Every Clerk record must be **DNS only** (grey
-   cloud). Clerk's validation fails behind the proxy.
+   cloud). Clerk's validation fails behind the proxy. The app records are the
+   opposite — proxied; see "Cloudflare" below. `sync-dns.sh` sets both.
 2. **CAA records.** If the domain has any, they must allow Let's Encrypt and
    Google Trust Services or certificate issuance hangs. Check with
    `nslookup -type=CAA pitchmyweb.in`.
 3. **Deploy certificates.** A button appears on the Clerk dashboard home once
    records validate. Production auth does not work until it is pressed.
+
+## Cloudflare
+
+Everything Cloudflare does for the site is set from two scripts, both dry runs
+unless given `--apply`, both safe to re-run, both reading the API token from
+the environment:
+
+```bash
+export CLOUDFLARE_API_TOKEN=...                           # see configure.sh for its permissions
+bash infrastructure/cloudflare/configure.sh               # zone settings, WAF, rate limit, DNSSEC,
+                                                          # email, Access, Turnstile, analytics, SSM
+bash infrastructure/cloudflare/sync-dns.sh                # DNS records: app proxied, Clerk DNS only
+```
+
+The order matters, because each step leans on the one before:
+
+1. **Deploy a release that trusts Cloudflare.** `setup-nginx.sh` writes
+   Cloudflare's edge ranges to `/etc/nginx/pitchmyweb-trusted-proxies-cloudflare.conf`
+   and `bootstrap.sh` pins `API_INTERNAL_URL` to loopback. Proxying before
+   this makes every visitor share an edge address, and one rate limit.
+2. **`configure.sh --apply`.** It checks the origin's certificate before
+   setting SSL to Full (strict), and writes `CF_ACCESS_*`, the Turnstile keys
+   and `API_INTERNAL_URL` to SSM. Zero Trust has to exist on the account
+   first (one visit to one.dash.cloudflare.com: a team name and the Free
+   plan); the script says so if it does not.
+3. **Redeploy** (`deploy.ps1`). The web app inlines the Turnstile site key at
+   build time and the API reads the secret and the Access settings at start,
+   so a restart of pmw-api alone is not enough — with the secret but no site
+   key in the build, every password sign-up is refused.
+4. **`sync-dns.sh --apply`** turns the proxy on. From here `/admin` asks for a
+   One-time PIN sent to the addresses in `ADMIN_EMAILS`.
+5. **Close the origin to everyone else:** `origin_cloudflare_only = true` in
+   `terraform.tfvars`, then `terraform apply`. The instance's address has
+   been public in DNS, so until this anyone can go around Cloudflare.
+6. **Check renewals still work:** `sudo certbot renew --dry-run` on the box.
+   Always Use HTTPS stays off at Cloudflare on purpose — nginx already
+   redirects and sends HSTS, and Cloudflare's redirect would move the HTTP-01
+   challenge off port 80, where certbot answers it.
+
+What each piece is for, and what not to switch on:
+
+- **WAF.** Scanner paths (`/.env`, `/.git`, `*.php`, `/wp-admin`…) are
+  blocked, and `api.pitchmyweb.in` answers only `/api/health` and ACME
+  challenges. Nothing legitimate calls it from outside: browsers go through
+  the web app's `/api` proxy, and every process on the box uses loopback.
+  The first webhook that needs a public endpoint (Razorpay, when it comes)
+  needs a skip for its path in `configure.sh`.
+- **Rate limit.** 10 requests per 10 seconds per address on sign-in, sign-up
+  and checkout, at the edge, ahead of the API's own per-address limits.
+- **Access** is the only way into `/admin` (and `/api/admin`); the API still
+  verifies Access's signed token itself, so the check holds even for a
+  request that reaches the box some other way.
+- **Turnstile** on the password sign-up form. Google and GitHub sign-up have
+  Clerk's own check.
+- **Web Analytics** is injected by the proxy; the web app's CSP allows its
+  beacon (`static.cloudflareinsights.com`, `cloudflareinsights.com`).
+- **Email Routing** forwards support@ and grievance@pitchmyweb.in to Gmail
+  once the destination address has been confirmed from the email Cloudflare
+  sends it.
+- **DNSSEC** is signed on Cloudflare's side; it takes effect when the DS
+  record the script prints is added at the registrar.
+- **Leave off:** Rocket Loader and Email Obfuscation (both rewrite HTML that
+  React hydrates), Bot Fight Mode (on this plan nothing can be exempted, and
+  it challenges the WhatsApp link-preview fetch of `/s/<slug>`), any
+  challenge rule on `preview.`, and "Cache Everything": Next.js marks
+  prerendered pages `s-maxage=31536000`, so cached HTML would outlive every
+  deploy. Static assets under `/_next/static` are cached by default.
 
 ## Deploying
 
@@ -383,6 +452,13 @@ apps/api rate-limits sign-in, sign-up and checkout per client address, which it
 reads from `X-Forwarded-For`. nginx is what makes that header trustworthy: it
 sends the address it saw rather than appending to whatever the client supplied
 (which let any caller choose a fresh rate-limit bucket per request).
+
+Behind Cloudflare the address nginx sees is an edge server's, and the visitor
+is the last entry Cloudflare appended to `X-Forwarded-For`. nginx recovers it
+only because `setup-nginx.sh` lists Cloudflare's ranges as trusted
+(`pitchmyweb-trusted-proxies-cloudflare.conf`, refreshed from Cloudflare's
+published list on every deploy); an entry the client wrote itself is never
+reached, since recursion stops at the first untrusted address.
 
 The web app's `/api` proxy is the one extra hop. With `API_URL` on loopback it
 goes straight to pmw-api and nothing more is needed — that is the recommended

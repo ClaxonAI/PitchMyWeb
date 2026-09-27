@@ -14,6 +14,10 @@ export const registerSchema = z.object({
   // otherwise). Optional: registering with no prior purchase is the normal case.
   orderId: z.string().min(1).optional(),
   fingerprintId: z.string().trim().min(8).max(512).optional(),
+  // Cloudflare Turnstile's token from the sign-up form (lib/auth/turnstile.ts).
+  // Optional here so the check itself decides: it is required only while
+  // TURNSTILE_SECRET_KEY is set. Cloudflare caps tokens at 2048 characters.
+  turnstileToken: z.string().trim().min(1).max(2048).optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
