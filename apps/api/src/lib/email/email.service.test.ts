@@ -128,6 +128,14 @@ describe("sendEmail", () => {
     expect(events.at(-1)).toMatchObject({ event: "email.failed", error: "invalid_api_key", retryable: false });
   });
 
+  it("names an error Resend gave no code by its status, and logs its message without addresses", async () => {
+    const transport = transportReturning({ error: { name: undefined, statusCode: 400, message: `Could not send to ${RECIPIENT}: domain is being verified` } });
+    const result = await sendEmail(input, { config, transport, sleep: noSleep });
+    expect(result).toEqual({ status: "failed", reason: "http_400", retryable: false, attempts: 1 });
+    expect(events.at(-1)).toMatchObject({ event: "email.failed", error: "http_400", statusCode: 400, detail: "Could not send to <address>: domain is being verified" });
+    expect(JSON.stringify(events)).not.toContain(RECIPIENT);
+  });
+
   it("never logs the recipient, the content or the API key", async () => {
     await sendEmail(input, { config, transport: transportReturning({ id: "email_4" }), sleep: noSleep });
     await sendEmail(input, { config, transport: transportReturning({ error: { name: "validation_error", statusCode: 422 } }), sleep: noSleep });

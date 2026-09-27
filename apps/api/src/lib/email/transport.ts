@@ -13,9 +13,9 @@ export type OutgoingEmail = {
   tags: Array<{ name: string; value: string }>;
 };
 
-// Only the error's code and HTTP status come back. Resend's messages can
-// quote the recipient's address, and they are never needed to decide what to do.
-export type TransportResult = { id: string } | { error: { name: string; statusCode: number | null } };
+// The error's code, HTTP status and message. The message can quote the
+// recipient's address, so email.service.ts scrubs it before logging it.
+export type TransportResult = { id: string } | { error: { name: string | undefined; statusCode: number | null; message?: string } };
 
 export type EmailTransport = (email: OutgoingEmail, options: { idempotencyKey?: string }) => Promise<TransportResult>;
 
@@ -34,7 +34,7 @@ export function resendTransport(apiKey: string): EmailTransport {
       },
       idempotencyKey ? { idempotencyKey } : undefined,
     );
-    if (error) return { error: { name: error.name, statusCode: error.statusCode } };
+    if (error) return { error: { name: error.name, statusCode: error.statusCode, message: error.message } };
     return { id: data.id };
   };
 }
