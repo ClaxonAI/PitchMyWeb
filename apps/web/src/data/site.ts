@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "PitchMyWeb",
-  email: "support@claxonai.in",
+  email: "claxonai@gmail.com",
   // The business behind PitchMyWeb, as Razorpay and the legal pages need it.
   legalName: "Claxon AI",
   phone: "+91 91762 74991",
