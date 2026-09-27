@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import http, { type IncomingMessage } from "node:http";
 import https from "node:https";
@@ -75,6 +76,8 @@ function isPrivateIPv4(ip: string): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
   if (a === 192 && b === 168) return true; // 192.168.0.0/16
   if (a === 0) return true; // 0.0.0.0/8 "this network"
+  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 carrier-grade NAT (also cloud internals)
+  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
   if (a >= 224) return true; // 224.0.0.0/4 multicast + reserved above it
   return false;
 }
@@ -89,8 +92,25 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-function isPrivateAddress(address: string, family: number): boolean {
+export function isPrivateAddress(address: string, family: number): boolean {
   return family === 4 ? isPrivateIPv4(address) : isPrivateIPv6(address);
+}
+
+/**
+ * Whether a hostname is, or resolves to, a non-public address. For callers
+ * that cannot pin the connection themselves (the Playwright fallback): an
+ * unresolvable host counts as unsafe.
+ */
+export async function hostIsPrivate(hostname: string, resolve: (host: string) => Promise<ResolvedAddress[]> = defaultResolveHost): Promise<boolean> {
+  const bare = hostname.replace(/^\[|\]$/g, "");
+  const literal = isIP(bare);
+  if (literal) return isPrivateAddress(bare, literal);
+  try {
+    const addresses = await resolve(bare);
+    return addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address, a.family));
+  } catch {
+    return true;
+  }
 }
 
 async function defaultResolveHost(hostname: string): Promise<ResolvedAddress[]> {

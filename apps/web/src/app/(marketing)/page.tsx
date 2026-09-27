@@ -12,7 +12,6 @@ import { Principles } from "@/components/home/Principles";
 import { ProblemSection } from "@/components/home/ProblemSection";
 import { SampleSites } from "@/components/home/SampleSites";
 import { StickyPlansBar } from "@/components/home/StickyPlansBar";
-import { Testimonials } from "@/components/home/Testimonials";
 import { TrustStrip } from "@/components/home/TrustStrip";
 
 // The home page keeps the root layout's default title rather than slotting
@@ -52,9 +51,7 @@ export default function HomePage() {
       <div className="defer-offscreen">
         <Principles />
       </div>
-      <div className="defer-offscreen">
-        <Testimonials />
-      </div>
+      {/* Testimonials return once there are real customer quotes (data/testimonials.ts). */}
       <div className="defer-offscreen">
         <PricingTeaser />
       </div>

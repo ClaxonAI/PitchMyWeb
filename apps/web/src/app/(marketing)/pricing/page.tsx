@@ -12,7 +12,7 @@ import { pricingSchemaGraph } from "@/lib/seo/structured-data";
 export const metadata: Metadata = pageMetadata({
   path: "/pricing",
   title: "Pricing",
-  description: "Two ways to pitch: Auto sends from your WhatsApp, Direct gives you one-tap links. Pay per batch.",
+  description: "Pay per batch, no subscription: each pitch is a sample website, a demo video and a WhatsApp message. Auto sends from your number; Direct gives one-tap links.",
 });
 
 export default function PricingPage() {

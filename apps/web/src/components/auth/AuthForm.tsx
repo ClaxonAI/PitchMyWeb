@@ -166,6 +166,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               type="password"
               required
               minLength={mode === "register" ? 8 : undefined}
+              maxLength={mode === "register" ? 72 : undefined}
               autoComplete={mode === "register" ? "new-password" : "current-password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -173,6 +174,16 @@ export function AuthForm({ mode }: { mode: Mode }) {
               placeholder={mode === "register" ? "At least 8 characters" : "Your password"}
             />
           </label>
+
+          {mode === "login" ? (
+            <p className="-mt-1 text-[12px] leading-relaxed text-ink/60">
+              Forgot your password? Use Continue with Google or GitHub above with the same email — it signs you straight in.
+            </p>
+          ) : (
+            <p className="-mt-1 text-[12px] leading-relaxed text-ink/60">
+              Your free pitches come with Google or GitHub sign-up, which confirms your email. Signed up with a password? Continue with Google or GitHub later to unlock them.
+            </p>
+          )}
 
           {error && (
             <p role="alert" className="rounded-2xl border border-coral/30 bg-coral/8 px-4 py-3 text-[13px] text-[#c2412f]">
