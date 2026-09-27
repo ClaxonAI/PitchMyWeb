@@ -119,6 +119,11 @@ for (const [device, theme, options] of runs) {
   await page.goto(`${WEB}/privacy`, { waitUntil: "networkidle" });
   check(`${tag}: /privacy names the Grievance Officer`, /Grievance Officer is Nitin P/.test(await page.evaluate(() => document.body.innerText)));
 
+  // /admin is Cloudflare Access's to open: signed out it is a plain 404,
+  // not a sign-in form or a "promote this account" page.
+  const admin = await page.goto(`${WEB}/admin`, { waitUntil: "networkidle" });
+  check(`${tag}: /admin is a 404 when signed out`, admin?.status() === 404 && !page.url().includes("/login"), `${admin?.status()} ${page.url().replace(WEB, "")}`);
+
   // A dead link: a real 404 with the site's navigation, not a bare page.
   const missing = await page.goto(`${WEB}/this-page-does-not-exist`, { waitUntil: "networkidle" });
   check(`${tag}: unknown page is a 404`, missing?.status() === 404, String(missing?.status()));
@@ -202,6 +207,10 @@ for (const [device, theme, options] of runs) {
     await page.waitForTimeout(300);
     check(`${tag}: Back closes the drawer`, (await page.getByRole("dialog").count()) === 0 && page.url().endsWith("/leads"), page.url());
   }
+
+  // Signed in as an ordinary user, /admin is still a 404.
+  const adminSignedIn = await page.goto(`${WEB}/admin`, { waitUntil: "networkidle" });
+  check(`${tag}: /admin is a 404 for a signed-in user`, adminSignedIn?.status() === 404 && !(await page.evaluate(() => document.body.innerText)).includes("admin:promote"), String(adminSignedIn?.status()));
 
   // A signed-in /login?next=… goes straight there; a foreign next is ignored.
   await page.goto(`${WEB}/login?next=%2Fsettings`, { waitUntil: "networkidle" });
