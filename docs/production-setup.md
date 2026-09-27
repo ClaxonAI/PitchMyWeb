@@ -195,7 +195,7 @@ verification) comes from Clerk, from its own `clkmail` records.
 |---|---|---|
 | `/pitchmyweb/prod/RESEND_API_KEY` | SecureString | a **sending access** key restricted to `pitchmyweb.in` |
 | `/pitchmyweb/prod/RESEND_FROM_EMAIL` | String | `PitchMyWeb <no-reply@pitchmyweb.in>` |
-| `/pitchmyweb/prod/RESEND_REPLY_TO_EMAIL` | String | `support@claxonai.in` (the support address the site already lists) |
+| `/pitchmyweb/prod/RESEND_REPLY_TO_EMAIL` | String | `claxonai@gmail.com` (the support inbox; `support@claxonai.in` has no mailbox) |
 
 Create the key in the Resend dashboard (API Keys → Create, permission
 "Sending access", domain `pitchmyweb.in`) — not a full-access key, which
@@ -208,7 +208,7 @@ read -rs -p "Resend API key: " RESEND_KEY; echo
 aws ssm put-parameter --region ap-south-1 --cli-input-json file:///tmp/resend-param.json && rm -f /tmp/resend-param.json
 unset RESEND_KEY
 aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RESEND_FROM_EMAIL   --type String --value "PitchMyWeb <no-reply@pitchmyweb.in>" --overwrite
-aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RESEND_REPLY_TO_EMAIL   --type String --value support@claxonai.in --overwrite
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RESEND_REPLY_TO_EMAIL   --type String --value claxonai@gmail.com --overwrite
 ```
 
 (From Git Bash on Windows, prefix the `aws` commands with `MSYS_NO_PATHCONV=1`,
