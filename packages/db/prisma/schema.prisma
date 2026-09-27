@@ -1236,6 +1236,13 @@ model Order {
   // pays out. Defaults to 0 so historical orders (predating the credit
   // system) do not grant anything on backfill.
   credits           Int         @default(0)
+  // Payment confirmation email (lib/checkout/order-receipt.ts). Set when a
+  // send is claimed, before it goes out, so the browser's verify and
+  // Razorpay's webhook confirming the same payment send it once; cleared
+  // again if the send fails, so the next confirmation retries it.
+  receiptEmailSentAt DateTime?
+  // Resend's id for that email, once Resend has accepted it.
+  receiptEmailId    String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 

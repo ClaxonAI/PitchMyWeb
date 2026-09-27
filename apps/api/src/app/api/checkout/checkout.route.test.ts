@@ -99,6 +99,31 @@ describe("POST /api/checkout/verify", () => {
     expect(await response.json()).toEqual({ orderId: order.orderId, status: "PAID", claimed: false });
   });
 
+  it("schedules the payment email for a verified payment only", async () => {
+    const order = await createTestOrder({ planId: "auto", market: "india" });
+    const signature = computeRazorpaySignature(KEY_SECRET, order.razorpayOrderId, "pay_456");
+    const defer = vi.fn();
+
+    await handleVerifyPayment(
+      prisma,
+      req("http://localhost/api/checkout/verify", { method: "POST", body: { orderId: order.orderId, razorpayPaymentId: "pay_456", razorpaySignature: signature } }),
+      KEY_SECRET,
+      defer,
+    );
+    expect(defer).toHaveBeenCalledOnce();
+
+    const forged = await createTestOrder({ planId: "auto", market: "india" });
+    await expect(
+      handleVerifyPayment(
+        prisma,
+        req("http://localhost/api/checkout/verify", { method: "POST", body: { orderId: forged.orderId, razorpayPaymentId: "pay_456", razorpaySignature: "forged" } }),
+        KEY_SECRET,
+        defer,
+      ),
+    ).rejects.toThrow(PaymentVerificationError);
+    expect(defer).toHaveBeenCalledOnce();
+  });
+
   it("rejects a forged signature and never marks the order PAID", async () => {
     const order = await createTestOrder({ planId: "auto", market: "india" });
 

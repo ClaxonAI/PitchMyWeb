@@ -174,6 +174,72 @@ its default (`pitchmyweb`) is not the user pm2 runs as on this box. Check with a
 test-mode purchase on /pricing; the credits appear in the wallet and
 `npm run credits:check -w apps/api -- <email>` shows the PURCHASE row.
 
+### Email (Resend)
+
+The API sends one transactional email: a payment confirmation, once per paid
+order, from `lib/checkout/order-receipt.ts`. It goes out after a payment is
+confirmed server-side — `/api/checkout/verify`, which recomputes Razorpay's
+signature, or Razorpay's signed webhook `/api/checkout/webhook` — and after
+the response, so a slow or
+failing email provider never holds up or fails a payment. A signed-in buyer is
+told the credits are in their account; a guest is told to sign in with Google
+or GitHub using the address they paid with, which is how guest orders are
+claimed. Everything else a customer receives by email (sign-in codes,
+verification) comes from Clerk, from its own `clkmail` records.
+
+| SSM parameter | Type | Value |
+|---|---|---|
+| `/pitchmyweb/prod/RESEND_API_KEY` | SecureString | a **sending access** key restricted to `pitchmyweb.in` |
+| `/pitchmyweb/prod/RESEND_FROM_EMAIL` | String | `PitchMyWeb <no-reply@pitchmyweb.in>` |
+| `/pitchmyweb/prod/RESEND_REPLY_TO_EMAIL` | String | `support@claxonai.in` (the support address the site already lists) |
+
+Create the key in the Resend dashboard (API Keys → Create, permission
+"Sending access", domain `pitchmyweb.in`) — not a full-access key, which
+could also read and delete domains and keys. Then, without the key touching
+shell history or `ps`:
+
+```bash
+read -rs -p "Resend API key: " RESEND_KEY; echo
+(umask 077; printf '{"Name":"/pitchmyweb/prod/RESEND_API_KEY","Type":"SecureString","Overwrite":true,"Value":"%s"}' "$RESEND_KEY" > /tmp/resend-param.json)
+aws ssm put-parameter --region ap-south-1 --cli-input-json file:///tmp/resend-param.json && rm -f /tmp/resend-param.json
+unset RESEND_KEY
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RESEND_FROM_EMAIL   --type String --value "PitchMyWeb <no-reply@pitchmyweb.in>" --overwrite
+aws ssm put-parameter --region ap-south-1 --name /pitchmyweb/prod/RESEND_REPLY_TO_EMAIL   --type String --value support@claxonai.in --overwrite
+```
+
+(From Git Bash on Windows, prefix the `aws` commands with `MSYS_NO_PATHCONV=1`,
+or the parameter names arrive as `C:/Program Files/Git/pitchmyweb/...`.)
+Nothing else is needed on the AWS side: load-secrets.sh reads the whole
+`/pitchmyweb/prod` path, and the instance role already may. Redeploy, then
+prove the deployed key, sender and domain from the box:
+
+```bash
+set -a; . /etc/pitchmyweb/env; set +a
+npm run email:test -w apps/api -- delivered@resend.dev     # Resend's test inbox
+```
+
+There is no staging environment; one would get its own key and its own SSM
+path, never production's.
+
+**DNS.** The domain is already set up in DNS for Resend: DKIM at
+`resend._domainkey.pitchmyweb.in` (TXT) and the bounce/SPF subdomain
+`send.pitchmyweb.in` (CNAME to Resend). SPF lives on `send.`, so the apex has
+no SPF record to merge with, and the existing DMARC record
+(`p=quarantine`, relaxed alignment) already covers it — do not add a second.
+These records must stay DNS only; `sync-dns.sh` never touches them. Check with
+`resend domains list` (Resend CLI) that the domain reads *verified*.
+
+**Logs.** Each send logs `email.sent` (with Resend's email id) or
+`email.failed` (Resend's error code, whether it is retryable, attempts), plus
+the order id — never the recipient, the content or the key. Temporary errors
+are retried twice within the request's after-work, and the next confirmation
+of the same payment retries again; `orders.receiptEmailId` records what was
+accepted. In production, email being unconfigured or a key/sender/quota error
+also alerts `ALERT_WEBHOOK_URL`.
+
+Resend's own webhooks (delivered, bounced…) are not consumed: nothing in the
+product acts on them yet, and the Resend dashboard shows each email's fate.
+
 ### Credits ledger
 
 Every pitch credit movement is a row in `pitch_credit_ledger`, and every

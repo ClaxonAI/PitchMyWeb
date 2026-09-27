@@ -15,6 +15,10 @@ export default defineConfig({
   test: {
     testTimeout: 15000,
     env: {
+      // No test may send real email, whatever a local .env holds. The email
+      // tests pass their own config and a fake transport.
+      RESEND_API_KEY: "",
+      RESEND_FROM_EMAIL: "",
       // The WhatsApp tests enqueue real BullMQ jobs to prove the producer
       // works. Without a separate prefix, a worker attached to the same
       // dev Redis consumes them and acts on them for real — it opened a
