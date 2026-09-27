@@ -53,7 +53,7 @@ describe("GET /api/me", () => {
       // every /api/me read, gated or not. These are the only pitch numbers
       // the API reports now: the derived freePitches* fields are gone, and
       // with them the "paid means unlimited" state they encoded.
-      availableCredits: 10,
+      availableCredits: 5,
       reservedCredits: 0,
       usedCredits: 0,
       // No WhatsApp linked yet, so the dashboard asks for one before a campaign.

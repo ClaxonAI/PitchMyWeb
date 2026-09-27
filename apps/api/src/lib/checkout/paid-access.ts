@@ -36,7 +36,7 @@ type Env = Record<string, string | undefined>;
 export type DiscoveryMarket = "india" | "foreign";
 
 /** Free pitch credits granted once, lazily, to every account (paid or not) — see ensureFreeGrant. */
-export const FREE_PITCH_ALLOWANCE = 10;
+export const FREE_PITCH_ALLOWANCE = 5;
 const ALL_MARKETS: DiscoveryMarket[] = ["india", "foreign"];
 
 export function isPaidDiscoveryRequired(env: Env = process.env): boolean {

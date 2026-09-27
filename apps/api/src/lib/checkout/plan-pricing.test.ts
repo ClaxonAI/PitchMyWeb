@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeOrderAmount } from "./plan-pricing";
+import { computeOrderAmount, computeOrderAmountWithDiscount } from "./plan-pricing";
 import { ValidationError } from "../errors";
 
 describe("computeOrderAmount", () => {
@@ -13,21 +13,9 @@ describe("computeOrderAmount", () => {
     expect(computeOrderAmount("direct", "foreign")).toEqual({ subtotalCents: 48900, discountCents: 0, totalCents: 48900, currency: "INR" });
   });
 
-  it("applies a known coupon's discount rate, case-insensitively", () => {
-    const withCoupon = computeOrderAmount("direct", "india", "firstpitch");
-    expect(withCoupon).toEqual({ subtotalCents: 28900, discountCents: 5780, totalCents: 23120, currency: "INR" });
-
-    const halfOff = computeOrderAmount("direct", "india", "LAUNCH50");
-    expect(halfOff).toEqual({ subtotalCents: 28900, discountCents: 14450, totalCents: 14450, currency: "INR" });
-  });
-
-  it("ignores an unknown coupon code rather than rejecting the order", () => {
-    expect(computeOrderAmount("auto", "india", "NOT-A-REAL-CODE")).toEqual({
-      subtotalCents: 14900,
-      discountCents: 0,
-      totalCents: 14900,
-      currency: "INR",
-    });
+  it("applies a coupon's discount rate to the plan price", () => {
+    expect(computeOrderAmountWithDiscount("direct", "india", 0.2)).toEqual({ subtotalCents: 28900, discountCents: 5780, totalCents: 23120, currency: "INR" });
+    expect(computeOrderAmountWithDiscount("direct", "india", 0.5)).toEqual({ subtotalCents: 28900, discountCents: 14450, totalCents: 14450, currency: "INR" });
   });
 
   it("throws ValidationError for an unrecognized planId", () => {

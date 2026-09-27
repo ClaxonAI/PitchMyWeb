@@ -11,18 +11,19 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { countries, findCountry } from "@/data/countries";
-import { demoCoupons, getPrice } from "@/data/plans";
+import { getPrice } from "@/data/plans";
+import type { AppliedCoupon } from "@/lib/api-client";
 import type { Market, Plan } from "@/types";
 import { cn, formatPrice } from "@/lib/utils";
 
 export function PlanCard({ plan, onCheckout }: { plan: Plan; onCheckout: (order: CheckoutOrder) => void }) {
   const [market, setMarket] = useState<Market>("india");
   const [countryCode, setCountryCode] = useState(countries[0].code);
-  const [coupon, setCoupon] = useState<string | null>(null);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
 
   const Icon = plan.id === "auto" ? Send : Hand;
   const { amount: subtotal, currency } = getPrice(plan, market);
-  const discount = coupon ? Math.round(subtotal * demoCoupons[coupon] * 100) / 100 : 0;
+  const discount = coupon ? Math.round(subtotal * coupon.discountPercent) / 100 : 0;
   const total = subtotal - discount;
 
   return (
@@ -99,7 +100,7 @@ export function PlanCard({ plan, onCheckout }: { plan: Plan; onCheckout: (order:
               size="lg"
               arrow
               onClick={() =>
-                onCheckout({ plan, market, country: findCountry(countryCode), subtotal, discount, currency, coupon })
+                onCheckout({ plan, market, country: findCountry(countryCode), subtotal, discount, currency, coupon: coupon?.code ?? null })
               }
             >
               Pay
